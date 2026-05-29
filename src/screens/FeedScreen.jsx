@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Animated,
   Dimensions,
+  PanResponder,
   Platform,
   StatusBar,
   StyleSheet,
@@ -13,9 +14,9 @@ import {
 } from "react-native";
 import { supabase } from "../lib/supabase";
 
-const { width, height } = Dimensions.get("window");
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
+const SWIPE_THRESHOLD = 80;
 
-// ─── Colour tokens ───────────────────────────────────────────
 const palette = {
   dark: {
     bg: "#0A0A0F",
@@ -30,16 +31,12 @@ const palette = {
     disagree: "#EF4444",
     disagreeBg: "#1A0505",
     disagreeBorder: "#3D1010",
-    skip: "#2A2A3A",
-    skipText: "#5A5A7A",
     pill: "#1A1A28",
     pillText: "#5A5A7A",
     minority: "#F59E0B",
     bar: "#1E1E2E",
-    barAgree: "#22C55E",
-    barDisagree: "#EF4444",
     next: "#7C3AED",
-    nextText: "#FFFFFF",
+    overlay: "rgba(0,0,0,0.85)",
   },
   light: {
     bg: "#F5F4FA",
@@ -54,363 +51,180 @@ const palette = {
     disagree: "#DC2626",
     disagreeBg: "#FFF5F5",
     disagreeBorder: "#FECACA",
-    skip: "#F0EFF8",
-    skipText: "#9A99AE",
     pill: "#F0EFF8",
     pillText: "#9A99AE",
     minority: "#D97706",
     bar: "#F0EFF8",
-    barAgree: "#16A34A",
-    barDisagree: "#DC2626",
     next: "#7C3AED",
-    nextText: "#FFFFFF",
+    overlay: "rgba(255,255,255,0.95)",
   },
 };
 
 const CATEGORY_LABELS = {
-  love: "Love",
-  money: "Money",
-  life: "Life",
-  tech: "Tech",
-  society: "Society",
+  love: "Love", money: "Money", life: "Life", tech: "Tech", society: "Society",
 };
 
-// ─── Result card shown after voting ──────────────────────────
-function ResultCard({ opinion, userVote, onNext, colors }) {
-  const agreePercent = opinion.total_votes > 0
-    ? Math.round((opinion.agree_count / opinion.total_votes) * 100)
-    : 50;
-  const disagreePercent = 100 - agreePercent;
-  const isMinority =
-    (userVote === "agree" && agreePercent < 50) ||
-    (userVote === "disagree" && disagreePercent < 50);
-
-  const barWidth = useRef(new Animated.Value(0)).current;
-  const fadeIn = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fadeIn, {
-        toValue: 1,
-        duration: 300,
-        useNativeDriver: true,
-      }),
-      Animated.timing(barWidth, {
-        toValue: 1,
-        duration: 700,
-        delay: 200,
-        useNativeDriver: false,
-      }),
-    ]).start();
-  }, []);
-
-  return (
-    <Animated.View style={[styles.resultCard, { backgroundColor: colors.card, borderColor: colors.cardBorder, opacity: fadeIn }]}>
-      {/* Opinion text */}
-      <Text style={[styles.resultOpinionText, { color: colors.textSub }]} numberOfLines={2}>
-        "{opinion.text}"
-      </Text>
-
-      {/* Minority / majority label */}
-      <View style={styles.verdictRow}>
-        <Text style={[styles.verdictEmoji]}>
-          {isMinority ? "🔥" : "✅"}
-        </Text>
-        <Text style={[styles.verdictText, { color: isMinority ? colors.minority : colors.agree }]}>
-          {isMinority ? "You are in the MINORITY" : "You are with the MAJORITY"}
-        </Text>
-      </View>
-
-      {/* Agree bar */}
-      <View style={styles.barSection}>
-        <View style={[styles.barTrack, { backgroundColor: colors.bar }]}>
-          <Animated.View
-            style={[
-              styles.barFill,
-              {
-                backgroundColor: colors.barAgree,
-                width: barWidth.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: ["0%", `${agreePercent}%`],
-                }),
-              },
-            ]}
-          />
-        </View>
-        <View style={styles.barLabelRow}>
-          <Text style={[styles.barLabel, { color: colors.agree }]}>
-            👍 Agree · {agreePercent}%
-          </Text>
-          <Text style={[styles.barCount, { color: colors.textSub }]}>
-            {opinion.agree_count.toLocaleString()}
-          </Text>
-        </View>
-      </View>
-
-      {/* Disagree bar */}
-      <View style={styles.barSection}>
-        <View style={[styles.barTrack, { backgroundColor: colors.bar }]}>
-          <Animated.View
-            style={[
-              styles.barFill,
-              {
-                backgroundColor: colors.barDisagree,
-                width: barWidth.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: ["0%", `${disagreePercent}%`],
-                }),
-              },
-            ]}
-          />
-        </View>
-        <View style={styles.barLabelRow}>
-          <Text style={[styles.barLabel, { color: colors.disagree }]}>
-            👎 Disagree · {disagreePercent}%
-          </Text>
-          <Text style={[styles.barCount, { color: colors.textSub }]}>
-            {opinion.disagree_count.toLocaleString()}
-          </Text>
-        </View>
-      </View>
-
-      {/* Total votes */}
-      <Text style={[styles.totalVotes, { color: colors.textMuted }]}>
-        {opinion.total_votes.toLocaleString()} votes worldwide
-      </Text>
-
-      {/* Next button */}
-      <TouchableOpacity
-        style={[styles.nextBtn, { backgroundColor: colors.next }]}
-        onPress={onNext}
-        activeOpacity={0.85}
-      >
-        <Text style={[styles.nextBtnText, { color: colors.nextText }]}>
-          Next Opinion →
-        </Text>
-      </TouchableOpacity>
-    </Animated.View>
-  );
-}
-
-// ─── Single opinion vote card ─────────────────────────────────
-function OpinionCard({ opinion, onVote, onSkip, colors }) {
-  const scaleAgree = useRef(new Animated.Value(1)).current;
-  const scaleDisagree = useRef(new Animated.Value(1)).current;
-  const cardOpacity = useRef(new Animated.Value(0)).current;
-  const cardTranslate = useRef(new Animated.Value(30)).current;
-
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(cardOpacity, { toValue: 1, duration: 350, useNativeDriver: true }),
-      Animated.spring(cardTranslate, { toValue: 0, tension: 80, friction: 10, useNativeDriver: true }),
-    ]).start();
-  }, [opinion.id]);
-
-  const pressIn = (scale) =>
-    Animated.spring(scale, { toValue: 0.95, useNativeDriver: true }).start();
-  const pressOut = (scale) =>
-    Animated.spring(scale, { toValue: 1, useNativeDriver: true }).start();
-
-  const handleVote = (value) => {
-    Animated.sequence([
-      Animated.timing(cardOpacity, { toValue: 0, duration: 200, useNativeDriver: true }),
-    ]).start(() => onVote(value));
-  };
-
-  return (
-    <Animated.View
-      style={[
-        styles.card,
-        {
-          backgroundColor: colors.card,
-          borderColor: colors.cardBorder,
-          opacity: cardOpacity,
-          transform: [{ translateY: cardTranslate }],
-        },
-      ]}
-    >
-      {/* Category pill */}
-      <View style={[styles.categoryPill, { backgroundColor: colors.pill }]}>
-        <Text style={[styles.categoryText, { color: colors.pillText }]}>
-          {CATEGORY_LABELS[opinion.category] ?? opinion.category}
-        </Text>
-      </View>
-
-      {/* Opinion text */}
-      <Text style={[styles.opinionText, { color: colors.text }]}>
-        {opinion.text}
-      </Text>
-
-      {/* Vote buttons */}
-      <View style={styles.voteRow}>
-        <Animated.View style={{ transform: [{ scale: scaleAgree }], flex: 1 }}>
-          <TouchableOpacity
-            style={[styles.voteBtn, styles.agreeBtn, { backgroundColor: colors.agreeBg, borderColor: colors.agreeBorder }]}
-            onPress={() => handleVote("agree")}
-            onPressIn={() => pressIn(scaleAgree)}
-            onPressOut={() => pressOut(scaleAgree)}
-            activeOpacity={1}
-          >
-            <Text style={styles.voteEmoji}>👍</Text>
-            <Text style={[styles.voteBtnText, { color: colors.agree }]}>Agree</Text>
-          </TouchableOpacity>
-        </Animated.View>
-
-        <View style={{ width: 12 }} />
-
-        <Animated.View style={{ transform: [{ scale: scaleDisagree }], flex: 1 }}>
-          <TouchableOpacity
-            style={[styles.voteBtn, styles.disagreeBtn, { backgroundColor: colors.disagreeBg, borderColor: colors.disagreeBorder }]}
-            onPress={() => handleVote("disagree")}
-            onPressIn={() => pressIn(scaleDisagree)}
-            onPressOut={() => pressOut(scaleDisagree)}
-            activeOpacity={1}
-          >
-            <Text style={styles.voteEmoji}>👎</Text>
-            <Text style={[styles.voteBtnText, { color: colors.disagree }]}>Disagree</Text>
-          </TouchableOpacity>
-        </Animated.View>
-      </View>
-
-      {/* Skip */}
-      <TouchableOpacity onPress={onSkip} style={styles.skipBtn}>
-        <Text style={[styles.skipText, { color: colors.skipText }]}>Skip →</Text>
-      </TouchableOpacity>
-    </Animated.View>
-  );
-}
-
-// ─── Main Feed Screen ─────────────────────────────────────────
-export default function FeedScreen() {
+export default function FeedScreen({ session }) {
   const scheme = useColorScheme();
   const colors = palette[scheme === "dark" ? "dark" : "light"];
 
   const [opinions, setOpinions] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [votedOpinion, setVotedOpinion] = useState(null);
   const [userVote, setUserVote] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [votedOpinion, setVotedOpinion] = useState(null);
 
-  // ── Fetch approved opinions ──────────────────────────────
-  useEffect(() => {
-    fetchOpinions();
-  }, []);
+  // Animation values
+  const translateY = useRef(new Animated.Value(0)).current;
+  const cardOpacity = useRef(new Animated.Value(1)).current;
+  const resultOpacity = useRef(new Animated.Value(0)).current;
+  const agreeScale = useRef(new Animated.Value(1)).current;
+  const disagreeScale = useRef(new Animated.Value(1)).current;
+  const barWidth = useRef(new Animated.Value(0)).current;
 
-  // ── Supabase Realtime: live vote count updates ───────────
+  useEffect(() => { fetchOpinions(); }, []);
+
+  // Realtime vote updates
   useEffect(() => {
     const channel = supabase
       .channel("opinions-realtime")
-      .on(
-        "postgres_changes",
+      .on("postgres_changes",
         { event: "UPDATE", schema: "public", table: "opinions" },
         (payload) => {
           setOpinions((prev) =>
-            prev.map((op) =>
-              op.id === payload.new.id ? { ...op, ...payload.new } : op
-            )
+            prev.map((op) => op.id === payload.new.id ? { ...op, ...payload.new } : op)
           );
           setVotedOpinion((prev) =>
             prev?.id === payload.new.id ? { ...prev, ...payload.new } : prev
           );
         }
-      )
-      .subscribe();
-
+      ).subscribe();
     return () => supabase.removeChannel(channel);
   }, []);
 
   const fetchOpinions = async () => {
     try {
       setLoading(true);
-      setError(null);
-
-      const { data, error: fetchError } = await supabase
+      const { data, error } = await supabase
         .from("opinions")
         .select("*")
         .eq("status", "approved")
         .order("created_at", { ascending: false })
         .limit(30);
-
-      if (fetchError) throw fetchError;
-
-      // Shuffle so feed feels fresh every session
-      const shuffled = [...data].sort(() => Math.random() - 0.5);
-      setOpinions(shuffled);
+      if (error) throw error;
+      setOpinions([...data].sort(() => Math.random() - 0.5));
     } catch (err) {
-      setError("Could not load opinions. Check your connection.");
+      console.error(err);
     } finally {
       setLoading(false);
     }
   };
 
-  // ── Handle vote ──────────────────────────────────────────
+  const goNext = () => {
+    // Animate card out upward
+    Animated.parallel([
+      Animated.timing(translateY, { toValue: -SCREEN_HEIGHT, duration: 300, useNativeDriver: true }),
+      Animated.timing(cardOpacity, { toValue: 0, duration: 250, useNativeDriver: true }),
+    ]).start(() => {
+      // Reset state
+      setUserVote(null);
+      setVotedOpinion(null);
+      barWidth.setValue(0);
+      resultOpacity.setValue(0);
+      translateY.setValue(SCREEN_HEIGHT * 0.3);
+      cardOpacity.setValue(0);
+
+      setCurrentIndex((prev) => {
+        const next = prev + 1;
+        if (next >= opinions.length) {
+          fetchOpinions();
+          return 0;
+        }
+        return next;
+      });
+
+      // Animate new card in from bottom
+      Animated.parallel([
+        Animated.spring(translateY, { toValue: 0, tension: 80, friction: 12, useNativeDriver: true }),
+        Animated.timing(cardOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+      ]).start();
+    });
+  };
+
+  const showResult = (opinion, vote) => {
+    const updated = {
+      ...opinion,
+      agree_count: vote === "agree" ? opinion.agree_count + 1 : opinion.agree_count,
+      disagree_count: vote === "disagree" ? opinion.disagree_count + 1 : opinion.disagree_count,
+      total_votes: opinion.total_votes + 1,
+    };
+    setVotedOpinion(updated);
+    setUserVote(vote);
+
+    // Animate buttons out, result in
+    Animated.parallel([
+      Animated.timing(agreeScale, { toValue: 0, duration: 200, useNativeDriver: true }),
+      Animated.timing(disagreeScale, { toValue: 0, duration: 200, useNativeDriver: true }),
+    ]).start(() => {
+      Animated.parallel([
+        Animated.timing(resultOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+        Animated.timing(barWidth, { toValue: 1, duration: 700, delay: 100, useNativeDriver: false }),
+      ]).start();
+    });
+  };
+
   const handleVote = async (value) => {
+    if (userVote) return;
     const opinion = opinions[currentIndex];
     if (!opinion) return;
 
-    // Optimistically update local counts
-    const updated = {
-      ...opinion,
-      agree_count: value === "agree" ? opinion.agree_count + 1 : opinion.agree_count,
-      disagree_count: value === "disagree" ? opinion.disagree_count + 1 : opinion.disagree_count,
-      total_votes: opinion.total_votes + 1,
-    };
+    showResult(opinion, value);
 
-    setVotedOpinion(updated);
-    setUserVote(value);
+    // Reset button scales for next card
+    agreeScale.setValue(1);
+    disagreeScale.setValue(1);
 
-    // Write to Supabase
-    // The DB trigger handles updating opinion counts automatically
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
+    // Save to database
+    if (session?.user?.id) {
       await supabase.from("votes").insert({
-        user_id: user.id,
+        user_id: session.user.id,
         opinion_id: opinion.id,
         vote_value: value,
         voted_date: new Date().toISOString().split("T")[0],
       });
-      // Note: if the user already voted today (unique constraint),
-      // Supabase will return a 409 conflict — safe to ignore silently
     }
   };
 
-  // ── Move to next opinion ─────────────────────────────────
-  const handleNext = () => {
-    setUserVote(null);
-    setVotedOpinion(null);
-    setCurrentIndex((prev) => {
-      const next = prev + 1;
-      // Reload when we reach the end
-      if (next >= opinions.length) {
-        fetchOpinions();
-        return 0;
-      }
-      return next;
-    });
-  };
+  // Pan responder for swipe up
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gesture) =>
+        Math.abs(gesture.dy) > 10 && gesture.dy < 0,
+      onPanResponderMove: (_, gesture) => {
+        if (gesture.dy < 0) {
+          translateY.setValue(gesture.dy * 0.4);
+        }
+      },
+      onPanResponderRelease: (_, gesture) => {
+        if (gesture.dy < -SWIPE_THRESHOLD) {
+          goNext();
+        } else {
+          Animated.spring(translateY, { toValue: 0, tension: 100, friction: 10, useNativeDriver: true }).start();
+        }
+      },
+    })
+  ).current;
 
-  const handleSkip = () => handleNext();
+  const pressIn = (scale) =>
+    Animated.spring(scale, { toValue: 0.93, useNativeDriver: true }).start();
+  const pressOut = (scale) =>
+    Animated.spring(scale, { toValue: 1, useNativeDriver: true }).start();
 
-  // ── Render states ────────────────────────────────────────
   if (loading) {
     return (
       <View style={[styles.centered, { backgroundColor: colors.bg }]}>
         <ActivityIndicator size="large" color={colors.next} />
-        <Text style={[styles.loadingText, { color: colors.textSub }]}>
-          Loading opinions...
-        </Text>
-      </View>
-    );
-  }
-
-  if (error) {
-    return (
-      <View style={[styles.centered, { backgroundColor: colors.bg }]}>
-        <Text style={[styles.errorText, { color: colors.disagree }]}>{error}</Text>
-        <TouchableOpacity style={[styles.nextBtn, { backgroundColor: colors.next, marginTop: 20 }]} onPress={fetchOpinions}>
-          <Text style={[styles.nextBtnText, { color: colors.nextText }]}>Try Again</Text>
-        </TouchableOpacity>
+        <Text style={[styles.loadingText, { color: colors.textSub }]}>Loading opinions...</Text>
       </View>
     );
   }
@@ -418,14 +232,19 @@ export default function FeedScreen() {
   if (opinions.length === 0) {
     return (
       <View style={[styles.centered, { backgroundColor: colors.bg }]}>
-        <Text style={[styles.emptyText, { color: colors.textSub }]}>
-          No opinions yet. Be the first to create one!
-        </Text>
+        <Text style={[styles.emptyText, { color: colors.textSub }]}>No opinions yet.</Text>
       </View>
     );
   }
 
-  const currentOpinion = opinions[currentIndex];
+  const opinion = opinions[currentIndex];
+  const agreePercent = votedOpinion?.total_votes > 0
+    ? Math.round((votedOpinion.agree_count / votedOpinion.total_votes) * 100)
+    : 50;
+  const disagreePercent = 100 - agreePercent;
+  const isMinority =
+    (userVote === "agree" && agreePercent < 50) ||
+    (userVote === "disagree" && disagreePercent < 50);
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.bg }]}>
@@ -435,90 +254,148 @@ export default function FeedScreen() {
       />
 
       {/* Header */}
-<View style={styles.header}>
-  <Text style={[styles.headerTitle, { color: colors.text }]}>
-    Live Opinion Feed
-  </Text>
-  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-    <View style={[styles.liveIndicator, { backgroundColor: colors.agreeBg, borderColor: colors.agreeBorder }]}>
-      <View style={[styles.liveDot, { backgroundColor: colors.agree }]} />
-      <Text style={[styles.liveText, { color: colors.agree }]}>LIVE</Text>
-    </View>
-    <TouchableOpacity
-      onPress={async () => { await supabase.auth.signOut(); }}
-      style={[styles.logoutBtn, { backgroundColor: colors.pill }]}
-    >
-      <Text style={[styles.logoutText, { color: colors.textSub }]}>Log out</Text>
-    </TouchableOpacity>
-  </View>
-</View>
-
-      {/* Progress indicator */}
-      <View style={styles.progressRow}>
-        <Text style={[styles.progressText, { color: colors.textMuted }]}>
-          {currentIndex + 1} / {opinions.length}
-        </Text>
-        <View style={[styles.progressTrack, { backgroundColor: colors.bar }]}>
-          <View
-            style={[
-              styles.progressFill,
-              {
-                backgroundColor: colors.next,
-                width: `${((currentIndex + 1) / opinions.length) * 100}%`,
-              },
-            ]}
-          />
+      <View style={styles.header}>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Live Opinion Feed</Text>
+        <View style={[styles.liveIndicator, { backgroundColor: colors.agreeBg, borderColor: colors.agreeBorder }]}>
+          <View style={[styles.liveDot, { backgroundColor: colors.agree }]} />
+          <Text style={[styles.liveText, { color: colors.agree }]}>LIVE</Text>
         </View>
       </View>
 
-      {/* Main content area */}
-      <View style={styles.cardArea}>
-        {userVote && votedOpinion ? (
-          <ResultCard
-            opinion={votedOpinion}
-            userVote={userVote}
-            onNext={handleNext}
-            colors={colors}
-          />
-        ) : (
-          <OpinionCard
-            key={currentOpinion.id}
-            opinion={currentOpinion}
-            onVote={handleVote}
-            onSkip={handleSkip}
-            colors={colors}
-          />
+      {/* Swipe hint */}
+      {!userVote && (
+        <Text style={[styles.swipeHint, { color: colors.textMuted }]}>
+          swipe up to skip ↑
+        </Text>
+      )}
+
+      {/* Full screen card */}
+      <Animated.View
+        style={[
+          styles.card,
+          {
+            backgroundColor: colors.card,
+            borderColor: colors.cardBorder,
+            opacity: cardOpacity,
+            transform: [{ translateY }],
+          },
+        ]}
+        {...panResponder.panHandlers}
+      >
+        {/* Category pill */}
+        <View style={[styles.categoryPill, { backgroundColor: colors.pill }]}>
+          <Text style={[styles.categoryText, { color: colors.pillText }]}>
+            {CATEGORY_LABELS[opinion?.category] ?? opinion?.category}
+          </Text>
+        </View>
+
+        {/* Opinion text */}
+        <Text style={[styles.opinionText, { color: colors.text }]}>
+          {opinion?.text}
+        </Text>
+
+        {/* Vote buttons — hidden after vote */}
+        {!userVote && (
+          <View style={styles.voteRow}>
+            <Animated.View style={{ transform: [{ scale: agreeScale }], flex: 1 }}>
+              <TouchableOpacity
+                style={[styles.voteBtn, { backgroundColor: colors.agreeBg, borderColor: colors.agreeBorder }]}
+                onPress={() => handleVote("agree")}
+                onPressIn={() => pressIn(agreeScale)}
+                onPressOut={() => pressOut(agreeScale)}
+                activeOpacity={1}
+              >
+                <Text style={styles.voteEmoji}>👍</Text>
+                <Text style={[styles.voteBtnText, { color: colors.agree }]}>Agree</Text>
+              </TouchableOpacity>
+            </Animated.View>
+            <View style={{ width: 12 }} />
+            <Animated.View style={{ transform: [{ scale: disagreeScale }], flex: 1 }}>
+              <TouchableOpacity
+                style={[styles.voteBtn, { backgroundColor: colors.disagreeBg, borderColor: colors.disagreeBorder }]}
+                onPress={() => handleVote("disagree")}
+                onPressIn={() => pressIn(disagreeScale)}
+                onPressOut={() => pressOut(disagreeScale)}
+                activeOpacity={1}
+              >
+                <Text style={styles.voteEmoji}>👎</Text>
+                <Text style={[styles.voteBtnText, { color: colors.disagree }]}>Disagree</Text>
+              </TouchableOpacity>
+            </Animated.View>
+          </View>
         )}
-      </View>
+
+        {/* Result — shown after vote */}
+        {userVote && (
+          <Animated.View style={[styles.resultSection, { opacity: resultOpacity }]}>
+            {/* Verdict */}
+            <View style={styles.verdictRow}>
+              <Text style={styles.verdictEmoji}>{isMinority ? "🔥" : "✅"}</Text>
+              <Text style={[styles.verdictText, { color: isMinority ? colors.minority : colors.agree }]}>
+                {isMinority ? "You are in the MINORITY" : "You are with the MAJORITY"}
+              </Text>
+            </View>
+
+            {/* Agree bar */}
+            <View style={styles.barSection}>
+              <View style={styles.barLabelRow}>
+                <Text style={[styles.barLabel, { color: colors.agree }]}>👍 Agree</Text>
+                <Text style={[styles.barPercent, { color: colors.agree }]}>{agreePercent}%</Text>
+              </View>
+              <View style={[styles.barTrack, { backgroundColor: colors.bar }]}>
+                <Animated.View style={[styles.barFill, {
+                  backgroundColor: colors.agree,
+                  width: barWidth.interpolate({ inputRange: [0, 1], outputRange: ["0%", `${agreePercent}%`] }),
+                }]} />
+              </View>
+            </View>
+
+            {/* Disagree bar */}
+            <View style={styles.barSection}>
+              <View style={styles.barLabelRow}>
+                <Text style={[styles.barLabel, { color: colors.disagree }]}>👎 Disagree</Text>
+                <Text style={[styles.barPercent, { color: colors.disagree }]}>{disagreePercent}%</Text>
+              </View>
+              <View style={[styles.barTrack, { backgroundColor: colors.bar }]}>
+                <Animated.View style={[styles.barFill, {
+                  backgroundColor: colors.disagree,
+                  width: barWidth.interpolate({ inputRange: [0, 1], outputRange: ["0%", `${disagreePercent}%`] }),
+                }]} />
+              </View>
+            </View>
+
+            {/* Total votes */}
+            <Text style={[styles.totalVotes, { color: colors.textMuted }]}>
+              {votedOpinion?.total_votes?.toLocaleString()} votes worldwide
+            </Text>
+
+            {/* Swipe hint after vote */}
+            <Text style={[styles.swipeHintAfter, { color: colors.textMuted }]}>
+              swipe up for next ↑
+            </Text>
+          </Animated.View>
+        )}
+      </Animated.View>
     </View>
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
     paddingTop: Platform.OS === "android" ? StatusBar.currentHeight + 12 : 56,
-    paddingHorizontal: 20,
   },
-  centered: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 32,
-  },
-  // Header
+  centered: { flex: 1, alignItems: "center", justifyContent: "center" },
+  loadingText: { marginTop: 16, fontSize: 14 },
+  emptyText: { fontSize: 15 },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 16,
+    paddingHorizontal: 20,
+    marginBottom: 8,
   },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    letterSpacing: -0.5,
-  },
+  headerTitle: { fontSize: 20, fontWeight: "700", letterSpacing: -0.5 },
   liveIndicator: {
     flexDirection: "row",
     alignItems: "center",
@@ -528,53 +405,21 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
   },
-  liveDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+  liveDot: { width: 6, height: 6, borderRadius: 3 },
+  liveText: { fontSize: 10, fontWeight: "700", letterSpacing: 1 },
+  swipeHint: {
+    textAlign: "center",
+    fontSize: 12,
+    marginBottom: 8,
   },
-  liveText: {
-    fontSize: 10,
-    fontWeight: "700",
-    letterSpacing: 1,
-  },
-  // Progress
-  progressRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginBottom: 20,
-  },
-  progressText: {
-    fontSize: 11,
-    fontWeight: "500",
-    width: 40,
-  },
-  progressTrack: {
-    flex: 1,
-    height: 3,
-    borderRadius: 2,
-    overflow: "hidden",
-  },
-  progressFill: {
-    height: 3,
-    borderRadius: 2,
-  },
-  // Card area
-  cardArea: {
-    flex: 1,
-    justifyContent: "center",
-  },
-  // Opinion card
   card: {
-    borderRadius: 24,
+    flex: 1,
+    marginHorizontal: 16,
+    marginBottom: 16,
+    borderRadius: 28,
     borderWidth: 1,
     padding: 28,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.08,
-    shadowRadius: 24,
-    elevation: 4,
+    justifyContent: "center",
   },
   categoryPill: {
     alignSelf: "flex-start",
@@ -583,132 +428,35 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     marginBottom: 20,
   },
-  categoryText: {
-    fontSize: 11,
-    fontWeight: "600",
-    letterSpacing: 0.8,
-    textTransform: "uppercase",
-  },
+  categoryText: { fontSize: 11, fontWeight: "600", letterSpacing: 0.8, textTransform: "uppercase" },
   opinionText: {
-    fontSize: 26,
-    fontWeight: "700",
-    lineHeight: 34,
+    fontSize: 28,
+    fontWeight: "800",
+    lineHeight: 36,
     letterSpacing: -0.5,
-    marginBottom: 36,
-    minHeight: 100,
+    marginBottom: 40,
   },
-  voteRow: {
-    flexDirection: "row",
-    marginBottom: 16,
-  },
+  voteRow: { flexDirection: "row" },
   voteBtn: {
-    borderRadius: 16,
+    borderRadius: 18,
     borderWidth: 1.5,
-    paddingVertical: 18,
+    paddingVertical: 20,
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
   },
-  voteEmoji: {
-    fontSize: 28,
-  },
-  voteBtnText: {
-    fontSize: 15,
-    fontWeight: "700",
-    letterSpacing: 0.2,
-  },
-  skipBtn: {
-    alignItems: "center",
-    paddingVertical: 12,
-  },
-  skipText: {
-    fontSize: 13,
-    fontWeight: "500",
-  },
-  // Result card
-  resultCard: {
-    borderRadius: 24,
-    borderWidth: 1,
-    padding: 28,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.08,
-    shadowRadius: 24,
-    elevation: 4,
-  },
-  resultOpinionText: {
-    fontSize: 14,
-    fontStyle: "italic",
-    marginBottom: 20,
-    lineHeight: 20,
-  },
-  verdictRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginBottom: 24,
-  },
-  verdictEmoji: {
-    fontSize: 20,
-  },
-  verdictText: {
-    fontSize: 17,
-    fontWeight: "800",
-    letterSpacing: -0.3,
-  },
-  barSection: {
-    marginBottom: 16,
-  },
-  barTrack: {
-    height: 10,
-    borderRadius: 5,
-    overflow: "hidden",
-    marginBottom: 6,
-  },
-  barFill: {
-    height: 10,
-    borderRadius: 5,
-  },
-  barLabelRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  barLabel: {
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  barCount: {
-    fontSize: 12,
-  },
-  totalVotes: {
-    fontSize: 11,
-    textAlign: "center",
-    marginTop: 4,
-    marginBottom: 24,
-  },
-  nextBtn: {
-    borderRadius: 16,
-    paddingVertical: 16,
-    alignItems: "center",
-  },
-  nextBtnText: {
-    fontSize: 16,
-    fontWeight: "700",
-    letterSpacing: 0.2,
-  },
-  // Loading / error / empty
-  loadingText: {
-    marginTop: 16,
-    fontSize: 14,
-  },
-  errorText: {
-    fontSize: 15,
-    textAlign: "center",
-    lineHeight: 22,
-  },
-  emptyText: {
-    fontSize: 15,
-    textAlign: "center",
-    lineHeight: 22,
-  }
+  voteEmoji: { fontSize: 30 },
+  voteBtnText: { fontSize: 15, fontWeight: "700" },
+  resultSection: { gap: 4 },
+  verdictRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 20 },
+  verdictEmoji: { fontSize: 22 },
+  verdictText: { fontSize: 18, fontWeight: "800", letterSpacing: -0.3, flex: 1 },
+  barSection: { marginBottom: 14 },
+  barLabelRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 6 },
+  barLabel: { fontSize: 13, fontWeight: "600" },
+  barPercent: { fontSize: 13, fontWeight: "700" },
+  barTrack: { height: 12, borderRadius: 6, overflow: "hidden" },
+  barFill: { height: 12, borderRadius: 6 },
+  totalVotes: { fontSize: 12, textAlign: "center", marginTop: 8 },
+  swipeHintAfter: { fontSize: 12, textAlign: "center", marginTop: 16 },
 });
