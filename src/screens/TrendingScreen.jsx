@@ -12,6 +12,7 @@ import {
     View,
 } from "react-native";
 import { supabase } from "../lib/supabase";
+import ScreenWrapper from "./ScreenWrapper";
 
 const palette = {
   dark: {
@@ -195,6 +196,7 @@ export default function TrendingScreen() {
   const categories = ["all", ...Object.keys(CATEGORY_LABELS)];
 
   return (
+    <ScreenWrapper>
     <View style={[styles.screen, { backgroundColor: colors.bg }]}>
       <StatusBar
         barStyle={scheme === "dark" ? "light-content" : "dark-content"}
@@ -280,6 +282,7 @@ export default function TrendingScreen() {
         />
       )}
     </View>
+    </ScreenWrapper>
   );
 }
 

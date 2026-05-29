@@ -11,6 +11,7 @@ import {
     View,
 } from "react-native";
 import { supabase } from "../lib/supabase";
+import ScreenWrapper from "./ScreenWrapper";
 
 const palette = {
   dark: {
@@ -136,12 +137,14 @@ export default function ProfileScreen({ session }) {
     if (votes === 0) return null;
     return Math.floor(50 + Math.random() * 30);
   };
-
+   
   if (loading) {
     return (
+        <ScreenWrapper>
       <View style={[styles.centered, { backgroundColor: colors.bg }]}>
         <ActivityIndicator size="large" color={colors.primary} />
       </View>
+      </ScreenWrapper>
     );
   }
 
