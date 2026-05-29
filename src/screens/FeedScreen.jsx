@@ -13,7 +13,11 @@ import {
 } from "react-native";
 import { supabase } from "../lib/supabase";
 
-const { width: W, height: H } = Dimensions.get("window");
+const { width: SW, height: SH } = Dimensions.get("window");
+
+// 9:16 card dimensions — card height = available screen height, width = height * 9/16
+const CARD_HEIGHT = SH - (Platform.OS === "android" ? 120 : 100);
+const CARD_WIDTH = Math.min(CARD_HEIGHT * (9 / 16), SW - 80);
 
 const palette = {
   dark: {
@@ -34,9 +38,8 @@ const palette = {
     minority: "#F59E0B",
     bar: "#1E1E2E",
     nextBtn: "#1E1E2E",
-    nextBtnBorder: "#2A2A3A",
+    nextBtnBorder: "#3A3A5A",
     nextIcon: "#A78BFA",
-    resultBg: "#0D0D14",
   },
   light: {
     bg: "#F0EFF8",
@@ -55,10 +58,9 @@ const palette = {
     pillText: "#9A99AE",
     minority: "#D97706",
     bar: "#F0EFF8",
-    nextBtn: "#F0EFF8",
+    nextBtn: "#FFFFFF",
     nextBtnBorder: "#E0DEFA",
     nextIcon: "#7C3AED",
-    resultBg: "#FAFAFA",
   },
 };
 
@@ -79,7 +81,7 @@ export default function FeedScreen({ session }) {
   const cardOpacity = useRef(new Animated.Value(1)).current;
   const cardTranslateY = useRef(new Animated.Value(0)).current;
   const resultOpacity = useRef(new Animated.Value(0)).current;
-  const resultTranslateY = useRef(new Animated.Value(120)).current;
+  const resultTranslateY = useRef(new Animated.Value(100)).current;
   const btnsOpacity = useRef(new Animated.Value(1)).current;
   const btnsTranslateY = useRef(new Animated.Value(0)).current;
   const barWidth = useRef(new Animated.Value(0)).current;
@@ -131,7 +133,7 @@ export default function FeedScreen({ session }) {
       setVotedOpinion(null);
       barWidth.setValue(0);
       resultOpacity.setValue(0);
-      resultTranslateY.setValue(120);
+      resultTranslateY.setValue(100);
       btnsOpacity.setValue(1);
       btnsTranslateY.setValue(0);
       cardTranslateY.setValue(80);
@@ -164,12 +166,10 @@ export default function FeedScreen({ session }) {
     setVotedOpinion(updated);
     setUserVote(value);
 
-    // Slide buttons down and fade out
     Animated.parallel([
-      Animated.timing(btnsOpacity, { toValue: 0, duration: 200, useNativeDriver: true }),
-      Animated.timing(btnsTranslateY, { toValue: 60, duration: 200, useNativeDriver: true }),
+      Animated.timing(btnsOpacity, { toValue: 0, duration: 180, useNativeDriver: true }),
+      Animated.timing(btnsTranslateY, { toValue: 50, duration: 180, useNativeDriver: true }),
     ]).start(() => {
-      // Slide result up and fade in
       Animated.parallel([
         Animated.timing(resultOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
         Animated.spring(resultTranslateY, { toValue: 0, tension: 70, friction: 10, useNativeDriver: true }),
@@ -189,16 +189,16 @@ export default function FeedScreen({ session }) {
 
   if (loading) {
     return (
-      <View style={[styles.fullScreen, { backgroundColor: colors.bg, alignItems: "center", justifyContent: "center" }]}>
+      <View style={[styles.screen, { backgroundColor: colors.bg, alignItems: "center", justifyContent: "center" }]}>
         <ActivityIndicator size="large" color="#7C3AED" />
-        <Text style={[styles.loadingText, { color: colors.textSub }]}>Loading opinions...</Text>
+        <Text style={[{ color: colors.textSub, fontSize: 14, marginTop: 16 }]}>Loading opinions...</Text>
       </View>
     );
   }
 
   if (opinions.length === 0) {
     return (
-      <View style={[styles.fullScreen, { backgroundColor: colors.bg, alignItems: "center", justifyContent: "center" }]}>
+      <View style={[styles.screen, { backgroundColor: colors.bg, alignItems: "center", justifyContent: "center" }]}>
         <Text style={[{ color: colors.textSub, fontSize: 15 }]}>No opinions yet.</Text>
       </View>
     );
@@ -214,21 +214,22 @@ export default function FeedScreen({ session }) {
     (userVote === "disagree" && disagreePercent < 50);
 
   return (
-    <View style={[styles.fullScreen, { backgroundColor: colors.bg }]}>
+    <View style={[styles.screen, { backgroundColor: colors.bg }]}>
       <StatusBar
         barStyle={scheme === "dark" ? "light-content" : "dark-content"}
-        backgroundColor="transparent"
-        translucent
+        backgroundColor={colors.bg}
       />
 
-      {/* Full screen card + right sidebar row */}
-      <View style={styles.row}>
+      {/* Centered layout */}
+      <View style={styles.layout}>
 
         {/* 9:16 Card */}
         <Animated.View
           style={[
             styles.card,
             {
+              width: CARD_WIDTH,
+              height: CARD_HEIGHT,
               backgroundColor: colors.card,
               borderColor: colors.cardBorder,
               opacity: cardOpacity,
@@ -236,14 +237,14 @@ export default function FeedScreen({ session }) {
             },
           ]}
         >
-          {/* Top area — category + live + counter */}
+          {/* Top row */}
           <View style={styles.cardTop}>
             <View style={[styles.categoryPill, { backgroundColor: colors.pill }]}>
               <Text style={[styles.categoryText, { color: colors.pillText }]}>
                 {CATEGORY_LABELS[opinion?.category] ?? opinion?.category}
               </Text>
             </View>
-            <View style={styles.cardTopRight}>
+            <View style={styles.topRight}>
               <View style={[styles.liveIndicator, { backgroundColor: colors.agreeBg, borderColor: colors.agreeBorder }]}>
                 <View style={[styles.liveDot, { backgroundColor: colors.agree }]} />
                 <Text style={[styles.liveText, { color: colors.agree }]}>LIVE</Text>
@@ -264,46 +265,42 @@ export default function FeedScreen({ session }) {
             </Text>
           </View>
 
-          {/* Bottom area — vote buttons OR result */}
+          {/* Bottom — buttons or result */}
           <View style={styles.cardBottom}>
             {/* Vote buttons */}
-            <Animated.View
-              style={[
-                styles.voteRow,
-                {
-                  opacity: btnsOpacity,
-                  transform: [{ translateY: btnsTranslateY }],
-                  position: userVote ? "absolute" : "relative",
-                  bottom: userVote ? 0 : undefined,
-                  left: 0, right: 0,
-                  pointerEvents: userVote ? "none" : "auto",
-                },
-              ]}
-            >
-              <TouchableOpacity
-                style={[styles.voteBtn, { backgroundColor: colors.agreeBg, borderColor: colors.agreeBorder }]}
-                onPress={() => handleVote("agree")}
-                activeOpacity={0.85}
-                disabled={!!userVote}
+            {!userVote && (
+              <Animated.View
+                style={[
+                  styles.voteRow,
+                  {
+                    opacity: btnsOpacity,
+                    transform: [{ translateY: btnsTranslateY }],
+                  },
+                ]}
               >
-                <Text style={styles.voteEmoji}>👍</Text>
-                <Text style={[styles.voteBtnText, { color: colors.agree }]}>Agree</Text>
-              </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.voteBtn, { backgroundColor: colors.agreeBg, borderColor: colors.agreeBorder }]}
+                  onPress={() => handleVote("agree")}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.voteEmoji}>👍</Text>
+                  <Text style={[styles.voteBtnText, { color: colors.agree }]}>Agree</Text>
+                </TouchableOpacity>
 
-              <View style={{ width: 12 }} />
+                <View style={{ width: 10 }} />
 
-              <TouchableOpacity
-                style={[styles.voteBtn, { backgroundColor: colors.disagreeBg, borderColor: colors.disagreeBorder }]}
-                onPress={() => handleVote("disagree")}
-                activeOpacity={0.85}
-                disabled={!!userVote}
-              >
-                <Text style={styles.voteEmoji}>👎</Text>
-                <Text style={[styles.voteBtnText, { color: colors.disagree }]}>Disagree</Text>
-              </TouchableOpacity>
-            </Animated.View>
+                <TouchableOpacity
+                  style={[styles.voteBtn, { backgroundColor: colors.disagreeBg, borderColor: colors.disagreeBorder }]}
+                  onPress={() => handleVote("disagree")}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.voteEmoji}>👎</Text>
+                  <Text style={[styles.voteBtnText, { color: colors.disagree }]}>Disagree</Text>
+                </TouchableOpacity>
+              </Animated.View>
+            )}
 
-            {/* Result section */}
+            {/* Result */}
             {userVote && (
               <Animated.View
                 style={[
@@ -314,7 +311,6 @@ export default function FeedScreen({ session }) {
                   },
                 ]}
               >
-                {/* Verdict */}
                 <View style={styles.verdictRow}>
                   <Text style={styles.verdictEmoji}>{isMinority ? "🔥" : "✅"}</Text>
                   <Text style={[styles.verdictText, { color: isMinority ? colors.minority : colors.agree }]}>
@@ -322,7 +318,6 @@ export default function FeedScreen({ session }) {
                   </Text>
                 </View>
 
-                {/* Agree bar */}
                 <View style={styles.barSection}>
                   <View style={styles.barLabelRow}>
                     <Text style={[styles.barLabel, { color: colors.agree }]}>👍 Agree</Text>
@@ -336,7 +331,6 @@ export default function FeedScreen({ session }) {
                   </View>
                 </View>
 
-                {/* Disagree bar */}
                 <View style={styles.barSection}>
                   <View style={styles.barLabelRow}>
                     <Text style={[styles.barLabel, { color: colors.disagree }]}>👎 Disagree</Text>
@@ -358,21 +352,28 @@ export default function FeedScreen({ session }) {
           </View>
         </Animated.View>
 
-        {/* Right sidebar — TikTok style */}
+        {/* Right sidebar — next button */}
         <View style={styles.sidebar}>
-          {/* Next / Up arrow button */}
           <TouchableOpacity
-            style={[styles.sideBtn, { backgroundColor: colors.nextBtn, borderColor: colors.nextBtnBorder }]}
             onPress={goNext}
-            onPressIn={() => Animated.spring(nextScale, { toValue: 0.88, useNativeDriver: true }).start()}
+            onPressIn={() => Animated.spring(nextScale, { toValue: 0.85, useNativeDriver: true }).start()}
             onPressOut={() => Animated.spring(nextScale, { toValue: 1, useNativeDriver: true }).start()}
             activeOpacity={1}
           >
-            <Animated.View style={{ transform: [{ scale: nextScale }] }}>
-              <Text style={[styles.sideBtnIcon, { color: colors.nextIcon }]}>↑</Text>
+            <Animated.View
+              style={[
+                styles.nextBtn,
+                {
+                  backgroundColor: colors.nextBtn,
+                  borderColor: colors.nextBtnBorder,
+                  transform: [{ scale: nextScale }],
+                },
+              ]}
+            >
+              <Text style={[styles.nextIcon, { color: colors.nextIcon }]}>↑</Text>
             </Animated.View>
           </TouchableOpacity>
-          <Text style={[styles.sideBtnLabel, { color: colors.textMuted }]}>Next</Text>
+          <Text style={[styles.nextLabel, { color: colors.textMuted }]}>Next</Text>
         </View>
 
       </View>
@@ -381,46 +382,52 @@ export default function FeedScreen({ session }) {
 }
 
 const styles = StyleSheet.create({
-  fullScreen: {
+  screen: {
     flex: 1,
     paddingTop: Platform.OS === "android" ? StatusBar.currentHeight ?? 0 : 0,
   },
-  loadingText: { marginTop: 16, fontSize: 14 },
-  row: {
+  layout: {
     flex: 1,
     flexDirection: "row",
-    alignItems: "stretch",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 16,
     paddingHorizontal: 12,
-    paddingVertical: 12,
-    gap: 10,
+    gap: 12,
   },
-  // 9:16 card — takes full height, leaves room for sidebar
   card: {
-    flex: 1,
-    borderRadius: 24,
+    borderRadius: 28,
     borderWidth: 1,
-    overflow: "hidden",
-    padding: 24,
+    padding: 22,
     flexDirection: "column",
     justifyContent: "space-between",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 24,
+    elevation: 6,
   },
-  // Card top
   cardTop: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
-  cardTopRight: {
+  topRight: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 6,
   },
   categoryPill: {
     paddingHorizontal: 12,
     paddingVertical: 5,
     borderRadius: 20,
   },
-  categoryText: { fontSize: 11, fontWeight: "600", letterSpacing: 0.8, textTransform: "uppercase" },
+  categoryText: {
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 1,
+    textTransform: "uppercase",
+  },
   liveIndicator: {
     flexDirection: "row",
     alignItems: "center",
@@ -433,29 +440,27 @@ const styles = StyleSheet.create({
   liveDot: { width: 5, height: 5, borderRadius: 3 },
   liveText: { fontSize: 9, fontWeight: "700", letterSpacing: 1 },
   counter: { fontSize: 11, fontWeight: "500" },
-  // Center area — opinion text
   centerArea: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    paddingVertical: 32,
+    paddingVertical: 24,
+    paddingHorizontal: 4,
   },
   opinionText: {
-    fontSize: 26,
+    fontSize: 24,
     fontWeight: "800",
-    lineHeight: 34,
+    lineHeight: 32,
     letterSpacing: -0.5,
     textAlign: "center",
-    marginBottom: 16,
+    marginBottom: 14,
   },
   voteCount: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "500",
   },
-  // Card bottom
   cardBottom: {
-    minHeight: 120,
-    justifyContent: "flex-end",
+    gap: 0,
   },
   voteRow: {
     flexDirection: "row",
@@ -464,47 +469,46 @@ const styles = StyleSheet.create({
     flex: 1,
     borderRadius: 16,
     borderWidth: 1.5,
-    paddingVertical: 18,
+    paddingVertical: 16,
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
   },
-  voteEmoji: { fontSize: 28 },
-  voteBtnText: { fontSize: 14, fontWeight: "700" },
-  // Result
-  resultSection: {
-    gap: 4,
-  },
+  voteEmoji: { fontSize: 26 },
+  voteBtnText: { fontSize: 13, fontWeight: "700" },
+  resultSection: { gap: 2 },
   verdictRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
     marginBottom: 14,
   },
-  verdictEmoji: { fontSize: 20 },
-  verdictText: { fontSize: 15, fontWeight: "800", flex: 1 },
+  verdictEmoji: { fontSize: 18 },
+  verdictText: { fontSize: 14, fontWeight: "800", flex: 1 },
   barSection: { marginBottom: 10 },
-  barLabelRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 5 },
-  barLabel: { fontSize: 12, fontWeight: "600" },
-  barPercent: { fontSize: 12, fontWeight: "700" },
-  barTrack: { height: 10, borderRadius: 5, overflow: "hidden" },
-  barFill: { height: 10, borderRadius: 5 },
-  totalVotes: { fontSize: 11, textAlign: "center", marginTop: 6 },
-  // Right sidebar
+  barLabelRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 5,
+  },
+  barLabel: { fontSize: 11, fontWeight: "600" },
+  barPercent: { fontSize: 11, fontWeight: "700" },
+  barTrack: { height: 9, borderRadius: 5, overflow: "hidden" },
+  barFill: { height: 9, borderRadius: 5 },
+  totalVotes: { fontSize: 10, textAlign: "center", marginTop: 6 },
   sidebar: {
-    width: 56,
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
   },
-  sideBtn: {
+  nextBtn: {
     width: 52,
     height: 52,
     borderRadius: 26,
-    borderWidth: 1,
+    borderWidth: 1.5,
     alignItems: "center",
     justifyContent: "center",
   },
-  sideBtnIcon: { fontSize: 24, fontWeight: "700" },
-  sideBtnLabel: { fontSize: 10, fontWeight: "500" },
+  nextIcon: { fontSize: 22, fontWeight: "700" },
+  nextLabel: { fontSize: 10, fontWeight: "500" },
 });
