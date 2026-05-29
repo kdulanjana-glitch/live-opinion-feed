@@ -11,7 +11,6 @@ import {
     View,
 } from "react-native";
 import { supabase } from "../lib/supabase";
-import ScreenWrapper from "./ScreenWrapper";
 
 const palette = {
   dark: {
@@ -68,6 +67,7 @@ export default function ProfileScreen({ session }) {
 
   const [profile, setProfile] = useState(null);
   const [badges, setBadges] = useState([]);
+  const [opinionCount, setOpinionCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loggingOut, setLoggingOut] = useState(false);
 
@@ -75,6 +75,21 @@ export default function ProfileScreen({ session }) {
     if (session?.user?.id) {
       fetchProfile();
     }
+  }, [session]);
+
+  // Realtime: count new opinions by this user
+  useEffect(() => {
+    if (!session?.user?.id) return;
+    const channel = supabase
+      .channel("profile-opinions")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "opinions" },
+        (payload) => {
+          if (payload.new.created_by === session.user.id) {
+            setOpinionCount((prev) => prev + 1);
+          }
+        }
+      ).subscribe();
+    return () => supabase.removeChannel(channel);
   }, [session]);
 
   const fetchProfile = async () => {
@@ -90,6 +105,14 @@ export default function ProfileScreen({ session }) {
 
       if (profileError) throw profileError;
       setProfile(profileData);
+
+      // Fetch real opinion count
+      const { count } = await supabase
+        .from("opinions")
+        .select("id", { count: "exact", head: true })
+        .eq("created_by", session.user.id)
+        .eq("status", "approved");
+      setOpinionCount(count ?? 0);
 
       // Fetch badges
       const { data: badgeData } = await supabase
@@ -140,11 +163,9 @@ export default function ProfileScreen({ session }) {
    
   if (loading) {
     return (
-        <ScreenWrapper>
       <View style={[styles.centered, { backgroundColor: colors.bg }]}>
         <ActivityIndicator size="large" color={colors.primary} />
       </View>
-      </ScreenWrapper>
     );
   }
 
@@ -206,7 +227,7 @@ export default function ProfileScreen({ session }) {
 
           <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
             <Text style={[styles.statValue, { color: colors.text }]}>
-              {profile?.total_opinions_created || 0}
+              {opinionCount}
             </Text>
             <Text style={[styles.statLabel, { color: colors.textSub }]}>Opinions</Text>
           </View>

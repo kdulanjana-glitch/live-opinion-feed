@@ -12,7 +12,6 @@ import {
     View,
 } from "react-native";
 import { supabase } from "../lib/supabase";
-import ScreenWrapper from "./ScreenWrapper";
 
 const palette = {
   dark: {
@@ -138,7 +137,6 @@ export default function CreateScreen({ session }) {
   };
 
   return (
-    <ScreenWrapper>
     <View style={[styles.screen, { backgroundColor: colors.bg }]}>
       <StatusBar
         barStyle={scheme === "dark" ? "light-content" : "dark-content"}
@@ -321,7 +319,6 @@ export default function CreateScreen({ session }) {
         <View style={{ height: 40 }} />
       </ScrollView>
     </View>
-    </ScreenWrapper>
   );
 }
 

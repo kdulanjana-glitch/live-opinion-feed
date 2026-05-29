@@ -13,3 +13,13 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     detectSessionInUrl: Platform.OS === "web",
   },
 });
+
+export function subscribeToTable(channelName, table, events, callback) {
+  const channel = supabase.channel(channelName);
+  const eventList = Array.isArray(events) ? events : [events];
+  eventList.forEach((event) => {
+    channel.on("postgres_changes", { event, schema: "public", table }, callback);
+  });
+  channel.subscribe();
+  return channel;
+}

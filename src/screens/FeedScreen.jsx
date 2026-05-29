@@ -1,9 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
   Dimensions,
-  KeyboardAvoidingView, Modal,
+  FlatList,
+  KeyboardAvoidingView,
+  Modal,
   Platform,
   ScrollView,
   StatusBar,
@@ -17,8 +19,6 @@ import {
 import { supabase } from "../lib/supabase";
 
 const { width: SW, height: SH } = Dimensions.get("window");
-const CARD_HEIGHT = SH - (Platform.OS === "android" ? 120 : 100);
-const CARD_WIDTH = Math.min(CARD_HEIGHT * (9 / 16), SW - 40);
 
 const palette = {
   dark: {
@@ -27,8 +27,8 @@ const palette = {
     agree: "#22C55E", agreeBg: "#0A1A0F", agreeBorder: "#0D4020", agreeDark: "#052010",
     disagree: "#EF4444", disagreeBg: "#1A0A0A", disagreeBorder: "#3D1010", disagreeDark: "#1A0505",
     pill: "#2A2A3A", pillText: "#A0A0B8", pillBorder: "#3A3A5A",
-    minority: "#F59E0B", bar: "#1E1E2E",
-    sideBtn: "#1E1E2E", sideBtnBorder: "#2A2A3A", nextIcon: "#A78BFA",
+    minority: "#F59E0B",
+    sideBtn: "#1E1E2E", sideBtnBorder: "#2A2A3A",
     liked: "#EF4444", saved: "#F59E0B",
     modalBg: "#13131A", modalBorder: "#2A2A3A",
     input: "#1E1E2E", inputBorder: "#3A3A5A",
@@ -41,8 +41,8 @@ const palette = {
     agree: "#16A34A", agreeBg: "#F0FDF4", agreeBorder: "#86EFAC", agreeDark: "#DCFCE7",
     disagree: "#DC2626", disagreeBg: "#FFF5F5", disagreeBorder: "#FCA5A5", disagreeDark: "#FFE4E4",
     pill: "#EDE9FE", pillText: "#5B21B6", pillBorder: "#C4B5FD",
-    minority: "#D97706", bar: "#F0EFF8",
-    sideBtn: "#F5F4FA", sideBtnBorder: "#E0DEFA", nextIcon: "#7C3AED",
+    minority: "#D97706",
+    sideBtn: "#F5F4FA", sideBtnBorder: "#E0DEFA",
     liked: "#EF4444", saved: "#D97706",
     modalBg: "#FFFFFF", modalBorder: "#E0DEFA",
     input: "#F5F4FA", inputBorder: "#E0DEFA",
@@ -52,10 +52,10 @@ const palette = {
 };
 
 const CATEGORY_LABELS = {
-  love: { label: "Love", emoji: "❤️" },
-  money: { label: "Money", emoji: "💰" },
-  life: { label: "Life", emoji: "🌱" },
-  tech: { label: "Tech", emoji: "💻" },
+  love:    { label: "Love",    emoji: "❤️" },
+  money:   { label: "Money",   emoji: "💰" },
+  life:    { label: "Life",    emoji: "🌱" },
+  tech:    { label: "Tech",    emoji: "💻" },
   society: { label: "Society", emoji: "🌍" },
 };
 
@@ -97,7 +97,7 @@ function CommentModal({ visible, onClose, opinionId, session, colors }) {
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={cs.overlay}>
-        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ width: "100%", maxWidth: 480 }}>
+        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ width: "100%" }}>
           <View style={[cs.sheet, { backgroundColor: colors.modalBg, borderColor: colors.modalBorder }]}>
             <View style={[cs.handle, { backgroundColor: colors.sideBtnBorder }]} />
             <View style={cs.header}>
@@ -169,223 +169,252 @@ const cs = StyleSheet.create({
   send: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
 });
 
-export default function FeedScreen({ session }) {
+export default function FeedScreen({ session, onRequireAuth, onNavigateToUser, scrollToId, onScrolled }) {
   const scheme = useColorScheme();
   const colors = palette[scheme === "dark" ? "dark" : "light"];
 
-  const [opinions, setOpinions] = useState([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [userVote, setUserVote] = useState(null);
-  const [liked, setLiked] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [displayOpinions, setDisplayOpinions] = useState([]);
+  const [baseOpinions, setBaseOpinions] = useState([]);
+  const [cardStates, setCardStates] = useState({});
+  const [visibleIndex, setVisibleIndex] = useState(0);
   const [commentOpen, setCommentOpen] = useState(false);
+  const [listHeight, setListHeight] = useState(SH);
   const [loading, setLoading] = useState(true);
 
-  // Double tap refs — store last tap time
-  const agreeTapTime = useRef(0);
-  const disagreeTapTime = useRef(0);
-  const DOUBLE_TAP_DELAY = 350;
+  const flatListRef = useRef(null);
+  const tapTimers = useRef({});
+  const likeScales = useRef({});
+  const saveScales = useRef({});
+  const displayOpinionsRef = useRef([]);
+  const sessionRef = useRef(session);
+  const listHeightRef = useRef(SH);
+  const fetchingMoreRef = useRef(false);
 
-  const cardOpacity = useRef(new Animated.Value(1)).current;
-  const cardTranslateY = useRef(new Animated.Value(0)).current;
-  const nextScale = useRef(new Animated.Value(1)).current;
-  const likeScale = useRef(new Animated.Value(1)).current;
-  const saveScale = useRef(new Animated.Value(1)).current;
+  useEffect(() => { displayOpinionsRef.current = displayOpinions; }, [displayOpinions]);
+  useEffect(() => { sessionRef.current = session; }, [session]);
+  useEffect(() => { listHeightRef.current = listHeight; }, [listHeight]);
+
+  const getLikeScale = (id) => {
+    if (!likeScales.current[id]) likeScales.current[id] = new Animated.Value(1);
+    return likeScales.current[id];
+  };
+  const getSaveScale = (id) => {
+    if (!saveScales.current[id]) saveScales.current[id] = new Animated.Value(1);
+    return saveScales.current[id];
+  };
 
   useEffect(() => { fetchOpinions(); }, []);
 
+  // Realtime: prepend new approved opinions
   useEffect(() => {
-    if (opinions.length > 0 && session?.user?.id) checkUserActions();
-  }, [currentIndex, opinions.length]);
-
-  useEffect(() => {
-    const channel = supabase.channel("opinions-rt")
-      .on("postgres_changes",
-        { event: "UPDATE", schema: "public", table: "opinions" },
-        (payload) => setOpinions((prev) =>
-          prev.map((op) => op.id === payload.new.id ? { ...op, ...payload.new } : op)
-        )
+    const channel = supabase.channel("feed-inserts")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "opinions" },
+        (payload) => {
+          if (payload.new.status === "approved") {
+            setDisplayOpinions((prev) => [payload.new, ...prev]);
+            setBaseOpinions((prev) => [payload.new, ...prev]);
+          }
+        }
       ).subscribe();
     return () => supabase.removeChannel(channel);
   }, []);
+
+  // Realtime: update counts
+  useEffect(() => {
+    const channel = supabase.channel("feed-updates")
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "opinions" },
+        (payload) => {
+          setDisplayOpinions((prev) =>
+            prev.map((op) => op.id === payload.new.id ? { ...op, ...payload.new } : op)
+          );
+          setBaseOpinions((prev) =>
+            prev.map((op) => op.id === payload.new.id ? { ...op, ...payload.new } : op)
+          );
+        }
+      ).subscribe();
+    return () => supabase.removeChannel(channel);
+  }, []);
+
+  // Scroll to specific opinion from SavedScreen
+  useEffect(() => {
+    if (!scrollToId || !flatListRef.current || displayOpinionsRef.current.length === 0) return;
+    const index = displayOpinionsRef.current.findIndex((op) => op.id === scrollToId);
+    if (index >= 0) {
+      flatListRef.current.scrollToOffset({ offset: index * listHeightRef.current, animated: true });
+      onScrolled?.();
+    }
+  }, [scrollToId]);
 
   const fetchOpinions = async () => {
     try {
       setLoading(true);
       const { data, error } = await supabase
-        .from("opinions").select("*, users(username)")
+        .from("opinions")
+        .select("*, users(username)")
         .eq("status", "approved")
         .order("created_at", { ascending: false })
         .limit(30);
       if (error) throw error;
-      setOpinions([...data].sort(() => Math.random() - 0.5));
+      const shuffled = [...data].sort(() => Math.random() - 0.5);
+      setBaseOpinions(shuffled);
+      setDisplayOpinions(shuffled);
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
   };
 
-  const checkUserActions = async () => {
-    if (!session?.user?.id || !opinions[currentIndex]) return;
-    const opId = opinions[currentIndex].id;
+  const handleEndReached = useCallback(() => {
+    if (fetchingMoreRef.current) return;
+    fetchingMoreRef.current = true;
+    const base = displayOpinionsRef.current.slice(0, baseOpinions.length || 30);
+    const more = [...base].sort(() => Math.random() - 0.5);
+    setDisplayOpinions((prev) => [...prev, ...more]);
+    fetchingMoreRef.current = false;
+  }, []);
+
+  const fetchCardState = async (opinionId) => {
+    const uid = sessionRef.current?.user?.id;
+    if (!uid) return;
     const today = new Date().toISOString().split("T")[0];
-
     const [voteRes, likeRes, saveRes] = await Promise.all([
-      supabase.from("votes").select("vote_value").eq("user_id", session.user.id).eq("opinion_id", opId).eq("voted_date", today).maybeSingle(),
-      supabase.from("opinion_likes").select("id").eq("user_id", session.user.id).eq("opinion_id", opId).maybeSingle(),
-      supabase.from("opinion_saves").select("id").eq("user_id", session.user.id).eq("opinion_id", opId).maybeSingle(),
+      supabase.from("votes").select("vote_value").eq("user_id", uid).eq("opinion_id", opinionId).eq("voted_date", today).maybeSingle(),
+      supabase.from("opinion_likes").select("id").eq("user_id", uid).eq("opinion_id", opinionId).maybeSingle(),
+      supabase.from("opinion_saves").select("id").eq("user_id", uid).eq("opinion_id", opinionId).maybeSingle(),
     ]);
-    setUserVote(voteRes.data?.vote_value || null);
-    setLiked(!!likeRes.data);
-    setSaved(!!saveRes.data);
+    setCardStates((prev) => ({
+      ...prev,
+      [opinionId]: {
+        userVote: voteRes.data?.vote_value || null,
+        liked: !!likeRes.data,
+        saved: !!saveRes.data,
+      },
+    }));
   };
 
-  const goNext = () => {
-    Animated.parallel([
-      Animated.timing(cardOpacity, { toValue: 0, duration: 200, useNativeDriver: true }),
-      Animated.timing(cardTranslateY, { toValue: -80, duration: 200, useNativeDriver: true }),
-    ]).start(() => {
-      setUserVote(null);
-      setLiked(false);
-      setSaved(false);
-      cardTranslateY.setValue(80);
-      cardOpacity.setValue(0);
-      setCurrentIndex((prev) => {
-        const next = prev + 1;
-        if (next >= opinions.length) { fetchOpinions(); return 0; }
-        return next;
-      });
-      Animated.parallel([
-        Animated.spring(cardTranslateY, { toValue: 0, tension: 70, friction: 11, useNativeDriver: true }),
-        Animated.timing(cardOpacity, { toValue: 1, duration: 280, useNativeDriver: true }),
-      ]).start();
+  const onViewableItemsChanged = useRef(({ viewableItems }) => {
+    if (viewableItems.length === 0) return;
+    const idx = viewableItems[0].index ?? 0;
+    setVisibleIndex(idx);
+    const op = displayOpinionsRef.current[idx];
+    if (op) fetchCardState(op.id);
+  }).current;
+
+  const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 50 }).current;
+
+  const handleVote = useCallback(async (opinion, value) => {
+    if (!sessionRef.current?.user?.id) { onRequireAuth?.(); return; }
+    setCardStates((prev) => {
+      if (prev[opinion.id]?.userVote) return prev;
+      return { ...prev, [opinion.id]: { ...prev[opinion.id], userVote: value } };
     });
-  };
-
-  // Double tap — only fires if two taps within DOUBLE_TAP_DELAY ms
-  const handleAgreeTap = () => {
-    if (userVote) return;
-    const now = Date.now();
-    if (now - agreeTapTime.current < DOUBLE_TAP_DELAY) {
-      agreeTapTime.current = 0;
-      handleVote("agree");
-    } else {
-      agreeTapTime.current = now;
-    }
-  };
-
-  const handleDisagreeTap = () => {
-    if (userVote) return;
-    const now = Date.now();
-    if (now - disagreeTapTime.current < DOUBLE_TAP_DELAY) {
-      disagreeTapTime.current = 0;
-      handleVote("disagree");
-    } else {
-      disagreeTapTime.current = now;
-    }
-  };
-
-  const handleVote = async (value) => {
-    if (userVote) return;
-    const opinion = opinions[currentIndex];
-    if (!opinion) return;
-    setUserVote(value);
-    setOpinions((prev) => prev.map((op) =>
+    setDisplayOpinions((prev) => prev.map((op) =>
       op.id === opinion.id ? {
         ...op,
-        agree_count: value === "agree" ? op.agree_count + 1 : op.agree_count,
-        disagree_count: value === "disagree" ? op.disagree_count + 1 : op.disagree_count,
-        total_votes: op.total_votes + 1,
+        agree_count: value === "agree" ? (op.agree_count || 0) + 1 : op.agree_count,
+        disagree_count: value === "disagree" ? (op.disagree_count || 0) + 1 : op.disagree_count,
+        total_votes: (op.total_votes || 0) + 1,
       } : op
     ));
-    if (session?.user?.id) {
-      await supabase.from("votes").insert({
-        user_id: session.user.id,
-        opinion_id: opinion.id,
-        vote_value: value,
-        voted_date: new Date().toISOString().split("T")[0],
-      });
-    }
-  };
+    await supabase.from("votes").insert({
+      user_id: sessionRef.current.user.id,
+      opinion_id: opinion.id,
+      vote_value: value,
+      voted_date: new Date().toISOString().split("T")[0],
+    });
+  }, [onRequireAuth]);
 
-  const handleLike = async () => {
-    if (!session?.user?.id) return;
-    const opinion = opinions[currentIndex];
-    Animated.sequence([
-      Animated.spring(likeScale, { toValue: 1.4, useNativeDriver: true }),
-      Animated.spring(likeScale, { toValue: 1, useNativeDriver: true }),
-    ]).start();
-    if (liked) {
-      setLiked(false);
-      await supabase.from("opinion_likes").delete().eq("user_id", session.user.id).eq("opinion_id", opinion.id);
+  const handleDoubleTapVote = useCallback((opinion, value) => {
+    const state = cardStates[opinion.id] || {};
+    if (state.userVote) return;
+    const key = `${opinion.id}-${value}`;
+    const now = Date.now();
+    const last = tapTimers.current[key] || 0;
+    if (now - last < 350) {
+      tapTimers.current[key] = 0;
+      handleVote(opinion, value);
     } else {
-      setLiked(true);
-      await supabase.from("opinion_likes").insert({ user_id: session.user.id, opinion_id: opinion.id });
+      tapTimers.current[key] = now;
     }
-  };
+  }, [cardStates, handleVote]);
 
-  const handleSave = async () => {
-    if (!session?.user?.id) return;
-    const opinion = opinions[currentIndex];
+  const handleLike = useCallback(async (opinion) => {
+    if (!sessionRef.current?.user?.id) { onRequireAuth?.(); return; }
+    const uid = sessionRef.current.user.id;
+    const anim = getLikeScale(opinion.id);
     Animated.sequence([
-      Animated.spring(saveScale, { toValue: 1.4, useNativeDriver: true }),
-      Animated.spring(saveScale, { toValue: 1, useNativeDriver: true }),
+      Animated.spring(anim, { toValue: 1.4, useNativeDriver: true }),
+      Animated.spring(anim, { toValue: 1, useNativeDriver: true }),
     ]).start();
-    if (saved) {
-      setSaved(false);
-      await supabase.from("opinion_saves").delete().eq("user_id", session.user.id).eq("opinion_id", opinion.id);
+    setCardStates((prev) => {
+      const isLiked = prev[opinion.id]?.liked;
+      return { ...prev, [opinion.id]: { ...prev[opinion.id], liked: !isLiked } };
+    });
+    const isCurrentlyLiked = cardStates[opinion.id]?.liked;
+    if (isCurrentlyLiked) {
+      await supabase.from("opinion_likes").delete().eq("user_id", uid).eq("opinion_id", opinion.id);
     } else {
-      setSaved(true);
-      await supabase.from("opinion_saves").insert({ user_id: session.user.id, opinion_id: opinion.id });
+      await supabase.from("opinion_likes").insert({ user_id: uid, opinion_id: opinion.id });
     }
-  };
+  }, [cardStates, onRequireAuth]);
 
-  if (loading) return (
-    <View style={[styles.screen, { backgroundColor: colors.bg, alignItems: "center", justifyContent: "center" }]}>
-      <ActivityIndicator size="large" color="#7C3AED" />
-      <Text style={{ color: colors.textSub, fontSize: 14, marginTop: 16 }}>Loading opinions...</Text>
-    </View>
-  );
+  const handleSave = useCallback(async (opinion) => {
+    if (!sessionRef.current?.user?.id) { onRequireAuth?.(); return; }
+    const uid = sessionRef.current.user.id;
+    const anim = getSaveScale(opinion.id);
+    Animated.sequence([
+      Animated.spring(anim, { toValue: 1.4, useNativeDriver: true }),
+      Animated.spring(anim, { toValue: 1, useNativeDriver: true }),
+    ]).start();
+    setCardStates((prev) => {
+      const isSaved = prev[opinion.id]?.saved;
+      return { ...prev, [opinion.id]: { ...prev[opinion.id], saved: !isSaved } };
+    });
+    const isCurrentlySaved = cardStates[opinion.id]?.saved;
+    if (isCurrentlySaved) {
+      await supabase.from("opinion_saves").delete().eq("user_id", uid).eq("opinion_id", opinion.id);
+    } else {
+      await supabase.from("opinion_saves").insert({ user_id: uid, opinion_id: opinion.id });
+    }
+  }, [cardStates, onRequireAuth]);
 
-  if (opinions.length === 0) return (
-    <View style={[styles.screen, { backgroundColor: colors.bg, alignItems: "center", justifyContent: "center" }]}>
-      <Text style={{ color: colors.textSub, fontSize: 15 }}>No opinions yet.</Text>
-    </View>
-  );
+  const handleAvatarPress = useCallback((opinion) => {
+    if (!sessionRef.current?.user?.id) { onRequireAuth?.(); return; }
+    if (opinion.created_by) onNavigateToUser?.(opinion.created_by);
+  }, [onRequireAuth, onNavigateToUser]);
 
-  const opinion = opinions[currentIndex];
-  const total = opinion?.total_votes || 0;
-  const agreePercent = total > 0 ? Math.round((opinion.agree_count / total) * 100) : 50;
-  const disagreePercent = 100 - agreePercent;
-  const isMinority = (userVote === "agree" && agreePercent < 50) || (userVote === "disagree" && disagreePercent < 50);
-  const catInfo = CATEGORY_LABELS[opinion?.category];
+  const handleComment = useCallback(() => {
+    if (!sessionRef.current?.user?.id) { onRequireAuth?.(); return; }
+    setCommentOpen(true);
+  }, [onRequireAuth]);
 
-  // Creator avatar initial
-  const creatorInitial = (opinion?.users?.username || opinion?.created_by || "?")[0].toUpperCase();
+  const handleShare = useCallback((opinion) => {
+    if (!sessionRef.current?.user?.id) { onRequireAuth?.(); return; }
+    // Native share would use Share.share() — keeping as stub for now
+  }, [onRequireAuth]);
 
-  return (
-    <View style={[styles.screen, { backgroundColor: colors.bg }]}>
-      <StatusBar barStyle={scheme === "dark" ? "light-content" : "dark-content"} backgroundColor={colors.bg} />
-      <View style={styles.layout}>
-        {/* 9:16 card with sidebar inside */}
-        <Animated.View style={[
-          styles.card,
-          {
-            width: CARD_WIDTH,
-            height: CARD_HEIGHT,
-            backgroundColor: colors.card,
-            borderColor: colors.cardBorder,
-            opacity: cardOpacity,
-            transform: [{ translateY: cardTranslateY }],
-          },
-        ]}>
-          {/* Card content left side */}
+  const renderCard = useCallback(({ item, index }) => {
+    const state = cardStates[item.id] || {};
+    const total = item.total_votes || 0;
+    const agreePercent = total > 0 ? Math.round((item.agree_count / total) * 100) : 50;
+    const disagreePercent = 100 - agreePercent;
+    const isMinority =
+      (state.userVote === "agree" && agreePercent < 50) ||
+      (state.userVote === "disagree" && disagreePercent < 50);
+    const catInfo = CATEGORY_LABELS[item.category];
+    const creatorInitial = (item.users?.username || item.created_by || "?")[0].toUpperCase();
+    const likeScale = getLikeScale(item.id);
+    const saveScale = getSaveScale(item.id);
+
+    return (
+      <View style={{ height: listHeight, backgroundColor: colors.bg }}>
+        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+          {/* Card main content */}
           <View style={styles.cardContent}>
             {/* Top row */}
             <View style={styles.cardTop}>
-              {/* Category pill — more visible */}
               <View style={[styles.categoryPill, { backgroundColor: colors.categoryBg, borderColor: colors.categoryBorder }]}>
-                <Text style={styles.categoryEmoji}>{catInfo?.emoji}</Text>
+                {catInfo && <Text style={styles.categoryEmoji}>{catInfo.emoji}</Text>}
                 <Text style={[styles.categoryText, { color: colors.categoryText }]}>
-                  {catInfo?.label ?? opinion?.category}
+                  {catInfo?.label ?? item.category}
                 </Text>
               </View>
               <View style={styles.topRight}>
@@ -394,17 +423,15 @@ export default function FeedScreen({ session }) {
                   <Text style={[styles.liveText, { color: colors.liveGreen }]}>LIVE</Text>
                 </View>
                 <Text style={[styles.counter, { color: colors.textMuted }]}>
-                  {currentIndex + 1}/{opinions.length}
+                  {index + 1}
                 </Text>
               </View>
             </View>
 
             {/* Center — opinion text */}
             <View style={styles.centerArea}>
-              <Text style={[styles.opinionText, { color: colors.text }]}>
-                {opinion?.text}
-              </Text>
-              {userVote && (
+              <Text style={[styles.opinionText, { color: colors.text }]}>{item.text}</Text>
+              {state.userVote && (
                 <View style={styles.resultInfo}>
                   <Text style={[styles.totalVotesText, { color: colors.textMuted }]}>
                     🔥 {total.toLocaleString()} votes worldwide
@@ -417,71 +444,67 @@ export default function FeedScreen({ session }) {
             </View>
 
             {/* Bottom — vote buttons */}
-            <View style={styles.cardBottom}>
-              <View style={styles.voteRow}>
-                <TouchableOpacity
-                  style={[
-                    styles.voteBtn,
-                    {
-                      backgroundColor: userVote === "agree" ? colors.agreeDark : colors.agreeBg,
-                      borderColor: colors.agreeBorder,
-                      borderWidth: userVote === "agree" ? 2.5 : 1.5,
-                    },
-                  ]}
-                  onPress={handleAgreeTap}
-                  activeOpacity={0.85}
-                >
-                  <Text style={styles.voteEmoji}>👍</Text>
-                  <Text style={[styles.voteBtnText, { color: colors.agree, fontWeight: userVote === "agree" ? "900" : "600" }]}>
-                    {userVote ? `${agreePercent}%` : "Agree"}
-                  </Text>
-                </TouchableOpacity>
+            <View style={styles.voteRow}>
+              <TouchableOpacity
+                style={[styles.voteBtn, {
+                  backgroundColor: state.userVote === "agree" ? colors.agreeDark : colors.agreeBg,
+                  borderColor: colors.agreeBorder,
+                  borderWidth: state.userVote === "agree" ? 2.5 : 1.5,
+                }]}
+                onPress={() => handleDoubleTapVote(item, "agree")}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.voteEmoji}>👍</Text>
+                <Text style={[styles.voteBtnText, { color: colors.agree, fontWeight: state.userVote === "agree" ? "900" : "600" }]}>
+                  {state.userVote ? `${agreePercent}%` : "Agree"}
+                </Text>
+              </TouchableOpacity>
 
-                <View style={{ width: 10 }} />
+              <View style={{ width: 10 }} />
 
-                <TouchableOpacity
-                  style={[
-                    styles.voteBtn,
-                    {
-                      backgroundColor: userVote === "disagree" ? colors.disagreeDark : colors.disagreeBg,
-                      borderColor: colors.disagreeBorder,
-                      borderWidth: userVote === "disagree" ? 2.5 : 1.5,
-                    },
-                  ]}
-                  onPress={handleDisagreeTap}
-                  activeOpacity={0.85}
-                >
-                  <Text style={styles.voteEmoji}>👎</Text>
-                  <Text style={[styles.voteBtnText, { color: colors.disagree, fontWeight: userVote === "disagree" ? "900" : "600" }]}>
-                    {userVote ? `${disagreePercent}%` : "Disagree"}
-                  </Text>
-                </TouchableOpacity>
-              </View>
+              <TouchableOpacity
+                style={[styles.voteBtn, {
+                  backgroundColor: state.userVote === "disagree" ? colors.disagreeDark : colors.disagreeBg,
+                  borderColor: colors.disagreeBorder,
+                  borderWidth: state.userVote === "disagree" ? 2.5 : 1.5,
+                }]}
+                onPress={() => handleDoubleTapVote(item, "disagree")}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.voteEmoji}>👎</Text>
+                <Text style={[styles.voteBtnText, { color: colors.disagree, fontWeight: state.userVote === "disagree" ? "900" : "600" }]}>
+                  {state.userVote ? `${disagreePercent}%` : "Disagree"}
+                </Text>
+              </TouchableOpacity>
             </View>
           </View>
 
-          {/* Right sidebar — inside card, center-right */}
+          {/* Right sidebar */}
           <View style={styles.sidebar}>
             {/* Creator avatar */}
             <View style={styles.sideItem}>
-              <View style={[styles.avatarBtn, { backgroundColor: "#7C3AED" }]}>
+              <TouchableOpacity
+                style={[styles.avatarBtn, { backgroundColor: "#7C3AED" }]}
+                onPress={() => handleAvatarPress(item)}
+                activeOpacity={0.8}
+              >
                 <Text style={styles.avatarText}>{creatorInitial}</Text>
-              </View>
+              </TouchableOpacity>
             </View>
 
             {/* Like */}
             <View style={styles.sideItem}>
               <TouchableOpacity
                 style={[styles.sideBtn, { backgroundColor: colors.sideBtn, borderColor: colors.sideBtnBorder }]}
-                onPress={handleLike}
+                onPress={() => handleLike(item)}
                 activeOpacity={0.8}
               >
                 <Animated.Text style={[styles.sideBtnIcon, { transform: [{ scale: likeScale }] }]}>
-                  {liked ? "❤️" : "🤍"}
+                  {state.liked ? "❤️" : "🤍"}
                 </Animated.Text>
               </TouchableOpacity>
               <Text style={[styles.sideBtnCount, { color: colors.textMuted }]}>
-                {(opinion?.like_count || 0).toLocaleString()}
+                {(item.like_count || 0).toLocaleString()}
               </Text>
             </View>
 
@@ -489,13 +512,13 @@ export default function FeedScreen({ session }) {
             <View style={styles.sideItem}>
               <TouchableOpacity
                 style={[styles.sideBtn, { backgroundColor: colors.sideBtn, borderColor: colors.sideBtnBorder }]}
-                onPress={() => setCommentOpen(true)}
+                onPress={() => handleComment(item)}
                 activeOpacity={0.8}
               >
                 <Text style={styles.sideBtnIcon}>💬</Text>
               </TouchableOpacity>
               <Text style={[styles.sideBtnCount, { color: colors.textMuted }]}>
-                {(opinion?.comment_count || 0).toLocaleString()}
+                {(item.comment_count || 0).toLocaleString()}
               </Text>
             </View>
 
@@ -503,15 +526,15 @@ export default function FeedScreen({ session }) {
             <View style={styles.sideItem}>
               <TouchableOpacity
                 style={[styles.sideBtn, { backgroundColor: colors.sideBtn, borderColor: colors.sideBtnBorder }]}
-                onPress={handleSave}
+                onPress={() => handleSave(item)}
                 activeOpacity={0.8}
               >
                 <Animated.Text style={[styles.sideBtnIcon, { transform: [{ scale: saveScale }] }]}>
-                  {saved ? "🔖" : "🏷️"}
+                  {state.saved ? "🔖" : "🏷️"}
                 </Animated.Text>
               </TouchableOpacity>
               <Text style={[styles.sideBtnCount, { color: colors.textMuted }]}>
-                {(opinion?.save_count || 0).toLocaleString()}
+                {(item.save_count || 0).toLocaleString()}
               </Text>
             </View>
 
@@ -519,54 +542,62 @@ export default function FeedScreen({ session }) {
             <View style={styles.sideItem}>
               <TouchableOpacity
                 style={[styles.sideBtn, { backgroundColor: colors.sideBtn, borderColor: colors.sideBtnBorder }]}
-                onPress={() => {
-                  try {
-                    const url = typeof window !== "undefined"
-                      ? window.location.href
-                      : "https://live-opinion-feed.vercel.app";
-                    if (typeof navigator !== "undefined" && navigator.share) {
-                      navigator.share({ title: opinion?.text, url });
-                    } else if (typeof navigator !== "undefined" && navigator.clipboard) {
-                      navigator.clipboard.writeText(url);
-                    }
-                  } catch (e) {}
-                }}
+                onPress={() => handleShare(item)}
                 activeOpacity={0.8}
               >
                 <Text style={styles.sideBtnIcon}>↗️</Text>
               </TouchableOpacity>
               <Text style={[styles.sideBtnCount, { color: colors.textMuted }]}>Share</Text>
             </View>
-
-            {/* Next ↑ */}
-            <View style={styles.sideItem}>
-              <TouchableOpacity
-                onPress={goNext}
-                onPressIn={() => Animated.spring(nextScale, { toValue: 0.85, useNativeDriver: true }).start()}
-                onPressOut={() => Animated.spring(nextScale, { toValue: 1, useNativeDriver: true }).start()}
-                activeOpacity={1}
-              >
-                <Animated.View style={[
-                  styles.nextBtn,
-                  {
-                    backgroundColor: colors.sideBtn,
-                    borderColor: "#7C3AED",
-                    transform: [{ scale: nextScale }],
-                  },
-                ]}>
-                  <Text style={[styles.nextIcon, { color: colors.nextIcon }]}>↑</Text>
-                </Animated.View>
-              </TouchableOpacity>
-              <Text style={[styles.sideBtnCount, { color: colors.textMuted }]}>Next</Text>
-            </View>
           </View>
-        </Animated.View>
+        </View>
       </View>
+    );
+  }, [cardStates, colors, listHeight, handleDoubleTapVote, handleLike, handleSave, handleAvatarPress, handleComment, handleShare]);
 
+  if (loading) {
+    return (
+      <View style={[styles.screen, { backgroundColor: colors.bg, alignItems: "center", justifyContent: "center" }]}>
+        <ActivityIndicator size="large" color="#7C3AED" />
+        <Text style={{ color: colors.textSub, fontSize: 14, marginTop: 16 }}>Loading opinions...</Text>
+      </View>
+    );
+  }
+
+  if (displayOpinions.length === 0) {
+    return (
+      <View style={[styles.screen, { backgroundColor: colors.bg, alignItems: "center", justifyContent: "center" }]}>
+        <Text style={{ color: colors.textSub, fontSize: 15 }}>No opinions yet.</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View
+      style={[styles.screen, { backgroundColor: colors.bg }]}
+      onLayout={(e) => setListHeight(e.nativeEvent.layout.height)}
+    >
+      <StatusBar barStyle={scheme === "dark" ? "light-content" : "dark-content"} backgroundColor={colors.bg} />
+      <FlatList
+        ref={flatListRef}
+        data={displayOpinions}
+        renderItem={renderCard}
+        keyExtractor={(item, index) => `${item.id}-${index}`}
+        pagingEnabled
+        showsVerticalScrollIndicator={false}
+        onViewableItemsChanged={onViewableItemsChanged}
+        viewabilityConfig={viewabilityConfig}
+        onEndReached={handleEndReached}
+        onEndReachedThreshold={3}
+        removeClippedSubviews
+        windowSize={5}
+        maxToRenderPerBatch={3}
+        initialNumToRender={2}
+      />
       <CommentModal
         visible={commentOpen}
         onClose={() => setCommentOpen(false)}
-        opinionId={opinion?.id}
+        opinionId={displayOpinions[visibleIndex]?.id}
         session={session}
         colors={colors}
       />
@@ -577,19 +608,14 @@ export default function FeedScreen({ session }) {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    paddingTop: Platform.OS === "android" ? StatusBar.currentHeight ?? 0 : 0,
-  },
-  layout: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 16,
-    paddingHorizontal: 12,
+    paddingTop: Platform.OS === "android" ? (StatusBar.currentHeight ?? 0) : 0,
   },
   card: {
+    flex: 1,
+    flexDirection: "row",
+    margin: 12,
     borderRadius: 28,
     borderWidth: 1,
-    flexDirection: "row",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.1,
@@ -645,7 +671,6 @@ const styles = StyleSheet.create({
   resultInfo: { alignItems: "center", gap: 6, marginTop: 4 },
   totalVotesText: { fontSize: 12, fontWeight: "500" },
   verdictText: { fontSize: 14, fontWeight: "800", textAlign: "center" },
-  cardBottom: {},
   voteRow: { flexDirection: "row" },
   voteBtn: {
     flex: 1,
@@ -657,30 +682,24 @@ const styles = StyleSheet.create({
   },
   voteEmoji: { fontSize: 26 },
   voteBtnText: { fontSize: 14 },
-  // Sidebar inside card
   sidebar: {
-    width: 64,
+    width: 68,
     justifyContent: "center",
     alignItems: "center",
-    gap: 14,
+    gap: 16,
     paddingVertical: 24,
     paddingRight: 10,
   },
   sideItem: { alignItems: "center", gap: 3 },
   avatarBtn: {
-    width: 42, height: 42, borderRadius: 21,
+    width: 44, height: 44, borderRadius: 22,
     alignItems: "center", justifyContent: "center",
   },
   avatarText: { color: "#fff", fontSize: 16, fontWeight: "700" },
   sideBtn: {
-    width: 42, height: 42, borderRadius: 21,
+    width: 44, height: 44, borderRadius: 22,
     borderWidth: 1, alignItems: "center", justifyContent: "center",
   },
   sideBtnIcon: { fontSize: 18 },
   sideBtnCount: { fontSize: 9, fontWeight: "500" },
-  nextBtn: {
-    width: 42, height: 42, borderRadius: 21,
-    borderWidth: 2, alignItems: "center", justifyContent: "center",
-  },
-  nextIcon: { fontSize: 20, fontWeight: "700" },
 });
