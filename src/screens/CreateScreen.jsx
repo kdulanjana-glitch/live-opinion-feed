@@ -98,35 +98,43 @@ export default function CreateScreen({ session }) {
   const isReady = text.trim().length >= 10 && category && !isOverLimit;
 
   const handleSubmit = async () => {
-    if (!isReady) return;
-    try {
-      setLoading(true);
-      setError(null);
+  if (!isReady) return;
+  try {
+    setLoading(true);
+    setError(null);
 
-      const { error: insertError } = await supabase
-        .from("opinions")
-        .insert({
-          text: text.trim(),
-          category,
-          created_by: session?.user?.id || null,
-          status: "pending",
-        });
+    // Check session
+    const { data: { user } } = await supabase.auth.getUser();
+    console.log("Current user:", user?.id);
+    console.log("Submitting:", { text: text.trim(), category, created_by: user?.id });
 
-      if (insertError) throw insertError;
+    const { data, error: insertError } = await supabase
+      .from("opinions")
+      .insert({
+        text: text.trim(),
+        category,
+        created_by: user?.id || null,
+        status: "approved",
+      })
+      .select();
 
-      setSuccess(true);
-      setText("");
-      setCategory(null);
+    console.log("Insert result:", data);
+    console.log("Insert error:", insertError);
 
-      // Reset success after 4 seconds
-      setTimeout(() => setSuccess(false), 4000);
+    if (insertError) throw insertError;
 
-    } catch (err) {
-      setError(err.message || "Failed to submit. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  };
+    setSuccess(true);
+    setText("");
+    setCategory(null);
+    setTimeout(() => setSuccess(false), 4000);
+
+  } catch (err) {
+    console.error("Submit error:", err);
+    setError(err.message || "Failed to submit. Please try again.");
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleExample = (example) => {
     setText(example);
