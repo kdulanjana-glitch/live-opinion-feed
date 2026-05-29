@@ -11,6 +11,7 @@ import { supabase } from '../lib/supabase';
 import CreateScreen from '../screens/CreateScreen';
 import FeedScreen from '../screens/FeedScreen';
 import ProfileScreen from '../screens/ProfileScreen';
+import TrendingScreen from '../screens/TrendingScreen';
 
 export default function Index() {
   const scheme = useColorScheme();
@@ -59,10 +60,11 @@ export default function Index() {
   }
 
   const TABS = [
-    { key: 'feed',    label: 'Feed',    emoji: '🏠' },
-    { key: 'create',  label: 'Create',  emoji: '➕' },
-    { key: 'profile', label: 'Profile', emoji: '👤' },
-  ];
+  { key: 'feed',     label: 'Feed',     emoji: '🏠' },
+  { key: 'trending', label: 'Trending', emoji: '🔥' },
+  { key: 'create',   label: 'Create',   emoji: '➕' },
+  { key: 'profile',  label: 'Profile',  emoji: '👤' },
+];
 
   return (
     <View style={[styles.container, { backgroundColor: colors.bg }]}>
@@ -70,6 +72,7 @@ export default function Index() {
       {/* Screen content */}
       <View style={styles.content}>
         {activeTab === 'feed'    && <FeedScreen    session={session} />}
+        {activeTab === 'trending' && <TrendingScreen />}
         {activeTab === 'create'  && <CreateScreen  session={session} />}
         {activeTab === 'profile' && <ProfileScreen session={session} />}
       </View>
