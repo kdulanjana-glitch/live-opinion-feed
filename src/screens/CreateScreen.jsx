@@ -65,11 +65,19 @@ const palette = {
 };
 
 const CATEGORIES = [
-  { key: "love",    label: "Love",    emoji: "❤️" },
-  { key: "money",   label: "Money",   emoji: "💰" },
-  { key: "life",    label: "Life",    emoji: "🌱" },
-  { key: "tech",    label: "Tech",    emoji: "💻" },
-  { key: "society", label: "Society", emoji: "🌍" },
+  { key: "love",          label: "Love",          emoji: "❤️"  },
+  { key: "money",         label: "Money",         emoji: "💰"  },
+  { key: "life",          label: "Life",          emoji: "🌱"  },
+  { key: "tech",          label: "Tech",          emoji: "💻"  },
+  { key: "society",       label: "Society",       emoji: "🌍"  },
+  { key: "politics",      label: "Politics",      emoji: "🏛️"  },
+  { key: "food",          label: "Food",          emoji: "🍕"  },
+  { key: "health",        label: "Health",        emoji: "💪"  },
+  { key: "sports",        label: "Sports",        emoji: "⚽"  },
+  { key: "entertainment", label: "Entertainment", emoji: "🎬"  },
+  { key: "science",       label: "Science",       emoji: "🔬"  },
+  { key: "education",     label: "Education",     emoji: "📚"  },
+  { key: "environment",   label: "Environment",   emoji: "🌿"  },
 ];
 
 const MAX_CHARS = 140;
@@ -87,11 +95,13 @@ export default function CreateScreen({ session }) {
   const colors = palette[scheme === "dark" ? "dark" : "light"];
 
   const [text, setText] = useState("");
+  const [description, setDescription] = useState("");
   const [category, setCategory] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
   const [focused, setFocused] = useState(false);
+  const [descFocused, setDescFocused] = useState(false);
 
   const charsLeft = MAX_CHARS - text.length;
   const isOverLimit = charsLeft < 0;
@@ -109,6 +119,7 @@ export default function CreateScreen({ session }) {
       .from("opinions")
       .insert({
         text: text.trim(),
+        description: description.trim() || null,
         category,
         created_by: user?.id || null,
         status: "approved",
@@ -119,6 +130,7 @@ export default function CreateScreen({ session }) {
 
     setSuccess(true);
     setText("");
+    setDescription("");
     setCategory(null);
     setTimeout(() => setSuccess(false), 4000);
 
@@ -204,6 +216,28 @@ export default function CreateScreen({ session }) {
               {charsLeft}
             </Text>
           </View>
+        </View>
+
+        {/* Description input (optional) */}
+        <Text style={[styles.sectionLabel, { color: colors.textSub }]}>
+          Add context {"("}optional{")"}
+        </Text>
+        <View style={[styles.descCard, { backgroundColor: colors.card, borderColor: descFocused ? colors.inputFocus : colors.cardBorder }]}>
+          <TextInput
+            style={[styles.descInput, { color: colors.text }]}
+            placeholder="Give voters more background or context…"
+            placeholderTextColor={colors.textMuted}
+            value={description}
+            onChangeText={(t) => { setDescription(t); setError(null); }}
+            onFocus={() => setDescFocused(true)}
+            onBlur={() => setDescFocused(false)}
+            multiline
+            maxLength={200}
+            textAlignVertical="top"
+          />
+          <Text style={[styles.descCounter, { color: colors.textMuted }]}>
+            {200 - description.length}
+          </Text>
         </View>
 
         {/* Category selector */}
@@ -359,6 +393,19 @@ const styles = StyleSheet.create({
   },
   counterHint: { fontSize: 11 },
   counter: { fontSize: 12, fontWeight: "600" },
+  descCard: {
+    borderRadius: 16,
+    borderWidth: 1.5,
+    padding: 14,
+    marginBottom: 20,
+    minHeight: 80,
+  },
+  descInput: {
+    fontSize: 14,
+    lineHeight: 20,
+    minHeight: 56,
+  },
+  descCounter: { fontSize: 11, textAlign: "right", marginTop: 6 },
   sectionLabel: {
     fontSize: 12,
     fontWeight: "600",

@@ -52,14 +52,22 @@ const palette = {
 };
 
 const CATEGORY_LABELS = {
-  love:    { label: "Love",    emoji: "❤️" },
-  money:   { label: "Money",   emoji: "💰" },
-  life:    { label: "Life",    emoji: "🌱" },
-  tech:    { label: "Tech",    emoji: "💻" },
-  society: { label: "Society", emoji: "🌍" },
+  love:          { label: "Love",          emoji: "❤️"  },
+  money:         { label: "Money",         emoji: "💰"  },
+  life:          { label: "Life",          emoji: "🌱"  },
+  tech:          { label: "Tech",          emoji: "💻"  },
+  society:       { label: "Society",       emoji: "🌍"  },
+  politics:      { label: "Politics",      emoji: "🏛️"  },
+  food:          { label: "Food",          emoji: "🍕"  },
+  health:        { label: "Health",        emoji: "💪"  },
+  sports:        { label: "Sports",        emoji: "⚽"  },
+  entertainment: { label: "Entertainment", emoji: "🎬"  },
+  science:       { label: "Science",       emoji: "🔬"  },
+  education:     { label: "Education",     emoji: "📚"  },
+  environment:   { label: "Environment",   emoji: "🌿"  },
 };
 
-function CommentModal({ visible, onClose, opinionId, session, colors }) {
+function CommentModal({ visible, onClose, opinionId, session, colors, onCommentPosted }) {
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState("");
   const [loading, setLoading] = useState(false);
@@ -91,6 +99,7 @@ function CommentModal({ visible, onClose, opinionId, session, colors }) {
     });
     setNewComment("");
     await fetchComments();
+    onCommentPosted?.(opinionId);
     setSubmitting(false);
   };
 
@@ -178,7 +187,7 @@ export default function FeedScreen({ session, onRequireAuth, onNavigateToUser, s
   const [cardStates, setCardStates] = useState({});
   const [visibleIndex, setVisibleIndex] = useState(0);
   const [commentOpen, setCommentOpen] = useState(false);
-  const [listHeight, setListHeight] = useState(SH);
+  const [listHeight, setListHeight] = useState(0);
   const [loading, setLoading] = useState(true);
 
   const flatListRef = useRef(null);
@@ -187,8 +196,10 @@ export default function FeedScreen({ session, onRequireAuth, onNavigateToUser, s
   const saveScales = useRef({});
   const displayOpinionsRef = useRef([]);
   const sessionRef = useRef(session);
-  const listHeightRef = useRef(SH);
+  const listHeightRef = useRef(0);
   const fetchingMoreRef = useRef(false);
+  // Stores the target opinion ID while waiting for list + height to be ready
+  const pendingScrollRef = useRef(scrollToId || null);
 
   useEffect(() => { displayOpinionsRef.current = displayOpinions; }, [displayOpinions]);
   useEffect(() => { sessionRef.current = session; }, [session]);
@@ -235,14 +246,39 @@ export default function FeedScreen({ session, onRequireAuth, onNavigateToUser, s
     return () => supabase.removeChannel(channel);
   }, []);
 
-  // Scroll to specific opinion from SavedScreen
-  useEffect(() => {
-    if (!scrollToId || !flatListRef.current || displayOpinionsRef.current.length === 0) return;
-    const index = displayOpinionsRef.current.findIndex((op) => op.id === scrollToId);
-    if (index >= 0) {
-      flatListRef.current.scrollToOffset({ offset: index * listHeightRef.current, animated: true });
-      onScrolled?.();
+  // Move a specific opinion to index 0, scroll FlatList to top.
+  // Offset 0 is always correct regardless of listHeight measurement timing.
+  const navigateToOpinion = async (targetId) => {
+    if (!targetId) return;
+    let targetOp = displayOpinionsRef.current.find((op) => op.id === targetId);
+    if (!targetOp) {
+      const { data } = await supabase
+        .from("opinions")
+        .select("*, users(username)")
+        .eq("id", targetId)
+        .maybeSingle();
+      if (!data) { pendingScrollRef.current = null; return; }
+      targetOp = data;
     }
+    // Put target at the front of the list
+    setDisplayOpinions((prev) => [targetOp, ...prev.filter((op) => op.id !== targetOp.id)]);
+    // Scroll to offset 0 — target is now always at index 0
+    setTimeout(() => {
+      flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+      pendingScrollRef.current = null;
+      onScrolled?.();
+    }, 200);
+  };
+
+  // When scrollToId prop changes (e.g. coming back from UserProfileScreen while feed is alive)
+  useEffect(() => {
+    if (!scrollToId) return;
+    pendingScrollRef.current = scrollToId;
+    // Only navigate immediately if the feed list is already loaded
+    if (displayOpinionsRef.current.length > 0) {
+      navigateToOpinion(scrollToId);
+    }
+    // If not loaded yet, fetchOpinions handles it
   }, [scrollToId]);
 
   const fetchOpinions = async () => {
@@ -255,9 +291,33 @@ export default function FeedScreen({ session, onRequireAuth, onNavigateToUser, s
         .order("created_at", { ascending: false })
         .limit(30);
       if (error) throw error;
-      const shuffled = [...data].sort(() => Math.random() - 0.5);
-      setBaseOpinions(shuffled);
-      setDisplayOpinions(shuffled);
+      let opinions = [...data].sort(() => Math.random() - 0.5);
+
+      // If there's a pending scroll target, put it at index 0 before rendering.
+      // The FlatList starts at offset 0 by default, so the target is immediately visible —
+      // no scrollToOffset call needed at all.
+      const targetId = pendingScrollRef.current;
+      if (targetId) {
+        const idx = opinions.findIndex((op) => op.id === targetId);
+        if (idx > 0) {
+          // Found but not at front — move it there
+          const [t] = opinions.splice(idx, 1);
+          opinions.unshift(t);
+        } else if (idx < 0) {
+          // Not in the 30 loaded — fetch it specifically and prepend
+          const { data: t } = await supabase
+            .from("opinions")
+            .select("*, users(username)")
+            .eq("id", targetId)
+            .maybeSingle();
+          if (t) opinions.unshift(t);
+        }
+        // idx === 0: already at front, nothing to do
+        setTimeout(() => { pendingScrollRef.current = null; onScrolled?.(); }, 400);
+      }
+
+      setBaseOpinions(opinions);
+      setDisplayOpinions(opinions);
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
   };
@@ -339,16 +399,27 @@ export default function FeedScreen({ session, onRequireAuth, onNavigateToUser, s
   const handleLike = useCallback(async (opinion) => {
     if (!sessionRef.current?.user?.id) { onRequireAuth?.(); return; }
     const uid = sessionRef.current.user.id;
+    const isCurrentlyLiked = cardStates[opinion.id]?.liked;
+    const delta = isCurrentlyLiked ? -1 : 1;
+
     const anim = getLikeScale(opinion.id);
     Animated.sequence([
       Animated.spring(anim, { toValue: 1.4, useNativeDriver: true }),
       Animated.spring(anim, { toValue: 1, useNativeDriver: true }),
     ]).start();
-    setCardStates((prev) => {
-      const isLiked = prev[opinion.id]?.liked;
-      return { ...prev, [opinion.id]: { ...prev[opinion.id], liked: !isLiked } };
-    });
-    const isCurrentlyLiked = cardStates[opinion.id]?.liked;
+
+    // Optimistically toggle icon
+    setCardStates((prev) => ({
+      ...prev,
+      [opinion.id]: { ...prev[opinion.id], liked: !isCurrentlyLiked },
+    }));
+    // Optimistically update displayed count
+    setDisplayOpinions((prev) => prev.map((op) =>
+      op.id === opinion.id
+        ? { ...op, like_count: Math.max(0, (op.like_count || 0) + delta) }
+        : op
+    ));
+
     if (isCurrentlyLiked) {
       await supabase.from("opinion_likes").delete().eq("user_id", uid).eq("opinion_id", opinion.id);
     } else {
@@ -359,16 +430,27 @@ export default function FeedScreen({ session, onRequireAuth, onNavigateToUser, s
   const handleSave = useCallback(async (opinion) => {
     if (!sessionRef.current?.user?.id) { onRequireAuth?.(); return; }
     const uid = sessionRef.current.user.id;
+    const isCurrentlySaved = cardStates[opinion.id]?.saved;
+    const delta = isCurrentlySaved ? -1 : 1;
+
     const anim = getSaveScale(opinion.id);
     Animated.sequence([
       Animated.spring(anim, { toValue: 1.4, useNativeDriver: true }),
       Animated.spring(anim, { toValue: 1, useNativeDriver: true }),
     ]).start();
-    setCardStates((prev) => {
-      const isSaved = prev[opinion.id]?.saved;
-      return { ...prev, [opinion.id]: { ...prev[opinion.id], saved: !isSaved } };
-    });
-    const isCurrentlySaved = cardStates[opinion.id]?.saved;
+
+    // Optimistically toggle icon
+    setCardStates((prev) => ({
+      ...prev,
+      [opinion.id]: { ...prev[opinion.id], saved: !isCurrentlySaved },
+    }));
+    // Optimistically update displayed count
+    setDisplayOpinions((prev) => prev.map((op) =>
+      op.id === opinion.id
+        ? { ...op, save_count: Math.max(0, (op.save_count || 0) + delta) }
+        : op
+    ));
+
     if (isCurrentlySaved) {
       await supabase.from("opinion_saves").delete().eq("user_id", uid).eq("opinion_id", opinion.id);
     } else {
@@ -404,8 +486,9 @@ export default function FeedScreen({ session, onRequireAuth, onNavigateToUser, s
     const likeScale = getLikeScale(item.id);
     const saveScale = getSaveScale(item.id);
 
+    const itemHeight = listHeight > 0 ? listHeight : SH;
     return (
-      <View style={{ height: listHeight, backgroundColor: colors.bg }}>
+      <View style={{ height: itemHeight, backgroundColor: colors.bg }}>
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
           {/* Card main content */}
           <View style={styles.cardContent}>
@@ -431,6 +514,11 @@ export default function FeedScreen({ session, onRequireAuth, onNavigateToUser, s
             {/* Center — opinion text */}
             <View style={styles.centerArea}>
               <Text style={[styles.opinionText, { color: colors.text }]}>{item.text}</Text>
+              {!!item.description && (
+                <Text style={[styles.descriptionText, { color: colors.textSub }]}>
+                  {item.description}
+                </Text>
+              )}
               {state.userVote && (
                 <View style={styles.resultInfo}>
                   <Text style={[styles.totalVotesText, { color: colors.textMuted }]}>
@@ -573,16 +661,14 @@ export default function FeedScreen({ session, onRequireAuth, onNavigateToUser, s
   }
 
   return (
-    <View
-      style={[styles.screen, { backgroundColor: colors.bg }]}
-      onLayout={(e) => setListHeight(e.nativeEvent.layout.height)}
-    >
+    <View style={[styles.screen, { backgroundColor: colors.bg }]}>
       <StatusBar barStyle={scheme === "dark" ? "light-content" : "dark-content"} backgroundColor={colors.bg} />
       <FlatList
         ref={flatListRef}
         data={displayOpinions}
         renderItem={renderCard}
         keyExtractor={(item, index) => `${item.id}-${index}`}
+        extraData={cardStates}
         pagingEnabled
         showsVerticalScrollIndicator={false}
         onViewableItemsChanged={onViewableItemsChanged}
@@ -593,6 +679,8 @@ export default function FeedScreen({ session, onRequireAuth, onNavigateToUser, s
         windowSize={5}
         maxToRenderPerBatch={3}
         initialNumToRender={2}
+        style={styles.flatList}
+        onLayout={(e) => setListHeight(e.nativeEvent.layout.height)}
       />
       <CommentModal
         visible={commentOpen}
@@ -600,6 +688,13 @@ export default function FeedScreen({ session, onRequireAuth, onNavigateToUser, s
         opinionId={displayOpinions[visibleIndex]?.id}
         session={session}
         colors={colors}
+        onCommentPosted={(opinionId) => {
+          setDisplayOpinions((prev) => prev.map((op) =>
+            op.id === opinionId
+              ? { ...op, comment_count: (op.comment_count || 0) + 1 }
+              : op
+          ));
+        }}
       />
     </View>
   );
@@ -610,10 +705,14 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingTop: Platform.OS === "android" ? (StatusBar.currentHeight ?? 0) : 0,
   },
+  flatList: {
+    flex: 1,
+  },
   card: {
     flex: 1,
     flexDirection: "row",
-    margin: 12,
+    marginHorizontal: 12,
+    marginVertical: 8,
     borderRadius: 28,
     borderWidth: 1,
     shadowColor: "#000",
@@ -667,6 +766,15 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
     textAlign: "center",
     marginBottom: 16,
+  },
+  descriptionText: {
+    fontSize: 13,
+    lineHeight: 19,
+    textAlign: "center",
+    fontStyle: "italic",
+    marginTop: 2,
+    marginBottom: 10,
+    paddingHorizontal: 8,
   },
   resultInfo: { alignItems: "center", gap: 6, marginTop: 4 },
   totalVotesText: { fontSize: 12, fontWeight: "500" },

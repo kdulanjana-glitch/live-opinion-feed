@@ -15,63 +15,46 @@ import { supabase } from "../lib/supabase";
 
 const palette = {
   dark: {
-    bg: "#0A0A0F",
-    card: "#13131A",
-    cardBorder: "#1E1E2E",
-    text: "#F0EFF8",
-    textSub: "#6B6A7E",
-    textMuted: "#3D3C50",
-    input: "#1A1A28",
-    inputBorder: "#2A2A3A",
-    inputFocus: "#7C3AED",
-    primary: "#7C3AED",
-    primaryText: "#FFFFFF",
-    error: "#EF4444",
-    errorBg: "#1A0505",
-    success: "#22C55E",
-    successBg: "#052010",
-    divider: "#1E1E2E",
-    link: "#A78BFA",
+    bg: "#0A0A0F", card: "#13131A", cardBorder: "#1E1E2E",
+    text: "#F0EFF8", textSub: "#6B6A7E", textMuted: "#3D3C50",
+    input: "#1A1A28", inputBorder: "#2A2A3A", inputFocus: "#7C3AED",
+    primary: "#7C3AED", primaryText: "#FFFFFF",
+    error: "#EF4444", errorBg: "#1A0505",
+    success: "#22C55E", successBg: "#052010",
+    divider: "#1E1E2E", link: "#A78BFA",
   },
   light: {
-    bg: "#F5F4FA",
-    card: "#FFFFFF",
-    cardBorder: "#E8E7F5",
-    text: "#0D0C1A",
-    textSub: "#7A798E",
-    textMuted: "#BCBBCE",
-    input: "#F5F4FA",
-    inputBorder: "#E8E7F5",
-    inputFocus: "#7C3AED",
-    primary: "#7C3AED",
-    primaryText: "#FFFFFF",
-    error: "#DC2626",
-    errorBg: "#FFF5F5",
-    success: "#16A34A",
-    successBg: "#F0FDF4",
-    divider: "#E8E7F5",
-    link: "#7C3AED",
+    bg: "#F5F4FA", card: "#FFFFFF", cardBorder: "#E8E7F5",
+    text: "#0D0C1A", textSub: "#7A798E", textMuted: "#BCBBCE",
+    input: "#F5F4FA", inputBorder: "#E8E7F5", inputFocus: "#7C3AED",
+    primary: "#7C3AED", primaryText: "#FFFFFF",
+    error: "#DC2626", errorBg: "#FFF5F5",
+    success: "#16A34A", successBg: "#F0FDF4",
+    divider: "#E8E7F5", link: "#7C3AED",
   },
 };
 
-export default function AuthScreen() {
+// redirectTo must match the scheme in app.json
+const RESET_REDIRECT = "liveopinionfeed://auth";
+
+export default function AuthScreen({ initialMode = "login" }) {
   const scheme = useColorScheme();
   const colors = palette[scheme === "dark" ? "dark" : "light"];
 
-  const [mode, setMode] = useState("login");
+  const [mode, setMode] = useState(initialMode);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [username, setUsername] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [successMsg, setSuccessMsg] = useState(null);
   const [focusedField, setFocusedField] = useState(null);
 
-  const clearMessages = () => {
-    setError(null);
-    setSuccessMsg(null);
-  };
+  const clearMessages = () => { setError(null); setSuccessMsg(null); };
 
+  // ── Login ──────────────────────────────────────────────────────────────────
   const handleLogin = async () => {
     if (!email || !password) {
       setError("Please enter your email and password.");
@@ -85,6 +68,7 @@ export default function AuthScreen() {
         password,
       });
       if (authError) throw authError;
+      // onAuthStateChange in index.tsx handles navigation after SIGNED_IN fires
     } catch (err) {
       setError(err.message || "Login failed. Please try again.");
     } finally {
@@ -92,6 +76,7 @@ export default function AuthScreen() {
     }
   };
 
+  // ── Sign up ────────────────────────────────────────────────────────────────
   const handleSignup = async () => {
     if (!email || !password || !username) {
       setError("Please fill in all fields.");
@@ -108,17 +93,22 @@ export default function AuthScreen() {
     try {
       setLoading(true);
       clearMessages();
-      const { error: authError } = await supabase.auth.signUp({
+      const { data, error: authError } = await supabase.auth.signUp({
         email: email.trim(),
         password,
-        options: {
-          data: { username: username.trim() },
-        },
+        options: { data: { username: username.trim() } },
       });
       if (authError) throw authError;
-      setSuccessMsg("Account created! Check your email to confirm, then log in.");
-      setMode("login");
-      setPassword("");
+
+      if (data.session) {
+        // Email confirmation is disabled — user is logged in immediately
+        // onAuthStateChange handles navigation
+      } else {
+        // Email confirmation is enabled — tell user to check inbox
+        setSuccessMsg("Account created! Check your email to confirm, then log in.");
+        setMode("login");
+        setPassword("");
+      }
     } catch (err) {
       setError(err.message || "Signup failed. Please try again.");
     } finally {
@@ -126,6 +116,7 @@ export default function AuthScreen() {
     }
   };
 
+  // ── Forgot password ────────────────────────────────────────────────────────
   const handleForgotPassword = async () => {
     if (!email) {
       setError("Please enter your email address.");
@@ -135,10 +126,13 @@ export default function AuthScreen() {
       setLoading(true);
       clearMessages();
       const { error: authError } = await supabase.auth.resetPasswordForEmail(
-        email.trim()
+        email.trim(),
+        { redirectTo: RESET_REDIRECT }
       );
       if (authError) throw authError;
-      setSuccessMsg("Password reset email sent. Check your inbox.");
+      setSuccessMsg(
+        "Password reset email sent! Open the link on this device to set a new password."
+      );
     } catch (err) {
       setError(err.message || "Failed to send reset email.");
     } finally {
@@ -146,10 +140,41 @@ export default function AuthScreen() {
     }
   };
 
+  // ── Set new password (after clicking reset link) ───────────────────────────
+  const handleResetPassword = async () => {
+    if (!newPassword) {
+      setError("Please enter a new password.");
+      return;
+    }
+    if (newPassword.length < 6) {
+      setError("Password must be at least 6 characters.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+    try {
+      setLoading(true);
+      clearMessages();
+      const { error: authError } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+      if (authError) throw authError;
+      setSuccessMsg("Password updated! You are now logged in.");
+      // onAuthStateChange fires SIGNED_IN → index.tsx navigates to feed
+    } catch (err) {
+      setError(err.message || "Failed to update password.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSubmit = () => {
-    if (mode === "login") handleLogin();
-    else if (mode === "signup") handleSignup();
-    else handleForgotPassword();
+    if (mode === "login")           handleLogin();
+    else if (mode === "signup")     handleSignup();
+    else if (mode === "forgot")     handleForgotPassword();
+    else if (mode === "reset-password") handleResetPassword();
   };
 
   const inputStyle = (field) => [
@@ -161,6 +186,20 @@ export default function AuthScreen() {
     },
   ];
 
+  // ── Render ─────────────────────────────────────────────────────────────────
+  const isResetMode = mode === "reset-password";
+  const isForgotMode = mode === "forgot";
+  const showTabs = !isForgotMode && !isResetMode;
+
+  const submitLabel = () => {
+    if (loading) return null;
+    if (mode === "login")           return "Log in";
+    if (mode === "signup")          return "Create account";
+    if (mode === "forgot")          return "Send reset link";
+    if (mode === "reset-password")  return "Set new password";
+    return "Continue";
+  };
+
   return (
     <KeyboardAvoidingView
       style={[styles.screen, { backgroundColor: colors.bg }]}
@@ -170,6 +209,7 @@ export default function AuthScreen() {
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
       >
+        {/* Logo */}
         <View style={styles.logoArea}>
           <View style={[styles.logoBadge, { backgroundColor: colors.primary }]}>
             <Text style={styles.logoEmoji}>🌍</Text>
@@ -183,37 +223,50 @@ export default function AuthScreen() {
         </View>
 
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
-          {mode !== "forgot" && (
+
+          {/* Login / Sign up tabs */}
+          {showTabs && (
             <View style={[styles.tabRow, { borderBottomColor: colors.divider }]}>
-              <TouchableOpacity
-                style={[styles.tab, mode === "login" && { borderBottomColor: colors.primary, borderBottomWidth: 2 }]}
-                onPress={() => { setMode("login"); clearMessages(); }}
-              >
-                <Text style={[styles.tabText, { color: mode === "login" ? colors.primary : colors.textSub, fontWeight: mode === "login" ? "700" : "400" }]}>
-                  Log in
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.tab, mode === "signup" && { borderBottomColor: colors.primary, borderBottomWidth: 2 }]}
-                onPress={() => { setMode("signup"); clearMessages(); }}
-              >
-                <Text style={[styles.tabText, { color: mode === "signup" ? colors.primary : colors.textSub, fontWeight: mode === "signup" ? "700" : "400" }]}>
-                  Sign up
-                </Text>
-              </TouchableOpacity>
+              {[{ key: "login", label: "Log in" }, { key: "signup", label: "Sign up" }].map((t) => (
+                <TouchableOpacity
+                  key={t.key}
+                  style={[styles.tab, mode === t.key && { borderBottomColor: colors.primary, borderBottomWidth: 2 }]}
+                  onPress={() => { setMode(t.key); clearMessages(); }}
+                >
+                  <Text style={[styles.tabText, {
+                    color: mode === t.key ? colors.primary : colors.textSub,
+                    fontWeight: mode === t.key ? "700" : "400",
+                  }]}>
+                    {t.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
             </View>
           )}
 
           <View style={styles.form}>
-            {mode === "forgot" && (
-              <View style={styles.forgotHeader}>
-                <Text style={[styles.forgotTitle, { color: colors.text }]}>Reset password</Text>
-                <Text style={[styles.forgotSub, { color: colors.textSub }]}>
+
+            {/* Forgot password header */}
+            {isForgotMode && (
+              <View style={styles.sectionHeader}>
+                <Text style={[styles.sectionTitle, { color: colors.text }]}>Reset password</Text>
+                <Text style={[styles.sectionSub, { color: colors.textSub }]}>
                   Enter your email and we'll send a reset link
                 </Text>
               </View>
             )}
 
+            {/* Set new password header */}
+            {isResetMode && (
+              <View style={styles.sectionHeader}>
+                <Text style={[styles.sectionTitle, { color: colors.text }]}>Set new password</Text>
+                <Text style={[styles.sectionSub, { color: colors.textSub }]}>
+                  Choose a strong password for your account
+                </Text>
+              </View>
+            )}
+
+            {/* Username (signup only) */}
             {mode === "signup" && (
               <View style={styles.fieldGroup}>
                 <Text style={[styles.label, { color: colors.textSub }]}>Username</Text>
@@ -231,23 +284,27 @@ export default function AuthScreen() {
               </View>
             )}
 
-            <View style={styles.fieldGroup}>
-              <Text style={[styles.label, { color: colors.textSub }]}>Email</Text>
-              <TextInput
-                style={inputStyle("email")}
-                placeholder="your@email.com"
-                placeholderTextColor={colors.textMuted}
-                value={email}
-                onChangeText={setEmail}
-                onFocus={() => setFocusedField("email")}
-                onBlur={() => setFocusedField(null)}
-                autoCapitalize="none"
-                keyboardType="email-address"
-                autoCorrect={false}
-              />
-            </View>
+            {/* Email (login / signup / forgot) */}
+            {!isResetMode && (
+              <View style={styles.fieldGroup}>
+                <Text style={[styles.label, { color: colors.textSub }]}>Email</Text>
+                <TextInput
+                  style={inputStyle("email")}
+                  placeholder="your@email.com"
+                  placeholderTextColor={colors.textMuted}
+                  value={email}
+                  onChangeText={setEmail}
+                  onFocus={() => setFocusedField("email")}
+                  onBlur={() => setFocusedField(null)}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  autoCorrect={false}
+                />
+              </View>
+            )}
 
-            {mode !== "forgot" && (
+            {/* Password (login / signup) */}
+            {(mode === "login" || mode === "signup") && (
               <View style={styles.fieldGroup}>
                 <Text style={[styles.label, { color: colors.textSub }]}>Password</Text>
                 <TextInput
@@ -263,6 +320,39 @@ export default function AuthScreen() {
               </View>
             )}
 
+            {/* New password (reset mode) */}
+            {isResetMode && (
+              <>
+                <View style={styles.fieldGroup}>
+                  <Text style={[styles.label, { color: colors.textSub }]}>New password</Text>
+                  <TextInput
+                    style={inputStyle("newPassword")}
+                    placeholder="Min. 6 characters"
+                    placeholderTextColor={colors.textMuted}
+                    value={newPassword}
+                    onChangeText={setNewPassword}
+                    onFocus={() => setFocusedField("newPassword")}
+                    onBlur={() => setFocusedField(null)}
+                    secureTextEntry
+                  />
+                </View>
+                <View style={styles.fieldGroup}>
+                  <Text style={[styles.label, { color: colors.textSub }]}>Confirm password</Text>
+                  <TextInput
+                    style={inputStyle("confirmPassword")}
+                    placeholder="Repeat your new password"
+                    placeholderTextColor={colors.textMuted}
+                    value={confirmPassword}
+                    onChangeText={setConfirmPassword}
+                    onFocus={() => setFocusedField("confirmPassword")}
+                    onBlur={() => setFocusedField(null)}
+                    secureTextEntry
+                  />
+                </View>
+              </>
+            )}
+
+            {/* Forgot password link */}
             {mode === "login" && (
               <TouchableOpacity
                 onPress={() => { setMode("forgot"); clearMessages(); }}
@@ -274,34 +364,33 @@ export default function AuthScreen() {
               </TouchableOpacity>
             )}
 
+            {/* Error / success banners */}
             {error && (
               <View style={[styles.messageBanner, { backgroundColor: colors.errorBg, borderColor: colors.error }]}>
                 <Text style={[styles.messageText, { color: colors.error }]}>{error}</Text>
               </View>
             )}
-
             {successMsg && (
               <View style={[styles.messageBanner, { backgroundColor: colors.successBg, borderColor: colors.success }]}>
                 <Text style={[styles.messageText, { color: colors.success }]}>{successMsg}</Text>
               </View>
             )}
 
+            {/* Submit button */}
             <TouchableOpacity
               style={[styles.submitBtn, { backgroundColor: colors.primary, opacity: loading ? 0.7 : 1 }]}
               onPress={handleSubmit}
               disabled={loading}
               activeOpacity={0.85}
             >
-              {loading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={[styles.submitText, { color: colors.primaryText }]}>
-                  {mode === "login" ? "Log in" : mode === "signup" ? "Create account" : "Send reset link"}
-                </Text>
-              )}
+              {loading
+                ? <ActivityIndicator color="#fff" />
+                : <Text style={[styles.submitText, { color: colors.primaryText }]}>{submitLabel()}</Text>
+              }
             </TouchableOpacity>
 
-            {mode === "forgot" && (
+            {/* Back to login */}
+            {(isForgotMode || isResetMode) && (
               <TouchableOpacity
                 onPress={() => { setMode("login"); clearMessages(); }}
                 style={styles.backLink}
@@ -333,9 +422,9 @@ const styles = StyleSheet.create({
   tab: { flex: 1, paddingVertical: 16, alignItems: "center" },
   tabText: { fontSize: 15 },
   form: { padding: 24 },
-  forgotHeader: { marginBottom: 20 },
-  forgotTitle: { fontSize: 20, fontWeight: "700", marginBottom: 6 },
-  forgotSub: { fontSize: 14, lineHeight: 20 },
+  sectionHeader: { marginBottom: 20 },
+  sectionTitle: { fontSize: 20, fontWeight: "700", marginBottom: 6 },
+  sectionSub: { fontSize: 14, lineHeight: 20 },
   fieldGroup: { marginBottom: 16 },
   label: { fontSize: 13, fontWeight: "500", marginBottom: 6 },
   input: { borderWidth: 1.5, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15 },

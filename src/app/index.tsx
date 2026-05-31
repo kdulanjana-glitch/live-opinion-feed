@@ -2,38 +2,47 @@ import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   StyleSheet,
-  Text,
-  TouchableOpacity,
-  useColorScheme,
   View,
+  useColorScheme,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../lib/supabase';
-import AuthScreen from '../screens/AuthScreen';
-import CreateScreen from '../screens/CreateScreen';
-import FeedScreen from '../screens/FeedScreen';
-import ProfileScreen from '../screens/ProfileScreen';
-import SavedScreen from '../screens/SavedScreen';
-import TrendingScreen from '../screens/TrendingScreen';
-import UserProfileScreen from '../screens/UserProfileScreen';
+
+// ── Peolia components ──────────────────────────
+import TabBar from '../components/TabBar';
+
+// ── Screens ────────────────────────────────────
+import AuthScreen      from '../screens/AuthScreen';
+import SentariumScreen from '../screens/SentariumScreen';
+import TrendingScreen  from '../screens/TrendingScreen';
+import FloatScreen     from '../screens/FloatScreen';
+import SavedScreen     from '../screens/SavedScreen';      // Pin tab (PinScreen coming soon)
+import ProfileScreen   from '../screens/ProfileScreen';    // own + other citizen
+
+// Tab keys used by TabBar: 'trending' | 'float' | 'sentarium' | 'pin' | 'profile'
+// Hidden keys (not in TabBar): 'auth' | 'reset-password'
 
 export default function Index() {
+  const insets = useSafeAreaInsets();
   const scheme = useColorScheme();
-  const colors = {
-    bg: scheme === 'dark' ? '#0A0A0F' : '#F5F4FA',
-    nav: scheme === 'dark' ? '#13131A' : '#FFFFFF',
-    navBorder: scheme === 'dark' ? '#1E1E2E' : '#E8E7F5',
-    active: '#7C3AED',
-    inactive: scheme === 'dark' ? '#3D3C50' : '#BCBBCE',
+  const bg     = scheme === 'dark' ? '#0F0F14' : '#FFFFFF';
+
+  const [session,       setSession]       = useState(null);
+  const [loading,       setLoading]       = useState(true);
+  const [activeTab,     setActiveTab]     = useState('sentarium');
+  const [userProfileId, setUserProfileId] = useState<string | null>(null);
+  const [feedScrollToId, setFeedScrollToId] = useState<string | null>(null);
+
+  // Refs so onAuthStateChange callback never captures stale state
+  const activeTabRef = useRef('sentarium');
+  const prevTabRef   = useRef('sentarium');
+
+  const goToTab = (tab: string) => {
+    activeTabRef.current = tab;
+    setActiveTab(tab);
   };
 
-  const [session, setSession] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('feed');
-  const [userProfileId, setUserProfileId] = useState(null);
-  const [feedScrollToId, setFeedScrollToId] = useState(null);
-
-  const prevTabRef = useRef('feed');
-
+  // ── Auth bootstrap ────────────────────────────
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
@@ -44,12 +53,18 @@ export default function Index() {
       (event, session) => {
         if (event === 'SIGNED_IN') {
           setSession(session);
-          if (activeTab === 'auth') setActiveTab(prevTabRef.current || 'feed');
+          if (activeTabRef.current === 'auth') {
+            goToTab(prevTabRef.current || 'sentarium');
+          }
         }
         if (event === 'SIGNED_OUT') {
           setSession(null);
-          setActiveTab('feed');
+          goToTab('sentarium');
           setUserProfileId(null);
+        }
+        if (event === 'PASSWORD_RECOVERY') {
+          setSession(session);
+          goToTab('reset-password');
         }
       }
     );
@@ -59,57 +74,48 @@ export default function Index() {
 
   if (loading) {
     return (
-      <View style={[styles.centered, { backgroundColor: colors.bg }]}>
-        <ActivityIndicator size="large" color="#7C3AED" />
+      <View style={[styles.centered, { backgroundColor: bg }]}>
+        <ActivityIndicator size="large" color="#4F46E5" />
       </View>
     );
   }
 
-  const TABS = [
-    { key: 'feed',     label: 'Feed',    emoji: '🏠' },
-    { key: 'trending', label: 'Trending', emoji: '🔥' },
-    { key: 'create',   label: 'Create',  emoji: '➕' },
-    { key: 'saved',    label: 'Saved',   emoji: '⭐' },
-    { key: 'profile',  label: 'Profile', emoji: '👤' },
-  ];
-
+  // ── Tab press handler ─────────────────────────
   const handleTabPress = (tabKey: string) => {
-    if (!session && ['create', 'saved', 'profile'].includes(tabKey)) {
-      prevTabRef.current = activeTab;
-      setActiveTab('auth');
+    // Require auth for float / pin / profile
+    if (!session && ['float', 'pin', 'profile'].includes(tabKey)) {
+      prevTabRef.current = activeTabRef.current;
+      goToTab('auth');
       return;
     }
     setUserProfileId(null);
-    setActiveTab(tabKey);
+    goToTab(tabKey);
   };
 
   const handleRequireAuth = () => {
-    prevTabRef.current = activeTab;
-    setActiveTab('auth');
+    prevTabRef.current = activeTabRef.current;
+    goToTab('auth');
   };
 
   const handleNavigateToUser = (userId: string) => {
     setUserProfileId(userId);
   };
 
-  const handleBackFromUserProfile = () => {
-    setUserProfileId(null);
-  };
-
   const handleNavigateToFeedOpinion = (opinionId: string) => {
     setFeedScrollToId(opinionId);
-    setActiveTab('feed');
     setUserProfileId(null);
+    goToTab('sentarium');
   };
 
+  // ── Screen renderer ───────────────────────────
   const renderScreen = () => {
+    // User profile overlay — slides over any tab
     if (userProfileId) {
       return (
-        <UserProfileScreen
+        <ProfileScreen
           userId={userProfileId}
-          session={session}
-          onBack={handleBackFromUserProfile}
-          onNavigateToFeed={handleNavigateToFeedOpinion}
+          onBack={() => setUserProfileId(null)}
+          onOpenSenti={handleNavigateToFeedOpinion}
         />
       );
     }
@@ -117,9 +123,13 @@ export default function Index() {
     switch (activeTab) {
       case 'auth':
         return <AuthScreen />;
-      case 'feed':
+
+      case 'reset-password':
+        return <AuthScreen initialMode="reset-password" />;
+
+      case 'sentarium':
         return (
-          <FeedScreen
+          <SentariumScreen
             session={session}
             onRequireAuth={handleRequireAuth}
             onNavigateToUser={handleNavigateToUser}
@@ -127,73 +137,64 @@ export default function Index() {
             onScrolled={() => setFeedScrollToId(null)}
           />
         );
+
       case 'trending':
-        return <TrendingScreen session={session} onRequireAuth={handleRequireAuth} />;
-      case 'create':
-        return session
-          ? <CreateScreen session={session} />
-          : <AuthScreen />;
-      case 'saved':
-        return session
-          ? <SavedScreen session={session} onNavigateToFeed={handleNavigateToFeedOpinion} />
-          : <AuthScreen />;
+        return (
+          <TrendingScreen
+            onOpenSenti={handleNavigateToFeedOpinion}
+          />
+        );
+
+      case 'float':
+        return session ? (
+          <FloatScreen
+            onBack={() => goToTab('sentarium')}
+            onFloated={() => goToTab('sentarium')}
+          />
+        ) : <AuthScreen />;
+
+      case 'pin':
+        return session ? (
+          <SavedScreen
+            session={session}
+            onNavigateToFeed={handleNavigateToFeedOpinion}
+          />
+        ) : <AuthScreen />;
+
       case 'profile':
-        return session
-          ? <ProfileScreen session={session} />
-          : <AuthScreen />;
+        return session ? (
+          <ProfileScreen
+            onOpenSenti={handleNavigateToFeedOpinion}
+          />
+        ) : <AuthScreen />;
+
       default:
         return null;
     }
   };
 
-  const visibleTab = userProfileId ? '' : activeTab;
+  // Hide tab highlight on auth / reset-password / user-profile overlay
+  const hiddenTabs  = ['auth', 'reset-password'];
+  const visibleTab  = userProfileId || hiddenTabs.includes(activeTab) ? '' : activeTab;
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.bg }]}>
+    <View style={[styles.container, { backgroundColor: bg }]}>
       <View style={styles.content}>
         {renderScreen()}
       </View>
 
-      <View style={[styles.bottomNav, { backgroundColor: colors.nav, borderTopColor: colors.navBorder }]}>
-        {TABS.map((tab) => (
-          <TouchableOpacity
-            key={tab.key}
-            style={styles.navItem}
-            onPress={() => handleTabPress(tab.key)}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.navIcon, { color: visibleTab === tab.key ? colors.active : colors.inactive }]}>
-              {tab.emoji}
-            </Text>
-            <Text style={[styles.navLabel, {
-              color: visibleTab === tab.key ? colors.active : colors.inactive,
-              fontWeight: visibleTab === tab.key ? '700' : '400',
-            }]}>
-              {tab.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      {/* Floating pill tab bar — hidden on auth screens */}
+      {!hiddenTabs.includes(activeTab) && !userProfileId && (
+        <View style={{ backgroundColor: bg, paddingBottom: Math.max(insets.bottom, 0) }}>
+          <TabBar activeTab={visibleTab} onTabPress={handleTabPress} />
+        </View>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  content: { flex: 1 },
-  bottomNav: {
-    flexDirection: 'row',
-    borderTopWidth: 1,
-    paddingBottom: 20,
-    paddingTop: 10,
-  },
-  navItem: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-  },
-  navIcon: { fontSize: 22 },
-  navLabel: { fontSize: 11 },
+  centered:  { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  content:   { flex: 1 },
 });
