@@ -1,64 +1,46 @@
 // ─────────────────────────────────────────────
-// Peolia Design System — Theme Constants
-// Drop this into src/constants/peoliaTheme.js
+// Peolia Design System — Theme Constants (Scaled)
+// src/constants/peoliaTheme.js
+//
+// Replace your existing peoliaTheme.js with this.
+// Typography now uses fs() for real-device scaling.
 // ─────────────────────────────────────────────
+
+import { fs, ms, s } from '../utils/peoliaScale';
 
 export const PeoliaColors = {
   light: {
-    // Backgrounds
     bg:           '#FFFFFF',
     surface:      '#F9FAFB',
     surfaceAlt:   '#F3F4F6',
-
-    // Borders
     border:       '#E5E7EB',
     borderStrong: '#D1D5DB',
-
-    // Text
     textPrimary:   '#111827',
     textSecondary: '#6B7280',
     textMuted:     '#9CA3AF',
-
-    // Accent — Indigo
     accent:        '#4F46E5',
     accentDark:    '#4338CA',
     accentLight:   '#EEF2FF',
     accentMid:     '#C7D2FE',
     accentText:    '#818CF8',
-
-    // Tab bar
     tabBg:         '#F3F4F6',
     tabBorder:     '#E5E7EB',
     tabActive:     '#4F46E5',
     tabInactive:   '#9CA3AF',
-
-    // Vote — Yes
     yesBg:         '#F0FDF4',
     yesText:       '#16A34A',
     yesChosen:     '#16A34A',
-
-    // Vote — Hmm
     hmmBg:         '#FEFCE8',
     hmmText:       '#CA8A04',
     hmmChosen:     '#CA8A04',
-
-    // Vote — Nah
     nahBg:         '#FEF2F2',
     nahText:       '#DC2626',
     nahChosen:     '#DC2626',
-
-    // Swell / Rare badge
     badgeBg:       '#EEF2FF',
     badgeText:     '#4338CA',
-
-    // Velocity (trending)
     velocity:      '#16A34A',
-
-    // Action icons
     likeColor:     '#F87171',
     iconMuted:     '#9CA3AF',
-
-    // Bottom sheet
     sheetBg:       '#FFFFFF',
     sheetBorder:   '#E5E7EB',
     cancelBg:      '#F3F4F6',
@@ -66,60 +48,37 @@ export const PeoliaColors = {
   },
 
   dark: {
-    // Backgrounds
     bg:           '#0F0F14',
     surface:      '#1A1A28',
     surfaceAlt:   '#1A1A28',
-
-    // Borders
     border:       '#2A2A3A',
     borderStrong: '#374151',
-
-    // Text
     textPrimary:   '#F9FAFB',
     textSecondary: '#9CA3AF',
     textMuted:     '#4B5563',
-
-    // Accent — Indigo
     accent:        '#4F46E5',
     accentDark:    '#4338CA',
     accentLight:   '#1E1B4B',
     accentMid:     '#3730A3',
     accentText:    '#818CF8',
-
-    // Tab bar
     tabBg:         '#1A1A28',
     tabBorder:     '#2A2A3A',
     tabActive:     '#4F46E5',
     tabInactive:   '#4B5563',
-
-    // Vote — Yes
     yesBg:         '#052E16',
     yesText:       '#4ADE80',
     yesChosen:     '#16A34A',
-
-    // Vote — Hmm
     hmmBg:         '#1C1A00',
     hmmText:       '#FACC15',
     hmmChosen:     '#CA8A04',
-
-    // Vote — Nah
     nahBg:         '#2D0A0A',
     nahText:       '#F87171',
     nahChosen:     '#DC2626',
-
-    // Swell / Rare badge
     badgeBg:       '#1E1B4B',
     badgeText:     '#A5B4FC',
-
-    // Velocity (trending)
     velocity:      '#4ADE80',
-
-    // Action icons
     likeColor:     '#F87171',
     iconMuted:     '#4B5563',
-
-    // Bottom sheet
     sheetBg:       '#1A1A28',
     sheetBorder:   '#2A2A3A',
     cancelBg:      '#2A2A3A',
@@ -127,31 +86,32 @@ export const PeoliaColors = {
   },
 };
 
+// ── Typography — ALL values go through fs() ──
 export const PeoliaTypography = {
-  sentiQuestion:      { fontSize: 17, fontWeight: '800' },
-  sentiQuestionSmall: { fontSize: 14, fontWeight: '800' },
-  description:        { fontSize: 10.5, fontWeight: '400', lineHeight: 16 },
-  wavePill:           { fontSize: 10, fontWeight: '700', letterSpacing: 0.4 },
-  sectionLabel:       { fontSize: 10, fontWeight: '700' },
-  metaText:           { fontSize: 8.5, fontWeight: '600' },
-  tabLabel:           { fontSize: 6.5, fontWeight: '700' },
-  seeMore:            { fontSize: 10.5, fontWeight: '700' },
-  votePercent:        { fontSize: 13, fontWeight: '800' },
-  voteCount:          { fontSize: 8.5, fontWeight: '600' },
-  rankBadge:          { fontSize: 9, fontWeight: '800' },
-  velocityText:       { fontSize: 8, fontWeight: '700' },
+  sentiQuestion:      { fontSize: fs(17), fontWeight: '800' },
+  sentiQuestionSmall: { fontSize: fs(14), fontWeight: '800' },
+  description:        { fontSize: fs(13), fontWeight: '400', lineHeight: fs(20) },
+  wavePill:           { fontSize: fs(12), fontWeight: '700', letterSpacing: 0.4 },
+  sectionLabel:       { fontSize: fs(13), fontWeight: '700' },
+  metaText:           { fontSize: fs(12), fontWeight: '600' },
+  tabLabel:           { fontSize: fs(11), fontWeight: '700' },
+  seeMore:            { fontSize: fs(13), fontWeight: '700' },
+  votePercent:        { fontSize: fs(16), fontWeight: '800' },
+  voteCount:          { fontSize: fs(12), fontWeight: '600' },
+  rankBadge:          { fontSize: fs(12), fontWeight: '800' },
+  velocityText:       { fontSize: fs(12), fontWeight: '700' },
 };
 
+// ── Spacing — ALL values go through ms() or s() ──
 export const PeoliaSpacing = {
-  screenPadding:  14,
-  cardRadius:     14,
-  pillRadius:     20,
-  avatarSize:     30,
-  tabBarRadius:   25,
-  tabItemRadius:  16,
+  screenPadding:  ms(16),
+  cardRadius:     ms(14),
+  pillRadius:     ms(20),
+  avatarSize:     s(38),
+  tabBarRadius:   ms(28),
+  tabItemRadius:  ms(18),
 };
 
-// Wave category colors — used for gradient backgrounds
 export const WaveColors = {
   'Tech':          ['#1E1B4B', '#4338CA'],
   'Love':          ['#831843', '#EC4899'],
@@ -169,6 +129,5 @@ export const WaveColors = {
   'default':       ['#1E1B4B', '#4338CA'],
 };
 
-// Helper — get colors for current scheme
 export const getPeoliaColors = (colorScheme) =>
   PeoliaColors[colorScheme === 'dark' ? 'dark' : 'light'];

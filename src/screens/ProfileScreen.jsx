@@ -1,30 +1,34 @@
 // ─────────────────────────────────────────────
 // Peolia — ProfileScreen
-// Replaces: old ProfileScreen.jsx + UserProfileScreen.jsx
+// src/screens/ProfileScreen.jsx
 //
-// Pass userId to show another citizen's profile.
-// Leave userId null/undefined for own profile.
+// Own profile: pass no userId prop
+// Other citizen: pass userId prop
 //
-// DB mapping (existing schema):
-//   users table: id, username  (no display_name/bio/avatar_initials yet)
-//   opinions table: text, category → floated sentis grid
-//   user_stats / user_wave_stats → not yet in DB, stubbed as empty
+// Queries (new schema):
+//   users           — id, username
+//   user_stats      — sentis_count, reacts_count, followers_count, following_count
+//   user_wave_stats — wave, react_count  (drives DNA chart)
+//   sentis          — id, question, wave, status, user_id
 // ─────────────────────────────────────────────
 
 import React, { useState, useEffect, useCallback } from 'react';
+import EditProfileSheet from '../components/EditProfileSheet';
 import {
   View, Text, ScrollView, TouchableOpacity,
   StyleSheet, useColorScheme,
   ActivityIndicator, Dimensions, StatusBar, Platform,
+  RefreshControl,
 } from 'react-native';
 import Svg, { Polygon, Circle, Line, Text as SvgText } from 'react-native-svg';
 import { supabase } from '../lib/supabase';
 import { getPeoliaColors } from '../constants/peoliaTheme';
+import { fs, ms, vs, s, SCREEN_WIDTH } from '../utils/peoliaScale';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const GRID_GAP  = 3;
+const GRID_GAP  = ms(4);
 const GRID_COLS = 3;
-const TILE_SIZE = (SCREEN_WIDTH - 28 - GRID_GAP * (GRID_COLS - 1)) / GRID_COLS;
+// ms(16)*2 matches gridSection paddingHorizontal on both sides
+const TILE_SIZE = Math.floor((SCREEN_WIDTH - ms(16) * 2 - GRID_GAP * (GRID_COLS - 1)) / GRID_COLS);
 
 const WAVE_EMOJIS = {
   'Tech': '💻', 'Love': '❤️', 'Money': '💰', 'Life': '🌱',
@@ -41,8 +45,6 @@ const WAVE_GRADIENTS = {
   'Education': '#1A2E05', 'Environment': '#064E3B',
 };
 
-const capitalize = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : '');
-
 const formatCount = (n) => {
   if (!n) return '0';
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -53,67 +55,102 @@ const formatCount = (n) => {
 export default function ProfileScreen({ userId, onBack, onOpenSenti }) {
   const scheme       = useColorScheme();
   const C            = getPeoliaColors(scheme);
-  const s            = makeStyles(C);
+  const st           = makeStyles(C);
   const isOwnProfile = !userId;
 
-  const [profile,   setProfile]   = useState(null);
-  const [sentis,    setSentis]    = useState([]);
-  const [loading,   setLoading]   = useState(true);
-  const [following, setFollowing] = useState(false);
+  const [profile,    setProfile]    = useState(null);
+  const [sentis,     setSentis]     = useState([]);
+  const [loading,    setLoading]    = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [following,  setFollowing]  = useState(false);
+  const [myId,       setMyId]       = useState(null);
+  const [editVisible, setEditVisible] = useState(false);
 
   const fetchProfile = useCallback(async () => {
     setLoading(true);
     try {
-      let targetId = userId;
-      if (!targetId) {
-        const { data: { user } } = await supabase.auth.getUser();
-        targetId = user?.id;
-      }
+      const { data: { user } } = await supabase.auth.getUser();
+      const me = user?.id ?? null;
+      setMyId(me);
+
+      const targetId = userId ?? me;
       if (!targetId) { setLoading(false); return; }
 
-      // Fetch user row (existing schema: id, username)
-      const { data: userData } = await supabase
-        .from('users')
-        .select('id, username')
-        .eq('id', targetId)
-        .single();
+      // Initial follow state — only when viewing another citizen
+      const followCheck = (userId && me && userId !== me)
+        ? supabase.from('follows').select('follower_id')
+            .eq('follower_id', me).eq('following_id', userId).maybeSingle()
+        : Promise.resolve({ data: null });
 
-      // Count their opinions as "sentis_count"
-      const { count: sentisCount } = await supabase
-        .from('opinions')
-        .select('id', { count: 'exact', head: true })
-        .eq('created_by', targetId)
-        .eq('status', 'approved');
+      // Run all queries in parallel
+      const [userRes, sentisRes, dnaRes, floatedRes, userStatsRes, followRes] = await Promise.all([
+        // Basic user info
+        supabase.from('users').select('id, username, display_name, bio').eq('id', targetId).single(),
 
-      // Count their votes as "reacts_count"
-      const { count: reactsCount } = await supabase
-        .from('votes')
-        .select('user_id', { count: 'exact', head: true })
-        .eq('user_id', targetId);
+        // Sentis count — derived directly from sentis table (always accurate)
+        supabase
+          .from('sentis')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', targetId)
+          .eq('status', 'approved'),
 
-      // Fetch floated opinions
-      const { data: opinionData } = await supabase
-        .from('opinions')
-        .select('id, text, category')
-        .eq('created_by', targetId)
-        .eq('status', 'approved')
-        .order('created_at', { ascending: false });
+        // Wave breakdown for DNA chart
+        supabase
+          .from('user_wave_stats')
+          .select('wave, react_count')
+          .eq('user_id', targetId)
+          .order('react_count', { ascending: false })
+          .limit(6),
+
+        // Floated sentis grid
+        supabase
+          .from('sentis')
+          .select('id, question, wave')
+          .eq('user_id', targetId)
+          .eq('status', 'approved')
+          .order('created_at', { ascending: false }),
+
+        // user_stats — for followers/following and reacts_count (trigger-maintained)
+        supabase
+          .from('user_stats')
+          .select('reacts_count, followers_count, following_count')
+          .eq('user_id', targetId)
+          .maybeSingle(),
+
+        followCheck,
+      ]);
+
+      setFollowing(!!followRes.data);
+
+      const ustats = userStatsRes.data ?? {};
+
+      // Reacts count — prefer user_stats trigger value, fall back to direct count
+      let reactsCount = ustats.reacts_count;
+      if (reactsCount === null || reactsCount === undefined) {
+        const { count } = await supabase
+          .from('senti_reactions')
+          .select('user_id', { count: 'exact', head: true })
+          .eq('user_id', targetId);
+        reactsCount = count ?? 0;
+      }
 
       setProfile({
-        username: userData?.username ?? 'unknown',
+        username:    userRes.data?.username ?? 'unknown',
+        displayName: userRes.data?.display_name ?? '',
+        bio:         userRes.data?.bio ?? '',
         stats: {
-          sentis_count:    sentisCount ?? 0,
-          reacts_count:    reactsCount ?? 0,
-          followers_count: 0,   // follows table not yet in DB
-          following_count: 0,
+          sentis_count:    sentisRes.count    ?? 0,  // always live from sentis table
+          reacts_count:    reactsCount,
+          followers_count: ustats.followers_count ?? 0,
+          following_count: ustats.following_count ?? 0,
         },
-        dna: [],  // user_wave_stats not yet in DB — hides DNA chart
+        dna: dnaRes.data ?? [],
       });
 
-      setSentis((opinionData ?? []).map((op) => ({
-        id:       op.id,
-        question: op.text,
-        wave:     capitalize(op.category),
+      setSentis((floatedRes.data ?? []).map((s) => ({
+        id:       s.id,
+        question: s.question,
+        wave:     s.wave ?? 'Tech',
       })));
 
     } catch (err) {
@@ -125,77 +162,115 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti }) {
 
   useEffect(() => { fetchProfile(); }, [fetchProfile]);
 
-  const handleFollow = () => setFollowing((f) => !f); // optimistic stub
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchProfile();
+    setRefreshing(false);
+  };
+
+  // ── Follow / unfollow — optimistic with rollback ─
+  const bumpFollowers = (delta) => setProfile((prev) => prev ? {
+    ...prev,
+    stats: { ...prev.stats, followers_count: Math.max(0, (prev.stats.followers_count ?? 0) + delta) },
+  } : prev);
+
+  const handleFollow = useCallback(async () => {
+    if (!myId || !userId || myId === userId) return;
+    const was   = following;
+    const delta = was ? -1 : 1;
+    setFollowing(!was);
+    bumpFollowers(delta);
+
+    let error;
+    if (!was) {
+      ({ error } = await supabase.from('follows')
+        .insert({ follower_id: myId, following_id: userId }));
+    } else {
+      ({ error } = await supabase.from('follows')
+        .delete().eq('follower_id', myId).eq('following_id', userId));
+    }
+    if (error) {
+      console.error('handleFollow error', error);
+      setFollowing(was);
+      bumpFollowers(-delta);
+    }
+  }, [myId, userId, following]);
 
   if (loading) {
-    return (
-      <View style={s.loader}>
-        <ActivityIndicator color={C.accent} />
-      </View>
-    );
+    return <View style={st.loader}><ActivityIndicator color={C.accent} /></View>;
   }
 
   const stats = profile?.stats ?? {};
 
   return (
-    <View style={s.screen}>
+    <View style={st.screen}>
       <StatusBar
         barStyle={scheme === 'dark' ? 'light-content' : 'dark-content'}
         backgroundColor={C.bg}
       />
 
       {/* Header */}
-      <View style={s.header}>
+      <View style={st.header}>
         {!isOwnProfile ? (
-          <TouchableOpacity onPress={onBack} style={s.backBtn} activeOpacity={0.7}>
-            <Text style={s.backIcon}>←</Text>
-            <Text style={s.headerTitle}>Citizen</Text>
+          <TouchableOpacity onPress={onBack} style={st.backBtn} activeOpacity={0.7}>
+            <Text style={st.backIcon}>←</Text>
+            <Text style={st.headerTitle}>Citizen</Text>
           </TouchableOpacity>
         ) : (
-          <Text style={s.headerTitle}>Profile</Text>
+          <Text style={st.headerTitle}>Profile</Text>
         )}
-        {isOwnProfile && <Text style={s.settingsIcon}>⚙️</Text>}
+        {isOwnProfile && <Text style={st.settingsIcon}>⚙️</Text>}
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={C.accent} />
+        }
+      >
 
         {/* Avatar + name + action */}
-        <View style={s.avatarRow}>
-          <View style={[s.avatar, { backgroundColor: isOwnProfile ? C.accent : '#059669' }]}>
-            <Text style={s.avatarText}>
-              {(profile?.username ?? '?')[0].toUpperCase()}
+        <View style={st.avatarRow}>
+          <View style={[st.avatar, { backgroundColor: isOwnProfile ? C.accent : '#059669' }]}>
+            <Text style={st.avatarText}>
+              {(profile?.username || '?')[0].toUpperCase()}
             </Text>
           </View>
-          <View style={s.nameBlock}>
-            <Text style={s.displayName}>{profile?.username ?? '—'}</Text>
-            <Text style={s.username}>@{profile?.username ?? '—'}</Text>
+          <View style={st.nameBlock}>
+            <Text style={st.displayName}>{profile?.displayName || profile?.username || '—'}</Text>
+            <Text style={st.username}>@{profile?.username ?? '—'}</Text>
           </View>
-          <View style={s.actionButtons}>
-            {isOwnProfile ? (
-              <TouchableOpacity style={s.editBtn} activeOpacity={0.7}>
-                <Text style={s.editText}>Edit</Text>
+          <View style={st.actionButtons}>
+            {(isOwnProfile || userId === myId) ? (
+              <TouchableOpacity style={st.editBtn} onPress={() => setEditVisible(true)} activeOpacity={0.7}>
+                <Text style={st.editText}>Edit</Text>
               </TouchableOpacity>
             ) : (
               <>
                 <TouchableOpacity
-                  style={[s.followBtn, following && s.followingBtn]}
+                  style={[st.followBtn, following && st.followingBtn]}
                   onPress={handleFollow}
                   activeOpacity={0.7}
                 >
-                  <Text style={[s.followText, following && s.followingText]}>
+                  <Text style={[st.followText, following && st.followingText]}>
                     {following ? 'Following' : 'Follow'}
                   </Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={s.askBtn} activeOpacity={0.7}>
-                  <Text style={s.askText}>Ask</Text>
+                <TouchableOpacity style={st.askBtn} activeOpacity={0.7}>
+                  <Text style={st.askText}>Ask</Text>
                 </TouchableOpacity>
               </>
             )}
           </View>
         </View>
 
-        {/* Stats row */}
-        <View style={s.statsRow}>
+        {/* Bio */}
+        {!!profile?.bio && (
+          <Text style={st.bioText}>{profile.bio}</Text>
+        )}
+
+        {/* Stats row — reads from user_stats (not COUNT(*)) */}
+        <View style={st.statsRow}>
           {[
             { label: 'Sentis',    value: formatCount(stats.sentis_count)    },
             { label: 'Reacts',    value: formatCount(stats.reacts_count)    },
@@ -203,26 +278,26 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti }) {
             { label: 'Following', value: formatCount(stats.following_count) },
           ].map(({ label, value }, i, arr) => (
             <React.Fragment key={label}>
-              <View style={s.statItem}>
-                <Text style={s.statValue}>{value}</Text>
-                <Text style={s.statLabel}>{label}</Text>
+              <View style={st.statItem}>
+                <Text style={st.statValue}>{value}</Text>
+                <Text style={st.statLabel}>{label}</Text>
               </View>
-              {i < arr.length - 1 && <View style={s.statDivider} />}
+              {i < arr.length - 1 && <View style={st.statDivider} />}
             </React.Fragment>
           ))}
         </View>
 
-        {/* Citizen DNA — hidden until user_wave_stats table is added */}
+        {/* Citizen DNA — shown when user_wave_stats data is available */}
         {profile?.dna?.length > 0 && (
-          <View style={s.dnaSection}>
-            <View style={s.dnaSectionHeader}>
-              <Text style={s.dnaSectionTitle}>Citizen DNA</Text>
-              <View style={s.dnaPrivacyRow}>
-                <Text style={s.dnaPrivacyIcon}>{isOwnProfile ? '🔒' : '🌍'}</Text>
-                <Text style={s.dnaPrivacyText}>{isOwnProfile ? 'Only you' : 'Public'}</Text>
+          <View style={st.dnaSection}>
+            <View style={st.dnaSectionHeader}>
+              <Text style={st.dnaSectionTitle}>Citizen DNA</Text>
+              <View style={st.dnaPrivacyRow}>
+                <Text style={st.dnaPrivacyIcon}>{isOwnProfile ? '🔒' : '🌍'}</Text>
+                <Text style={st.dnaPrivacyText}>{isOwnProfile ? 'Only you' : 'Public'}</Text>
               </View>
             </View>
-            <View style={[s.dnaChart, { backgroundColor: C.surface, borderColor: C.border }]}>
+            <View style={[st.dnaChart, { backgroundColor: C.surface, borderColor: C.border }]}>
               <CitizenDNAChart
                 data={profile.dna}
                 color={isOwnProfile ? C.accent : '#059669'}
@@ -232,26 +307,26 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti }) {
           </View>
         )}
 
-        {/* Floated sentis grid */}
-        <View style={s.gridSection}>
-          <View style={s.gridHeader}>
-            <Text style={s.gridTitle}>Floated sentis</Text>
-            <Text style={s.gridCount}>{sentis.length} total</Text>
+        {/* Floated sentis grid — each tile navigates to that senti in Sentarium */}
+        <View style={st.gridSection}>
+          <View style={st.gridHeader}>
+            <Text style={st.gridTitle}>Floated sentis</Text>
+            <Text style={st.gridCount}>{sentis.length} total</Text>
           </View>
           {sentis.length === 0 ? (
-            <Text style={[s.gridEmpty, { color: C.textMuted }]}>No sentis floated yet.</Text>
+            <Text style={[st.gridEmpty, { color: C.textMuted }]}>No sentis floated yet.</Text>
           ) : (
-            <View style={s.grid}>
+            <View style={st.grid}>
               {sentis.map((item) => {
                 const bg = WAVE_GRADIENTS[item.wave] ?? '#1E1B4B';
                 return (
                   <TouchableOpacity
                     key={item.id}
-                    style={[s.tile, { backgroundColor: bg, width: TILE_SIZE, height: TILE_SIZE }]}
-                    onPress={() => onOpenSenti?.(item.id)}
+                    style={[st.tile, { backgroundColor: bg, width: TILE_SIZE, height: TILE_SIZE }]}
+                    onPress={() => onOpenSenti?.(item.id)}   // passes UUID to navigate in Sentarium
                     activeOpacity={0.8}
                   >
-                    <Text style={s.tileText} numberOfLines={3}>{item.question}</Text>
+                    <Text style={st.tileText} numberOfLines={3}>{item.question}</Text>
                   </TouchableOpacity>
                 );
               })}
@@ -260,6 +335,23 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti }) {
         </View>
 
       </ScrollView>
+
+      {/* Edit profile sheet — own profile only */}
+      <EditProfileSheet
+        visible={editVisible}
+        onClose={() => setEditVisible(false)}
+        initial={{
+          username:    profile?.username ?? '',
+          displayName: profile?.displayName ?? '',
+          bio:         profile?.bio ?? '',
+        }}
+        onSaved={(u) => setProfile((prev) => prev ? {
+          ...prev,
+          username:    u.username,
+          displayName: u.display_name ?? '',
+          bio:         u.bio ?? '',
+        } : prev)}
+      />
     </View>
   );
 }
@@ -267,7 +359,6 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti }) {
 // ── Citizen DNA Radar Chart ───────────────────
 function CitizenDNAChart({ data, color, gridColor }) {
   if (!data.length) return null;
-
   const SIZE   = 200;
   const CX     = 100;
   const CY     = 80;
@@ -284,7 +375,6 @@ function CitizenDNAChart({ data, color, gridColor }) {
   const dataPoints = data.slice(0, N).map((d, i) =>
     getPoint(i, (d.react_count / maxVal) * RADIUS)
   );
-  const dataPolyPoints = dataPoints.map((p) => `${p.x},${p.y}`).join(' ');
 
   return (
     <Svg width="100%" height={SIZE * 0.75} viewBox={`0 0 ${SIZE} ${SIZE * 0.75}`}>
@@ -299,17 +389,19 @@ function CitizenDNAChart({ data, color, gridColor }) {
         />
       ))}
       {Array.from({ length: N }, (_, i) => {
-        const outer = getPoint(i, RADIUS);
-        return <Line key={i} x1={CX} y1={CY} x2={outer.x} y2={outer.y} stroke={gridColor} strokeWidth="0.5" />;
+        const o = getPoint(i, RADIUS);
+        return <Line key={i} x1={CX} y1={CY} x2={o.x} y2={o.y} stroke={gridColor} strokeWidth="0.5" />;
       })}
-      <Polygon points={dataPolyPoints} fill={`${color}30`} stroke={color} strokeWidth="1.5" />
+      <Polygon
+        points={dataPoints.map((p) => `${p.x},${p.y}`).join(' ')}
+        fill={`${color}30`} stroke={color} strokeWidth="1.5"
+      />
       {dataPoints.map((p, i) => <Circle key={i} cx={p.x} cy={p.y} r="2.5" fill={color} />)}
       {data.slice(0, N).map((d, i) => {
-        const lp    = getPoint(i, RADIUS + 12);
-        const emoji = WAVE_EMOJIS[d.wave] ?? '🌊';
+        const lp = getPoint(i, RADIUS + 12);
         return (
           <SvgText key={i} x={lp.x} y={lp.y} textAnchor="middle" fontSize="6.5" fill="#6B7280" fontWeight="600">
-            {emoji} {d.wave}
+            {WAVE_EMOJIS[d.wave] ?? '🌊'} {d.wave}
           </SvgText>
         );
       })}
@@ -325,54 +417,62 @@ const makeStyles = (C) => StyleSheet.create({
   loader: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: C.bg },
   header: {
     flexDirection: 'row', justifyContent: 'space-between',
-    alignItems: 'center', paddingHorizontal: 14, paddingTop: 8, paddingBottom: 0,
+    alignItems: 'center', paddingHorizontal: ms(16), paddingTop: vs(10), paddingBottom: 0,
   },
-  backBtn:     { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  backIcon:    { fontSize: 16, color: C.textPrimary },
-  headerTitle: { fontSize: 13, fontWeight: '800', color: C.textPrimary },
-  settingsIcon: { fontSize: 17 },
+  backBtn:     { flexDirection: 'row', alignItems: 'center', gap: ms(6) },
+  backIcon:    { fontSize: fs(20), color: C.textPrimary },                 // was fs(18) ×1.10
+  headerTitle: { fontSize: fs(18), fontWeight: '800', color: C.textPrimary }, // was fs(16) ×1.10
+  settingsIcon: { fontSize: fs(22) },                                       // was fs(20) ×1.10
   avatarRow: {
     flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 14, paddingTop: 10, gap: 10,
+    paddingHorizontal: ms(16), paddingTop: vs(12), gap: ms(12),
   },
-  avatar: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  avatarText: { fontSize: 17, fontWeight: '800', color: '#FFFFFF' },
-  nameBlock:  { flex: 1 },
-  displayName: { fontSize: 13, fontWeight: '800', color: C.textPrimary },
-  username:    { fontSize: 9.5, fontWeight: '500', color: C.textMuted },
-  actionButtons: { flexDirection: 'column', gap: 4, alignItems: 'flex-end', flexShrink: 0 },
+  avatar: {
+    width: s(50), height: s(50), borderRadius: s(25),
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  },
+  avatarText:  { fontSize: fs(22), fontWeight: '800', color: '#FFFFFF' },   // was fs(20) ×1.10
+  nameBlock:   { flex: 1 },
+  displayName: { fontSize: fs(18), fontWeight: '800', color: C.textPrimary }, // was fs(16) ×1.10
+  username:    { fontSize: fs(14), fontWeight: '500', color: C.textMuted },   // was fs(13) ×1.10
+  actionButtons: { flexDirection: 'column', gap: vs(5), alignItems: 'flex-end', flexShrink: 0 },
   editBtn: {
-    paddingVertical: 4, paddingHorizontal: 12, borderRadius: 20,
+    paddingVertical: vs(5), paddingHorizontal: ms(14), borderRadius: ms(20),
     backgroundColor: C.surfaceAlt, borderWidth: 0.5, borderColor: C.border,
   },
-  editText:    { fontSize: 8.5, fontWeight: '700', color: C.textSecondary },
-  followBtn:   { paddingVertical: 4, paddingHorizontal: 12, borderRadius: 20, backgroundColor: C.accent },
+  editText:    { fontSize: fs(14), fontWeight: '700', color: C.textSecondary }, // was fs(13) ×1.10
+  followBtn:   { paddingVertical: vs(5), paddingHorizontal: ms(14), borderRadius: ms(20), backgroundColor: C.accent },
   followingBtn: { backgroundColor: C.surfaceAlt, borderWidth: 0.5, borderColor: C.border },
-  followText:   { fontSize: 8.5, fontWeight: '700', color: '#FFFFFF' },
+  followText:   { fontSize: fs(14), fontWeight: '700', color: '#FFFFFF' },      // was fs(13) ×1.10
   followingText: { color: C.textSecondary },
   askBtn: {
-    paddingVertical: 3, paddingHorizontal: 10, borderRadius: 20,
+    paddingVertical: vs(4), paddingHorizontal: ms(12), borderRadius: ms(20),
     backgroundColor: C.surfaceAlt, borderWidth: 0.5, borderColor: C.border,
   },
-  askText: { fontSize: 8.5, fontWeight: '700', color: C.textSecondary },
-  statsRow: { flexDirection: 'row', paddingHorizontal: 14, paddingTop: 10 },
-  statItem:   { flex: 1, alignItems: 'center', gap: 1 },
-  statValue:  { fontSize: 13, fontWeight: '800', color: C.textPrimary },
-  statLabel:  { fontSize: 7, fontWeight: '600', color: C.textMuted },
-  statDivider: { width: 0.5, backgroundColor: C.border, marginHorizontal: 4 },
-  dnaSection:  { paddingHorizontal: 14, paddingTop: 10 },
-  dnaSectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 },
-  dnaSectionTitle:  { fontSize: 10, fontWeight: '700', color: C.textPrimary },
-  dnaPrivacyRow:    { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  dnaPrivacyIcon:   { fontSize: 9 },
-  dnaPrivacyText:   { fontSize: 7.5, fontWeight: '600', color: C.textMuted },
-  dnaChart:         { borderRadius: 12, padding: 6, borderWidth: 0.5 },
-  gridSection: { paddingHorizontal: 14, paddingTop: 8, paddingBottom: 20 },
-  gridHeader:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
-  gridTitle:   { fontSize: 10, fontWeight: '700', color: C.textPrimary },
-  gridCount:   { fontSize: 8, fontWeight: '600', color: C.textMuted },
-  gridEmpty:   { fontSize: 12, textAlign: 'center', paddingVertical: 24 },
+  askText:     { fontSize: fs(14), fontWeight: '700', color: C.textSecondary }, // was fs(13) ×1.10
+  bioText: {
+    fontSize: fs(14), fontWeight: '400', color: C.textSecondary,
+    lineHeight: fs(20), paddingHorizontal: ms(16), paddingTop: vs(8),
+  },
+  statsRow:    { flexDirection: 'row', paddingHorizontal: ms(16), paddingTop: vs(12) },
+  statItem:    { flex: 1, alignItems: 'center', gap: vs(2) },
+  statValue:   { fontSize: fs(19), fontWeight: '800', color: C.textPrimary },   // was fs(17) ×1.10
+  statLabel:   { fontSize: fs(12), fontWeight: '600', color: C.textMuted },     // was fs(11) ×1.10
+  statDivider: { width: 0.5, backgroundColor: C.border, marginHorizontal: ms(4) },
+  dnaSection:  { paddingHorizontal: ms(16), paddingTop: vs(12) },
+  dnaSectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: vs(6) },
+  dnaSectionTitle:  { fontSize: fs(14), fontWeight: '700', color: C.textPrimary }, // was fs(13) ×1.10
+  dnaPrivacyRow:    { flexDirection: 'row', alignItems: 'center', gap: ms(4) },
+  dnaPrivacyIcon:   { fontSize: fs(13) },                                         // was fs(12) ×1.10
+  dnaPrivacyText:   { fontSize: fs(12), fontWeight: '600', color: C.textMuted },  // was fs(11) ×1.10
+  dnaChart:         { borderRadius: ms(14), padding: ms(8), borderWidth: 0.5 },
+  gridSection: { paddingHorizontal: ms(16), paddingTop: vs(10), paddingBottom: vs(24) },
+  gridHeader:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: vs(8) },
+  gridTitle:   { fontSize: fs(14), fontWeight: '700', color: C.textPrimary },   // was fs(13) ×1.10
+  gridCount:   { fontSize: fs(13), fontWeight: '600', color: C.textMuted },     // was fs(12) ×1.10
+  gridEmpty:   { fontSize: fs(15), textAlign: 'center', paddingVertical: vs(24) }, // was fs(14) ×1.10
   grid:        { flexDirection: 'row', flexWrap: 'wrap', gap: GRID_GAP },
-  tile:        { borderRadius: 8, padding: 4, justifyContent: 'flex-end' },
-  tileText:    { fontSize: 6, fontWeight: '700', color: 'rgba(255,255,255,0.85)', lineHeight: 8 },
+  // Tile: square, text centered and filling the box
+  tile:        { borderRadius: ms(10), overflow: 'hidden', justifyContent: 'center', alignItems: 'center', padding: ms(6) },
+  tileText:    { fontSize: fs(10), fontWeight: '700', color: 'rgba(255,255,255,0.92)', lineHeight: fs(14), textAlign: 'center' }, // was fs(9) ×1.10
 });

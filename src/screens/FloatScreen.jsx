@@ -1,11 +1,13 @@
 // ─────────────────────────────────────────────
 // Peolia — FloatScreen
-// Replaces: CreateScreen.jsx
+// src/screens/FloatScreen.jsx
 //
-// DB mapping:
-//   sentis.question → opinions.text
-//   sentis.wave     → opinions.category (lowercase)
-//   sentis.user_id  → opinions.created_by
+// Inserts to: public.sentis
+//   question   — the opinion text
+//   description — optional context
+//   wave        — capitalized category string ('Tech', 'Love', etc.)
+//   user_id     — auth.uid()
+//   status      — 'approved'
 // ─────────────────────────────────────────────
 
 import React, { useState } from 'react';
@@ -15,6 +17,7 @@ import {
 } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { getPeoliaColors } from '../constants/peoliaTheme';
+import { fs, ms, vs } from '../utils/peoliaScale';
 
 const SENTI_LIMIT = 150;
 const DESC_LIMIT  = 300;
@@ -56,12 +59,14 @@ export default function FloatScreen({ onBack, onFloated }) {
         return;
       }
 
-      const { error } = await supabase.from('opinions').insert({
-        text:        question.trim(),
+      // Insert into public.sentis (new schema)
+      // status is NOT sent — the DB column default controls it so the client
+      // can never bypass moderation. Requires: ALTER COLUMN status SET DEFAULT 'approved'
+      const { error } = await supabase.from('sentis').insert({
+        question:    question.trim(),
         description: description.trim() || null,
-        category:    wave.toLowerCase(),   // DB stores lowercase
-        created_by:  user.id,
-        status:      'approved',
+        wave,                   // capitalized: 'Tech', 'Love', etc.
+        user_id:     user.id,   // sentis.user_id (not created_by)
       });
 
       if (error) throw error;
@@ -91,6 +96,7 @@ export default function FloatScreen({ onBack, onFloated }) {
         onFloat={handleFloat}
         floating={floating}
         C={C}
+        s={s}
       />
     );
   }
@@ -109,11 +115,7 @@ export default function FloatScreen({ onBack, onFloated }) {
           <Text style={s.headerTitle}>Float a senti</Text>
         </TouchableOpacity>
         <View style={s.headerRight}>
-          <TouchableOpacity
-            style={s.previewBtn}
-            onPress={() => setPreview(true)}
-            activeOpacity={0.7}
-          >
+          <TouchableOpacity style={s.previewBtn} onPress={() => setPreview(true)} activeOpacity={0.7}>
             <Text style={s.previewText}>Preview</Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -129,7 +131,7 @@ export default function FloatScreen({ onBack, onFloated }) {
 
       <ScrollView style={s.scroll} showsVerticalScrollIndicator={false}>
 
-        {/* Senti input */}
+        {/* Question input */}
         <View style={s.field}>
           <View style={s.fieldHeader}>
             <Text style={s.fieldLabel}>Senti</Text>
@@ -201,7 +203,7 @@ export default function FloatScreen({ onBack, onFloated }) {
           </ScrollView>
         </View>
 
-        {/* Media row */}
+        {/* Media row (stubs) */}
         <View style={s.mediaRow}>
           <TouchableOpacity
             style={[s.mediaBtn, { backgroundColor: C.surfaceAlt, borderColor: C.border }]}
@@ -227,10 +229,8 @@ export default function FloatScreen({ onBack, onFloated }) {
 }
 
 // ── Preview sub-screen ─────────────────────────
-function FloatPreview({ question, description, wave, onBack, onFloat, floating, C }) {
-  const s = makeStyles(C);
+function FloatPreview({ question, description, wave, onBack, onFloat, floating, C, s }) {
   const emoji = WAVE_EMOJIS[wave] ?? '🌊';
-
   return (
     <View style={s.screen}>
       <View style={s.header}>
@@ -247,7 +247,6 @@ function FloatPreview({ question, description, wave, onBack, onFloat, floating, 
           <Text style={s.floatBtnText}>{floating ? '...' : 'Float'}</Text>
         </TouchableOpacity>
       </View>
-
       <View style={[s.previewCard, { backgroundColor: '#1E1B4B' }]}>
         <View style={s.previewOverlay} />
         <View style={s.previewWavePill}>
@@ -277,59 +276,63 @@ const makeStyles = (C) => StyleSheet.create({
   },
   header: {
     flexDirection: 'row', justifyContent: 'space-between',
-    alignItems: 'center', paddingHorizontal: 14, paddingTop: 8, paddingBottom: 4,
+    alignItems: 'center', paddingHorizontal: ms(16), paddingTop: vs(10), paddingBottom: vs(6),
   },
-  backBtn:  { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  backIcon: { fontSize: 15, color: C.textPrimary },
-  headerTitle: { fontSize: 12, fontWeight: '700', color: C.textPrimary },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  backBtn:  { flexDirection: 'row', alignItems: 'center', gap: ms(6) },
+  backIcon: { fontSize: fs(20), color: C.textPrimary },                 // was fs(18) ×1.10
+  headerTitle: { fontSize: fs(17), fontWeight: '700', color: C.textPrimary }, // was fs(15) ×1.10
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: ms(6) },
   previewBtn: {
-    paddingVertical: 4, paddingHorizontal: 10, borderRadius: 20,
+    paddingVertical: vs(5), paddingHorizontal: ms(12), borderRadius: ms(20),
     backgroundColor: C.surfaceAlt, borderWidth: 0.5, borderColor: C.border,
   },
-  previewText: { fontSize: 9, fontWeight: '700', color: C.textSecondary },
-  floatBtn: { paddingVertical: 5, paddingHorizontal: 14, borderRadius: 20, backgroundColor: C.accent },
+  previewText: { fontSize: fs(14), fontWeight: '700', color: C.textSecondary }, // was fs(13) ×1.10
+  floatBtn: { paddingVertical: vs(6), paddingHorizontal: ms(16), borderRadius: ms(20), backgroundColor: C.accent },
   floatBtnDisabled: { opacity: 0.5 },
-  floatBtnText: { fontSize: 10, fontWeight: '700', color: '#FFFFFF' },
+  floatBtnText: { fontSize: fs(14), fontWeight: '700', color: '#FFFFFF' },      // was fs(13) ×1.10
   scroll: { flex: 1 },
-  field: { paddingHorizontal: 14, paddingTop: 10, gap: 3 },
+  field: { paddingHorizontal: ms(16), paddingTop: vs(12), gap: vs(4) },
   fieldHeader: {
     flexDirection: 'row', justifyContent: 'space-between',
-    alignItems: 'center', marginBottom: 3,
+    alignItems: 'center', marginBottom: vs(4),
   },
-  fieldLabel:    { fontSize: 9, fontWeight: '700', color: C.textSecondary },
-  charCount:     { fontSize: 8, fontWeight: '600', color: C.textMuted },
+  fieldLabel:    { fontSize: fs(14), fontWeight: '700', color: C.textSecondary }, // was fs(13) ×1.10
+  charCount:     { fontSize: fs(13), fontWeight: '600', color: C.textMuted },     // was fs(12) ×1.10
   charCountWarn: { color: '#DC2626' },
   input: {
     backgroundColor: C.surface, borderWidth: 1, borderColor: C.border,
-    borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8,
-    fontSize: 10.5, lineHeight: 15, color: C.textPrimary, textAlignVertical: 'top',
+    borderRadius: ms(12), paddingHorizontal: ms(12), paddingVertical: vs(10),
+    fontSize: fs(15), lineHeight: fs(21), color: C.textPrimary, textAlignVertical: 'top', // was fs(14) ×1.10
   },
-  inputSenti: { minHeight: 58 },
-  inputDesc:  { minHeight: 60 },
+  inputSenti: { minHeight: vs(70) },
+  inputDesc:  { minHeight: vs(70) },
   waveScroll:   { flexGrow: 0 },
-  waveContent:  { gap: 6, paddingBottom: 2 },
-  wavePill:     { paddingVertical: 5, paddingHorizontal: 14, borderRadius: 20 },
-  wavePillText: { fontSize: 10, fontWeight: '700' },
-  mediaRow: { flexDirection: 'row', gap: 10, paddingHorizontal: 14, paddingTop: 10, paddingBottom: 20 },
-  mediaBtn: {
-    flexDirection: 'column', alignItems: 'center', gap: 3,
-    paddingVertical: 8, paddingHorizontal: 14, borderRadius: 12, borderWidth: 0.5,
+  waveContent:  { gap: ms(8), paddingBottom: vs(4) },
+  wavePill:     { paddingVertical: vs(6), paddingHorizontal: ms(16), borderRadius: ms(20) },
+  wavePillText: { fontSize: fs(14), fontWeight: '700' },          // was fs(13) ×1.10
+  mediaRow: {
+    flexDirection: 'row', gap: ms(12),
+    paddingHorizontal: ms(16), paddingTop: vs(12), paddingBottom: vs(24),
   },
-  mediaBtnIcon:  { fontSize: 18 },
-  mediaBtnLabel: { fontSize: 8, fontWeight: '600' },
+  mediaBtn: {
+    flexDirection: 'column', alignItems: 'center', gap: vs(4),
+    paddingVertical: vs(10), paddingHorizontal: ms(16),
+    borderRadius: ms(12), borderWidth: 0.5,
+  },
+  mediaBtnIcon:  { fontSize: fs(24) },                            // was fs(22) ×1.10
+  mediaBtnLabel: { fontSize: fs(13), fontWeight: '600' },         // was fs(12) ×1.10
   // Preview
-  previewCard: { flex: 1, position: 'relative', padding: 14, justifyContent: 'center' },
+  previewCard: { flex: 1, position: 'relative', padding: ms(16), justifyContent: 'center' },
   previewOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.48)' },
   previewWavePill: {
-    backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: 20,
-    paddingVertical: 3, paddingHorizontal: 12, alignSelf: 'flex-start',
-    marginBottom: 10, position: 'relative', zIndex: 1,
+    backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: ms(20),
+    paddingVertical: vs(4), paddingHorizontal: ms(14), alignSelf: 'flex-start',
+    marginBottom: vs(12), position: 'relative', zIndex: 1,
   },
-  previewWaveText:  { fontSize: 9.5, fontWeight: '700', color: '#FFFFFF', letterSpacing: 0.4 },
-  previewQuestion:  { fontSize: 17, fontWeight: '800', color: '#FFFFFF', lineHeight: 22, marginBottom: 8, position: 'relative', zIndex: 1 },
-  previewDesc:      { fontSize: 10.5, lineHeight: 16, color: 'rgba(255,255,255,0.72)', position: 'relative', zIndex: 1 },
-  previewVoteBar:   { flexDirection: 'row', gap: 5, marginTop: 20, position: 'relative', zIndex: 1 },
-  previewVoteBtn:   { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderRadius: 13, backgroundColor: 'rgba(255,255,255,0.15)' },
-  previewVoteEmoji: { fontSize: 26 },
+  previewWaveText:  { fontSize: fs(14), fontWeight: '700', color: '#FFFFFF', letterSpacing: 0.4 }, // was fs(13) ×1.10
+  previewQuestion:  { fontSize: fs(22), fontWeight: '800', color: '#FFFFFF', lineHeight: fs(27), marginBottom: vs(10), position: 'relative', zIndex: 1 }, // was fs(20) ×1.10
+  previewDesc:      { fontSize: fs(15), lineHeight: fs(21), color: 'rgba(255,255,255,0.72)', position: 'relative', zIndex: 1 }, // was fs(14) ×1.10
+  previewVoteBar:   { flexDirection: 'row', gap: ms(6), marginTop: vs(24), position: 'relative', zIndex: 1 },
+  previewVoteBtn:   { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: vs(12), borderRadius: ms(14), backgroundColor: 'rgba(255,255,255,0.15)' },
+  previewVoteEmoji: { fontSize: fs(33) },  // was fs(30) ×1.10
 });

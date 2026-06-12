@@ -1,58 +1,7 @@
-# Live Opinion Feed — Session Handoff
+# Peolia — Session Handoff
 
-## Active Bug To Fix First
-
-### Feed screen content goes under the Android status bar
-
-**Screenshot**: Category pill ("Life"), LIVE badge, and gear icon all start behind the system
-status bar (clock/signal row at the top of the phone).
-
-**Root cause**  
-`styles.screen` in `src/screens/FeedScreen.jsx` has `flex: 1` with **no `paddingTop`**.
-A previous fix removed `paddingTop` from the screen View to avoid a double-count with the
-`onLayout` measurement. That solved the card-height/scroll issue but left the top of the
-FlatList flush against the status bar.
-
-The `cardTop` style currently adds `paddingTop: Platform.OS === "android" ? (StatusBar.currentHeight ?? 24) : 44`
-as padding **inside** the card, but the card container itself starts at y=0 (behind the status bar).
-
-**Exact fix needed** — in `src/screens/FeedScreen.jsx`:
-
-```js
-// CHANGE this:
-screen: {
-  flex: 1,
-},
-
-// TO this:
-screen: {
-  flex: 1,
-  paddingTop: Platform.OS === "android" ? (StatusBar.currentHeight ?? 0) : 0,
-},
-```
-
-Then **remove** the duplicate `paddingTop` from `cardTop` (it was only a workaround):
-
-```js
-// CHANGE this:
-cardTop: {
-  flexDirection: "row",
-  alignItems: "center",
-  justifyContent: "space-between",
-  paddingTop: Platform.OS === "android" ? (StatusBar.currentHeight ?? 24) : 44,
-},
-
-// TO this:
-cardTop: {
-  flexDirection: "row",
-  alignItems: "center",
-  justifyContent: "space-between",
-},
-```
-
-The `onLayout` on the FlatList (not on the screen View) ensures the card height equals the
-FlatList's rendered height — which is now screen height minus the status bar padding. This
-is correct.
+**Last updated: 2026-06-12.** App is working end-to-end on device (Expo Go, Android, tunnel mode).
+Votes, likes, pins, voices, follow, share, profile edit, and the view-reacts lock all function.
 
 ---
 
@@ -60,185 +9,192 @@ is correct.
 
 | Layer | Technology |
 |---|---|
-| Framework | Expo SDK 56 + React Native 0.85 |
+| Framework | Expo SDK 56 + React Native 0.85 + Expo Router v56 (entry only) |
 | Navigation | Custom tab system in `src/app/index.tsx` (NOT expo-router tabs) |
-| Auth + DB | Supabase (`@supabase/supabase-js` v2) |
+| Auth + DB | Supabase (`@supabase/supabase-js` v2), project in ap-northeast-2 Seoul |
 | Storage | AsyncStorage for session persistence |
-| Deep links | `expo-linking` + Supabase PKCE flow |
-| App scheme | `liveopinionfeed` (set in `app.json`) |
+| Deep links | `expo-linking` + Supabase PKCE flow, scheme `liveopinionfeed` |
+| Design system | `src/utils/peoliaScale.js` (fs/ms/vs/s) + `src/constants/peoliaTheme.js` |
 
 ---
 
-## File Structure
+## Build Config — DO NOT DELETE THESE FILES
+
+Both files were created 2026-06-12 to fix "stuck at 99% bundling" + blank white screen:
+
+- **`metro.config.js`** — `getDefaultConfig(__dirname)` from `expo/metro-config`. Without it,
+  Metro never learns the router root is `src/app` (falls back to non-existent `app/`), Expo Router
+  finds zero routes, and the app renders a blank white screen with no error.
+- **`babel.config.js`** — `babel-preset-expo` with `'react-compiler': false`. Do NOT add
+  `react-native-reanimated/plugin` or `react-native-worklets/plugin` manually — babel-preset-expo
+  v56 auto-detects and adds the worklets plugin; adding it again runs the transform twice and
+  hangs Metro at 99%.
+- `app.json` has `"reactCompiler": false` — React Compiler hangs Metro on this codebase's
+  `useRef(callback).current` patterns. Keep it off.
+
+**Tunnel mode required** on this network (LAN blocked): `npx expo start --tunnel --clear`.
+`@expo/ngrok` is installed as a devDependency to keep the tunnel stable.
+
+---
+
+## File Structure (post-cleanup — all Expo starter files deleted)
 
 ```
 src/
   app/
-    _layout.tsx          — SafeAreaProvider + deep-link handler for password reset
+    _layout.tsx          — SafeAreaProvider + ErrorBoundary + deep-link handler
     index.tsx            — Root: tab state, auth state, navigation orchestration
   screens/
-    FeedScreen.jsx       — TikTok-style vertical FlatList feed (main screen)
-    TrendingScreen.jsx   — Top 10 opinions per category
-    CreateScreen.jsx     — Create new opinion form
-    SavedScreen.jsx      — Saved opinions list
-    ProfileScreen.jsx    — User profile, stats, badges
+    SentariumScreen.jsx  — Main 9:16 paged feed (sentarium_feed view, cursor pagination)
+    TrendingScreen.jsx   — Top 20 by velocity_2h, wave filter pills
+    FloatScreen.jsx      — Create senti (preview sub-screen, media stubs for Sprint 2/3)
+    PinScreen.jsx        — Pinned sentis, direct-tap unpin (optimistic)
+    ProfileScreen.jsx    — Own + other citizen, DNA radar chart, follow, edit profile
     AuthScreen.jsx       — Login / signup / forgot / reset-password
-    UserProfileScreen.jsx — View another user's opinions
-    ScreenWrapper.jsx    — Legacy 9:16 wrapper (no longer used by any screen)
-  lib/
-    supabase.js          — Supabase client + subscribeToTable() helper
+  components/
+    SentiCard.jsx        — Card: WavePill + VoteBar + ActionBar + ViewReactsSheet
+    ActionBar.jsx        — Like / voice / pin / ask column
+    VoteBar.jsx          — Yes/Hmm/Nah; results after vote or view-lock
+    ViewReactsSheet.jsx  — MODAL (blocks all background taps) — confirm before viewing reacts
+    VoiceSheet.jsx       — Modal bottom sheet for voices (comments)
+    EditProfileSheet.jsx — Modal: edit username / display_name / bio
+    TabBar.jsx, WavePill.jsx, ErrorBoundary.jsx
+  constants/peoliaTheme.js   — colors (getPeoliaColors), typography, spacing — DO NOT BREAK
+  utils/peoliaScale.js       — fs/ms/vs/s scaling — DO NOT BREAK
+  lib/supabase.js            — client (env vars) + subscribeToTable helper — DO NOT MODIFY CONFIG
 supabase/
-  migration.sql          — ALTER TABLE opinions ADD COLUMN description TEXT
-scripts/
-  seed-admin.js          — Creates admin user + 25 seed opinions (node scripts/seed-admin.js)
+  migration.sql          — STALE (old opinions/votes schema). Real schema lives in dashboard only.
+  seed-sentis.sql        — seed data for sentis
 ```
+
+Deleted 2026-06-12 (do not resurrect): `App.js`, `FeedScreen`, `CreateScreen`, `SavedScreen`,
+`ScreenWrapper`, `UserProfileScreen`, `src/app/explore.tsx`, all `themed-*`/`app-tabs`/
+`animated-icon`/starter components, `src/hooks/`, `src/constants/theme.ts`, starter assets.
+Removed deps: `@expo/ui`, `expo-glass-effect`, `expo-symbols`, `expo-web-browser`.
 
 ---
 
-## Supabase Tables Used
+## Database (Supabase, public schema)
 
-| Table | Purpose |
+**Tables:** sentis, senti_reactions, senti_counts (trigger-maintained — never write),
+senti_likes, senti_pins, senti_view_locks, voices, follows (follower_id, following_id),
+users (id, username, display_name, bio), user_stats, user_wave_stats.
+
+**Views:** `sentarium_feed` (feed queries), `trending_sentis` (velocity_2h desc).
+
+**SQL already applied in dashboard (2026-06-12):**
+1. `SECURITY DEFINER SET search_path = public` on all trigger functions of senti_likes /
+   senti_pins / senti_reactions / voices — fixed RLS 42501 on senti_counts writes.
+2. `ALTER TABLE sentis ALTER COLUMN status SET DEFAULT 'approved'` — client no longer sends
+   status (moderation can be enabled later by flipping this default to 'pending').
+3. `users.display_name` + `users.bio` columns added + `users_update_own` RLS policy
+   (UPDATE USING/WITH CHECK auth.uid() = id).
+
+**Rules:** votes immutable (`ignoreDuplicates: true` upsert); one like/pin per user per senti
+(toggle insert/delete); always filter sentis by `status = 'approved'`; cursor pagination only.
+
+---
+
+## Navigation
+
+All in `src/app/index.tsx` via `activeTab` state. Tab keys:
+`trending | float | sentarium | pin | profile` + hidden `auth | reset-password`.
+
+- Guest mode: sentarium + trending browsable; float/pin/profile and all interactions
+  route to auth via `onRequireAuth()`.
+- **Always use `goToTab(tab)`, never `setActiveTab` directly** (keeps `activeTabRef` in
+  sync for the `onAuthStateChange` closure).
+- Cross-screen: `onNavigateToUser(userId)` → ProfileScreen overlay;
+  `handleNavigateToFeedOpinion(id)` → sets `feedScrollToId` + jumps to sentarium
+  (SentariumScreen moves target to index 0).
+
+---
+
+## Key Patterns in SentariumScreen
+
+- **Optimistic + rollback** on every action; per-senti in-flight guards
+  (`perSentiLikeInFlight` / `perSentiPinInFlight` refs) block double-taps.
+- **`rawCounts` { yes, hmm, nah }** on each feed item — REQUIRED for optimistic vote math.
+  `results` only holds pct + formatted strings. Kept in sync in: `normalise()`, the realtime
+  handler, and the vote-rollback refetch. If you touch vote logic, preserve all three.
+- **Refs mirror state** (`likedSentisRef`, `pinnedSentisRef`, `sessionRef`, `sentisRef`)
+  to avoid stale closures.
+- Realtime: ONE channel for the visible card only (`subscribeToVisible`), removed on change.
+- `batchFetchStates(ids)` — one query per page for votes/locks/likes/pins (not per-card).
+- Feed dedupes by id on `fetchMore`; `keyExtractor` is plain `item.id`.
+- Bottom sheets are all `Modal` components with `paddingBottom: vs(20) + insets.bottom`
+  (Android nav-bar clearance via `useSafeAreaInsets`).
+
+---
+
+## Changelog — 2026-06-12 session
+
+| Change | Where |
 |---|---|
-| `opinions` | Main content. Columns: id, text, description, category, created_by, status, agree_count, disagree_count, total_votes, like_count, save_count, comment_count |
-| `users` | User profiles. Columns: id, username |
-| `votes` | One row per user per opinion per day. Columns: user_id, opinion_id, vote_value, voted_date |
-| `opinion_likes` | Columns: user_id, opinion_id |
-| `opinion_saves` | Columns: user_id, opinion_id |
-| `opinion_comments` | Columns: id, user_id, opinion_id, text, created_at |
-| `user_badges` | Columns: user_id, badge_type |
+| Fixed blank screen / 99% bundling (missing metro.config.js, babel double-plugin, React Compiler) | metro.config.js, babel.config.js, app.json |
+| Fixed optimistic vote showing 100%/0%/0% (missing raw counts) | SentariumScreen `rawCounts` |
+| Feed dedupe + stable keys | SentariumScreen |
+| Follow/unfollow persisted to `follows` with rollback + live follower count | ProfileScreen |
+| Direct-tap unpin (removed confirm dialog) | PinScreen |
+| Ask → `Share.share()` with senti question | SentariumScreen → ActionBar |
+| ErrorBoundary (no more blank screen on render crash) | src/components/ErrorBoundary.jsx + _layout.tsx |
+| Feed network-error state with Retry (no longer fakes "empty") | SentariumScreen |
+| ViewReactsSheet → true Modal: blocks card/votebar/tabbar taps until user chooses | ViewReactsSheet.jsx |
+| All sheets respect Android nav-bar bottom inset | ViewReactsSheet, VoiceSheet, EditProfileSheet |
+| Edit Profile: username/display_name/bio with validation + taken-username handling | EditProfileSheet.jsx + ProfileScreen |
+| status no longer sent client-side (DB default) | FloatScreen |
+| Empty-username crash guards (`|| '?'` not `?? '?'`) | ProfileScreen, VoiceSheet |
+| Dead starter/legacy code deleted (~29 modules, 4 deps) | repo-wide |
+| `.env` added to .gitignore | .gitignore |
 
-**Important**: Table names differ from what the build plan described. The actual names above
-are what the code uses. Do not rename them.
+**Note:** all of this is uncommitted on `main` — commit after device verification.
 
 ---
 
-## Categories (13 total)
+## Known Issues
+
+| Priority | Issue | Notes |
+|---|---|---|
+| 🟡 | "View reacts" lock is cosmetic | `sentarium_feed` returns counts to all clients; lock only hides them in UI. Server-side enforcement needed if the rule must be hard. |
+| 🟡 | Vote can silently no-op | If `batchFetchStates` fails, user may "vote" on an already-voted senti — `ignoreDuplicates` returns no error; UI shows new choice, DB keeps old. Consider `.select()` on upsert + reconcile. |
+| 🟡 | Pin state not synced across screens | Unpin in PinScreen doesn't update SentariumScreen state until refetch. |
+| 🟡 | `handleViewLocked` has no rollback | Minor violation of optimistic+rollback rule. |
+| 🟢 | Voices double-count briefly | Optimistic +1 plus realtime update can flash +2; no suppress flag for voices. |
+| 🟢 | SentiCard not memoized | Every realtime tick re-renders all mounted cards. Add React.memo + useCallback renderItem + getItemLayout. |
+| 🟢 | Realtime channel churn on fast scroll | Debounce `subscribeToVisible` ~300ms. |
+| 🟢 | 956KB MaterialSymbols font bundles | expo-router's own internal dependency (expo-symbols) — not removable from app side. |
+| 🟢 | Schema not in repo | `migration.sql` is the OLD schema. Export real DDL to `supabase/schema.sql` (`supabase db dump`). |
+| 🟢 | Zero tests | Start with pure helpers (buildResults, normalise, formatCount). |
+
+---
+
+## Future Development (priority order)
+
+1. **Sprint 2 — image picker** for FloatScreen (`sentis.image_url` + SentiCard `imageUrl`
+   already exist; needs Supabase Storage bucket + expo-image rendering) and avatar upload.
+2. **Voices polish** — realtime subscription while sheet open, pagination past 50,
+   delete-own-voice.
+3. **Report / block** — REQUIRED by Google Play for UGC apps before launch.
+4. **OnboardingScreen** — splash, walkthrough, wave picker.
+5. **NotificationsScreen** — nudges, voices, reacts (expo-notifications + Edge Function).
+6. **Search** — Postgres full-text on sentis.question.
+7. **Sprint 3 — Track feature** (FloatScreen stub exists).
+8. **Production**: EAS Build for Play Store (Expo Go can't ship), SMTP for auth emails
+   (SendGrid/Resend), moderation pipeline (flip status default to 'pending' + approval path).
+9. **Perf pass**: React.memo SentiCard, getItemLayout, channel debounce.
+
+---
+
+## Environment / How to Run
 
 ```
-love, money, life, tech, society,
-politics, food, health, sports,
-entertainment, science, education, environment
+# .env (gitignored, never commit)
+EXPO_PUBLIC_SUPABASE_URL=...
+EXPO_PUBLIC_SUPABASE_ANON_KEY=...
 ```
-
-All three screens (FeedScreen, TrendingScreen, CreateScreen) use the same 13 categories.
-
----
-
-## Navigation Architecture
-
-All navigation is managed in `src/app/index.tsx` via `activeTab` state.
-There is **no** expo-router file-based routing in use — the `_layout.tsx` is only a
-SafeAreaProvider + deep-link wrapper.
-
-### Tab keys
-```
-feed | trending | create | saved | profile | auth | reset-password
-```
-`auth` and `reset-password` are hidden tabs (not shown in the tab bar).
-
-### Guest mode
-- Feed and Trending are visible without login.
-- Any interaction (like/save/comment/vote/share/avatar tap) calls `onRequireAuth()` → navigates to `auth` tab.
-- Create, Saved, Profile tabs redirect guests to `auth` tab automatically.
-
-### `activeTabRef` (critical)
-`onAuthStateChange` runs inside a `useEffect([], [])` closure that would otherwise capture
-a stale `activeTab`. The fix: `activeTabRef` is a `useRef` kept in sync via `goToTab()`.
-**Always use `goToTab(tab)` instead of `setActiveTab(tab)` in `index.tsx`.**
-
-### Cross-screen navigation
-- `onNavigateToUser(userId)` — sets `userProfileId` state → renders `UserProfileScreen` overlay
-- `onNavigateToFeed(opinionId)` — sets `feedScrollToId` + switches to feed tab
-- FeedScreen places target opinion at index 0 of the list (no offset calculation needed)
-
----
-
-## Auth Flow
-
-### Login
-1. AuthScreen calls `supabase.auth.signInWithPassword()`
-2. Supabase fires `SIGNED_IN` on `onAuthStateChange` in `index.tsx`
-3. `setSession(session)` + `goToTab(prevTabRef.current || 'feed')`
-
-### Signup
-1. AuthScreen calls `supabase.auth.signUp()`
-2. If `data.session` returned → email confirmation disabled → logged in automatically
-3. If no session → email confirmation enabled → show "check your email" message
-
-### Password reset
-1. AuthScreen calls `supabase.auth.resetPasswordForEmail(email, { redirectTo: 'liveopinionfeed://auth' })`
-2. User clicks email link on their phone → OS opens app via deep link
-3. `_layout.tsx` extracts `?code=` from URL → calls `supabase.auth.exchangeCodeForSession(code)`
-4. Supabase fires `PASSWORD_RECOVERY` on `onAuthStateChange`
-5. `index.tsx` → `goToTab('reset-password')`
-6. AuthScreen rendered with `initialMode="reset-password"` → two password fields
-7. Submit calls `supabase.auth.updateUser({ password: newPassword })`
-8. `SIGNED_IN` fires → user lands on feed
-
----
-
-## FeedScreen Architecture
-
-### Card system
-- `pagingEnabled` FlatList — each swipe moves exactly one card
-- `onLayout` on the **FlatList itself** (not the screen View) sets `listHeight`
-- Each card container: `height: itemHeight` where `itemHeight = listHeight > 0 ? listHeight : SH`
-- `listHeight` initialises to **0** so the scroll-to-opinion logic waits for the real measurement
-
-### Per-card state
-`cardStates` is a `{ [opinionId]: { userVote, liked, saved } }` map.
-Updated by `fetchCardState()` when a card becomes visible (`onViewableItemsChanged`).
-**Must pass `extraData={cardStates}` to FlatList** — without it, icon styles don't update.
-
-### Realtime
-Two Supabase channels:
-- `feed-inserts` — prepends new approved opinions to the list
-- `feed-updates` — merges `UPDATE` payloads to update counts
-
-### Navigate-to-opinion (from Saved/Trending)
-`fetchOpinions()` checks `pendingScrollRef.current`. If set, moves the target opinion to
-index 0 of the list before calling `setDisplayOpinions()`. FlatList always starts at offset 0
-so the opinion is immediately visible — no `scrollToOffset` calculation needed.
-
----
-
-## Known Issues / Remaining Work
-
-| Priority | Issue | Location | Notes |
-|---|---|---|---|
-| 🔴 Fix now | Feed content under status bar | FeedScreen.jsx | See top of this doc |
-| 🟡 Config | Signup email not delivered | Supabase dashboard | Configure SMTP (SendGrid/Resend). Free tier: 3 emails/hour |
-| 🟡 Config | Email confirmation setting | Supabase dashboard | Auth → Settings → Enable/disable email confirmation |
-| 🟢 Enhancement | Share button is a stub | FeedScreen.jsx `handleShare` | Implement `Share.share()` from react-native |
-| 🟢 Enhancement | Avatar shows "?" for seed opinions | FeedScreen.jsx | Seed opinions use `created_by` UUID not joined username; fix seed or add join |
-
----
-
-## Seed Data (Admin Account)
-
-- **Email**: admin@liveopinionfeed.com  
-- **Password**: Admin@LiveFeed2025!  
-- **Run**: `node scripts/seed-admin.js` (requires `SUPABASE_SERVICE_ROLE_KEY` in `.env`)
-- **Pre-requisite**: Run `supabase/migration.sql` in Supabase SQL Editor first
-
----
-
-## Environment Variables
-
-```
-EXPO_PUBLIC_SUPABASE_URL=         # in .env already
-EXPO_PUBLIC_SUPABASE_ANON_KEY=    # in .env already
-SUPABASE_SERVICE_ROLE_KEY=        # add this for seed script only
-```
-
----
-
-## How to Run
 
 ```bash
-npx expo start          # normal start
-npx expo start --clear  # clear Metro cache (use after multiple file changes)
+npx expo start --tunnel          # normal (LAN blocked on this network)
+npx expo start --tunnel --clear  # after config/native changes
+npx expo export --platform android  # quick "does it bundle" check without a device
 ```
-
-Scan QR with Expo Go on Android. Same QR works after JS-only changes (Fast Refresh).
-Rescan required after: adding native packages, changing app.json, or after --clear.

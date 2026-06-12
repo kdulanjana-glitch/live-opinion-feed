@@ -1,16 +1,12 @@
 // ─────────────────────────────────────────────
-// Peolia — TabBar Component
+// Peolia — TabBar (Scaled for real devices)
 // src/components/TabBar.jsx
-//
-// Usage:
-//   <TabBar activeTab={activeTab} onTabPress={setActiveTab} />
-//
-// Tab keys: 'trending' | 'float' | 'sentarium' | 'pin' | 'profile'
 // ─────────────────────────────────────────────
 
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, useColorScheme } from 'react-native';
-import { getPeoliaColors, PeoliaSpacing } from '../constants/peoliaTheme';
+import { getPeoliaColors } from '../constants/peoliaTheme';
+import { fs, ms, vs } from '../utils/peoliaScale';
 
 const TABS = [
   { key: 'trending',  label: 'Trending',  icon: '↗'  },
@@ -23,26 +19,22 @@ const TABS = [
 export default function TabBar({ activeTab, onTabPress }) {
   const scheme = useColorScheme();
   const C = getPeoliaColors(scheme);
-  const s = makeStyles(C);
+  const st = makeStyles(C);
 
   return (
-    <View style={s.wrapper}>
-      <View style={s.pill}>
+    <View style={st.wrapper}>
+      <View style={st.pill}>
         {TABS.map((tab) => {
           const isActive = activeTab === tab.key;
           return (
             <TouchableOpacity
               key={tab.key}
-              style={[s.tab, isActive && s.tabActive]}
+              style={[st.tab, isActive && st.tabActive]}
               onPress={() => onTabPress(tab.key)}
               activeOpacity={0.7}
             >
-              <Text style={[s.icon, isActive && s.iconActive]}>
-                {tab.icon}
-              </Text>
-              <Text style={[s.label, isActive && s.labelActive]}>
-                {tab.label}
-              </Text>
+              <Text style={[st.icon, isActive && st.iconActive]}>{tab.icon}</Text>
+              <Text style={[st.label, isActive && st.labelActive]}>{tab.label}</Text>
             </TouchableOpacity>
           );
         })}
@@ -53,9 +45,9 @@ export default function TabBar({ activeTab, onTabPress }) {
 
 const makeStyles = (C) => StyleSheet.create({
   wrapper: {
-    paddingHorizontal: 8,
-    paddingTop: 5,
-    paddingBottom: 10,
+    paddingHorizontal: ms(10),
+    paddingTop: vs(6),
+    paddingBottom: vs(12),
     backgroundColor: C.bg,
   },
   pill: {
@@ -63,38 +55,25 @@ const makeStyles = (C) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-around',
     backgroundColor: C.tabBg,
-    borderRadius: PeoliaSpacing.tabBarRadius,
+    borderRadius: ms(28),
     borderWidth: 0.5,
     borderColor: C.tabBorder,
-    paddingVertical: 5,
-    paddingHorizontal: 3,
+    paddingVertical: vs(6),
+    paddingHorizontal: ms(4),
   },
   tab: {
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 2,
-    paddingVertical: 4,
-    paddingHorizontal: 6,
-    borderRadius: PeoliaSpacing.tabItemRadius,
-    minWidth: 36,
+    gap: vs(2),
+    paddingVertical: vs(5),
+    paddingHorizontal: ms(8),
+    borderRadius: ms(18),
+    minWidth: ms(44),
   },
-  tabActive: {
-    backgroundColor: C.tabActive,
-  },
-  icon: {
-    fontSize: 15,
-    color: C.tabInactive,
-  },
-  iconActive: {
-    color: '#FFFFFF',
-  },
-  label: {
-    fontSize: 6.5,
-    fontWeight: '700',
-    color: C.tabInactive,
-  },
-  labelActive: {
-    color: '#FFFFFF',
-  },
+  tabActive:   { backgroundColor: C.tabActive },
+  icon:        { fontSize: fs(20), color: C.tabInactive },
+  iconActive:  { color: '#FFFFFF' },
+  label:       { fontSize: fs(13), fontWeight: '700', color: C.tabInactive },
+  labelActive: { color: '#FFFFFF' },
 });

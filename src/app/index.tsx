@@ -16,7 +16,7 @@ import AuthScreen      from '../screens/AuthScreen';
 import SentariumScreen from '../screens/SentariumScreen';
 import TrendingScreen  from '../screens/TrendingScreen';
 import FloatScreen     from '../screens/FloatScreen';
-import SavedScreen     from '../screens/SavedScreen';      // Pin tab (PinScreen coming soon)
+import PinScreen      from '../screens/PinScreen';         // Pin tab
 import ProfileScreen   from '../screens/ProfileScreen';    // own + other citizen
 
 // Tab keys used by TabBar: 'trending' | 'float' | 'sentarium' | 'pin' | 'profile'
@@ -155,9 +155,9 @@ export default function Index() {
 
       case 'pin':
         return session ? (
-          <SavedScreen
+          <PinScreen
             session={session}
-            onNavigateToFeed={handleNavigateToFeedOpinion}
+            onOpenSenti={handleNavigateToFeedOpinion}   // UUID → Sentarium
           />
         ) : <AuthScreen />;
 

@@ -1,13 +1,3 @@
----
-description: 
-alwaysApply: true
----
-
----
-description: 
-alwaysApply: true
----
-
 PROJECT: Peolia — React Native / Expo app for Android
 BACKEND: Supabase (PostgreSQL) — project in ap-northeast-2 Seoul
 
@@ -27,14 +17,11 @@ DATABASE RULES:
 - UUID primary keys on all tables — sentis.id is source of truth
 - Never update senti_counts manually — triggers handle it
 - Always filter sentis by status = 'approved'
-- Never send status on sentis insert — DB column default controls it
 - Use sentarium_feed view for feed queries
 - Use trending_sentis view for trending queries
 - Votes cannot be changed once cast
 - One like per user per senti — toggle delete/insert
 - One pin per user per senti — toggle delete/insert
-- Trigger functions on interaction tables are SECURITY DEFINER (applied 2026-06-12)
-- users has display_name + bio columns; users_update_own RLS policy allows own-row updates
 
 CODE RULES:
 - No hover states — Android only
@@ -50,16 +37,6 @@ FILE OWNERSHIP:
 - src/utils/peoliaScale.js — sizing system, do not break
 - src/constants/peoliaTheme.js — color system, do not break
 - src/lib/supabase.js — DB client, do not modify connection config
-- metro.config.js — required for Expo Router to find src/app; deleting it = blank white screen
-- babel.config.js — react-compiler must stay false; NEVER add reanimated/worklets plugin
-  manually (babel-preset-expo auto-adds it; doubling it hangs Metro at 99%)
-
-CODE PATTERNS (see HANDOFF.md for full details):
-- Feed items carry rawCounts {yes,hmm,nah} — required for optimistic vote math;
-  must stay in sync in normalise(), the realtime handler, and vote rollback
-- Bottom sheets are Modal components with paddingBottom: vs(20) + insets.bottom
-  (Android nav-bar clearance)
-- In index.tsx always navigate via goToTab(), never setActiveTab directly
 
 TABLES:
 public.sentis, public.senti_reactions, public.senti_counts,

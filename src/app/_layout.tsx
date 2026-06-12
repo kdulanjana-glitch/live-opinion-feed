@@ -2,6 +2,7 @@ import * as Linking from 'expo-linking';
 import { Stack } from 'expo-router';
 import { useEffect } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import ErrorBoundary from '../components/ErrorBoundary';
 import { supabase } from '../lib/supabase';
 
 export default function Layout() {
@@ -33,7 +34,9 @@ export default function Layout() {
 
   return (
     <SafeAreaProvider>
-      <Stack screenOptions={{ headerShown: false }} />
+      <ErrorBoundary>
+        <Stack screenOptions={{ headerShown: false }} />
+      </ErrorBoundary>
     </SafeAreaProvider>
   );
 }

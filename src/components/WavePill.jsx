@@ -1,30 +1,18 @@
 // ─────────────────────────────────────────────
-// Peolia — WavePill Component
+// Peolia — WavePill (Scaled for real devices)
 // src/components/WavePill.jsx
-//
-// Usage:
-//   <WavePill wave="Tech" />
-//   <WavePill wave="Love" transparent /> // for use on dark image bg
 // ─────────────────────────────────────────────
 
 import React from 'react';
 import { View, Text, StyleSheet, useColorScheme } from 'react-native';
 import { getPeoliaColors } from '../constants/peoliaTheme';
+import { fs, ms, vs } from '../utils/peoliaScale';
 
 const WAVE_EMOJIS = {
-  'Tech':          '💻',
-  'Love':          '❤️',
-  'Money':         '💰',
-  'Life':          '🌱',
-  'Society':       '🌍',
-  'Politics':      '🏛️',
-  'Food':          '🍕',
-  'Health':        '💪',
-  'Sports':        '⚽',
-  'Entertainment': '🎬',
-  'Science':       '🔬',
-  'Education':     '📚',
-  'Environment':   '🌿',
+  'Tech': '💻', 'Love': '❤️', 'Money': '💰', 'Life': '🌱',
+  'Society': '🌍', 'Politics': '🏛️', 'Food': '🍕', 'Health': '💪',
+  'Sports': '⚽', 'Entertainment': '🎬', 'Science': '🔬',
+  'Education': '📚', 'Environment': '🌿',
 };
 
 export default function WavePill({ wave = 'Tech', transparent = false, style }) {
@@ -52,18 +40,12 @@ const styles = StyleSheet.create({
   pill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
-    paddingVertical: 3,
-    paddingHorizontal: 12,
-    borderRadius: 20,
+    gap: ms(5),
+    paddingVertical: vs(5),
+    paddingHorizontal: ms(14),
+    borderRadius: ms(20),
     alignSelf: 'flex-start',
   },
-  emoji: {
-    fontSize: 10,
-  },
-  label: {
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.4,
-  },
+  emoji: { fontSize: fs(15) },
+  label: { fontSize: fs(18), fontWeight: '700', letterSpacing: 0.4 },  // was fs(14) → ×1.25
 });

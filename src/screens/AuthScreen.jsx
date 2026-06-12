@@ -12,34 +12,17 @@ import {
   View,
 } from "react-native";
 import { supabase } from "../lib/supabase";
-
-const palette = {
-  dark: {
-    bg: "#0A0A0F", card: "#13131A", cardBorder: "#1E1E2E",
-    text: "#F0EFF8", textSub: "#6B6A7E", textMuted: "#3D3C50",
-    input: "#1A1A28", inputBorder: "#2A2A3A", inputFocus: "#7C3AED",
-    primary: "#7C3AED", primaryText: "#FFFFFF",
-    error: "#EF4444", errorBg: "#1A0505",
-    success: "#22C55E", successBg: "#052010",
-    divider: "#1E1E2E", link: "#A78BFA",
-  },
-  light: {
-    bg: "#F5F4FA", card: "#FFFFFF", cardBorder: "#E8E7F5",
-    text: "#0D0C1A", textSub: "#7A798E", textMuted: "#BCBBCE",
-    input: "#F5F4FA", inputBorder: "#E8E7F5", inputFocus: "#7C3AED",
-    primary: "#7C3AED", primaryText: "#FFFFFF",
-    error: "#DC2626", errorBg: "#FFF5F5",
-    success: "#16A34A", successBg: "#F0FDF4",
-    divider: "#E8E7F5", link: "#7C3AED",
-  },
-};
+import { getPeoliaColors } from "../constants/peoliaTheme";
+import { fs, ms, vs, s } from "../utils/peoliaScale";
 
 // redirectTo must match the scheme in app.json
 const RESET_REDIRECT = "liveopinionfeed://auth";
 
 export default function AuthScreen({ initialMode = "login" }) {
   const scheme = useColorScheme();
-  const colors = palette[scheme === "dark" ? "dark" : "light"];
+  const C = getPeoliaColors(scheme);
+  const COnAccent = getPeoliaColors("light");
+  const st = makeStyles();
 
   const [mode, setMode] = useState(initialMode);
   const [email, setEmail] = useState("");
@@ -178,11 +161,11 @@ export default function AuthScreen({ initialMode = "login" }) {
   };
 
   const inputStyle = (field) => [
-    styles.input,
+    st.input,
     {
-      backgroundColor: colors.input,
-      borderColor: focusedField === field ? colors.inputFocus : colors.inputBorder,
-      color: colors.text,
+      backgroundColor: C.surfaceAlt,
+      borderColor: focusedField === field ? C.accent : C.borderStrong,
+      color: C.textPrimary,
     },
   ];
 
@@ -202,39 +185,39 @@ export default function AuthScreen({ initialMode = "login" }) {
 
   return (
     <KeyboardAvoidingView
-      style={[styles.screen, { backgroundColor: colors.bg }]}
+      style={[st.screen, { backgroundColor: C.bg }]}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
       <ScrollView
-        contentContainerStyle={styles.scroll}
+        contentContainerStyle={st.scroll}
         keyboardShouldPersistTaps="handled"
       >
         {/* Logo */}
-        <View style={styles.logoArea}>
-          <View style={[styles.logoBadge, { backgroundColor: colors.primary }]}>
-            <Text style={styles.logoEmoji}>🌍</Text>
+        <View style={st.logoArea}>
+          <View style={[st.logoBadge, { backgroundColor: C.accent }]}>
+            <Text style={st.logoEmoji}>🌍</Text>
           </View>
-          <Text style={[styles.appName, { color: colors.text }]}>
+          <Text style={[st.appName, { color: C.textPrimary }]}>
             Live Opinion Feed
           </Text>
-          <Text style={[styles.tagline, { color: colors.textSub }]}>
+          <Text style={[st.tagline, { color: C.textSecondary }]}>
             See what the world really thinks
           </Text>
         </View>
 
-        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+        <View style={[st.card, { backgroundColor: C.surface, borderColor: C.border }]}>
 
           {/* Login / Sign up tabs */}
           {showTabs && (
-            <View style={[styles.tabRow, { borderBottomColor: colors.divider }]}>
+            <View style={[st.tabRow, { borderBottomColor: C.border }]}>
               {[{ key: "login", label: "Log in" }, { key: "signup", label: "Sign up" }].map((t) => (
                 <TouchableOpacity
                   key={t.key}
-                  style={[styles.tab, mode === t.key && { borderBottomColor: colors.primary, borderBottomWidth: 2 }]}
+                  style={[st.tab, mode === t.key && { borderBottomColor: C.accent, borderBottomWidth: ms(2) }]}
                   onPress={() => { setMode(t.key); clearMessages(); }}
                 >
-                  <Text style={[styles.tabText, {
-                    color: mode === t.key ? colors.primary : colors.textSub,
+                  <Text style={[st.tabText, {
+                    color: mode === t.key ? C.accent : C.textSecondary,
                     fontWeight: mode === t.key ? "700" : "400",
                   }]}>
                     {t.label}
@@ -244,13 +227,13 @@ export default function AuthScreen({ initialMode = "login" }) {
             </View>
           )}
 
-          <View style={styles.form}>
+          <View style={st.form}>
 
             {/* Forgot password header */}
             {isForgotMode && (
-              <View style={styles.sectionHeader}>
-                <Text style={[styles.sectionTitle, { color: colors.text }]}>Reset password</Text>
-                <Text style={[styles.sectionSub, { color: colors.textSub }]}>
+              <View style={st.sectionHeader}>
+                <Text style={[st.sectionTitle, { color: C.textPrimary }]}>Reset password</Text>
+                <Text style={[st.sectionSub, { color: C.textSecondary }]}>
                   Enter your email and we'll send a reset link
                 </Text>
               </View>
@@ -258,9 +241,9 @@ export default function AuthScreen({ initialMode = "login" }) {
 
             {/* Set new password header */}
             {isResetMode && (
-              <View style={styles.sectionHeader}>
-                <Text style={[styles.sectionTitle, { color: colors.text }]}>Set new password</Text>
-                <Text style={[styles.sectionSub, { color: colors.textSub }]}>
+              <View style={st.sectionHeader}>
+                <Text style={[st.sectionTitle, { color: C.textPrimary }]}>Set new password</Text>
+                <Text style={[st.sectionSub, { color: C.textSecondary }]}>
                   Choose a strong password for your account
                 </Text>
               </View>
@@ -268,12 +251,12 @@ export default function AuthScreen({ initialMode = "login" }) {
 
             {/* Username (signup only) */}
             {mode === "signup" && (
-              <View style={styles.fieldGroup}>
-                <Text style={[styles.label, { color: colors.textSub }]}>Username</Text>
+              <View style={st.fieldGroup}>
+                <Text style={[st.label, { color: C.textSecondary }]}>Username</Text>
                 <TextInput
                   style={inputStyle("username")}
                   placeholder="e.g. kasun123"
-                  placeholderTextColor={colors.textMuted}
+                  placeholderTextColor={C.textMuted}
                   value={username}
                   onChangeText={setUsername}
                   onFocus={() => setFocusedField("username")}
@@ -286,12 +269,12 @@ export default function AuthScreen({ initialMode = "login" }) {
 
             {/* Email (login / signup / forgot) */}
             {!isResetMode && (
-              <View style={styles.fieldGroup}>
-                <Text style={[styles.label, { color: colors.textSub }]}>Email</Text>
+              <View style={st.fieldGroup}>
+                <Text style={[st.label, { color: C.textSecondary }]}>Email</Text>
                 <TextInput
                   style={inputStyle("email")}
                   placeholder="your@email.com"
-                  placeholderTextColor={colors.textMuted}
+                  placeholderTextColor={C.textMuted}
                   value={email}
                   onChangeText={setEmail}
                   onFocus={() => setFocusedField("email")}
@@ -305,12 +288,12 @@ export default function AuthScreen({ initialMode = "login" }) {
 
             {/* Password (login / signup) */}
             {(mode === "login" || mode === "signup") && (
-              <View style={styles.fieldGroup}>
-                <Text style={[styles.label, { color: colors.textSub }]}>Password</Text>
+              <View style={st.fieldGroup}>
+                <Text style={[st.label, { color: C.textSecondary }]}>Password</Text>
                 <TextInput
                   style={inputStyle("password")}
                   placeholder={mode === "signup" ? "Min. 6 characters" : "Your password"}
-                  placeholderTextColor={colors.textMuted}
+                  placeholderTextColor={C.textMuted}
                   value={password}
                   onChangeText={setPassword}
                   onFocus={() => setFocusedField("password")}
@@ -323,12 +306,12 @@ export default function AuthScreen({ initialMode = "login" }) {
             {/* New password (reset mode) */}
             {isResetMode && (
               <>
-                <View style={styles.fieldGroup}>
-                  <Text style={[styles.label, { color: colors.textSub }]}>New password</Text>
+                <View style={st.fieldGroup}>
+                  <Text style={[st.label, { color: C.textSecondary }]}>New password</Text>
                   <TextInput
                     style={inputStyle("newPassword")}
                     placeholder="Min. 6 characters"
-                    placeholderTextColor={colors.textMuted}
+                    placeholderTextColor={C.textMuted}
                     value={newPassword}
                     onChangeText={setNewPassword}
                     onFocus={() => setFocusedField("newPassword")}
@@ -336,12 +319,12 @@ export default function AuthScreen({ initialMode = "login" }) {
                     secureTextEntry
                   />
                 </View>
-                <View style={styles.fieldGroup}>
-                  <Text style={[styles.label, { color: colors.textSub }]}>Confirm password</Text>
+                <View style={st.fieldGroup}>
+                  <Text style={[st.label, { color: C.textSecondary }]}>Confirm password</Text>
                   <TextInput
                     style={inputStyle("confirmPassword")}
                     placeholder="Repeat your new password"
-                    placeholderTextColor={colors.textMuted}
+                    placeholderTextColor={C.textMuted}
                     value={confirmPassword}
                     onChangeText={setConfirmPassword}
                     onFocus={() => setFocusedField("confirmPassword")}
@@ -356,9 +339,9 @@ export default function AuthScreen({ initialMode = "login" }) {
             {mode === "login" && (
               <TouchableOpacity
                 onPress={() => { setMode("forgot"); clearMessages(); }}
-                style={styles.forgotLink}
+                style={st.forgotLink}
               >
-                <Text style={[styles.forgotLinkText, { color: colors.link }]}>
+                <Text style={[st.forgotLinkText, { color: C.accentText }]}>
                   Forgot password?
                 </Text>
               </TouchableOpacity>
@@ -366,26 +349,26 @@ export default function AuthScreen({ initialMode = "login" }) {
 
             {/* Error / success banners */}
             {error && (
-              <View style={[styles.messageBanner, { backgroundColor: colors.errorBg, borderColor: colors.error }]}>
-                <Text style={[styles.messageText, { color: colors.error }]}>{error}</Text>
+              <View style={[st.messageBanner, { backgroundColor: C.nahBg, borderColor: C.nahText }]}>
+                <Text style={[st.messageText, { color: C.nahText }]}>{error}</Text>
               </View>
             )}
             {successMsg && (
-              <View style={[styles.messageBanner, { backgroundColor: colors.successBg, borderColor: colors.success }]}>
-                <Text style={[styles.messageText, { color: colors.success }]}>{successMsg}</Text>
+              <View style={[st.messageBanner, { backgroundColor: C.yesBg, borderColor: C.yesText }]}>
+                <Text style={[st.messageText, { color: C.yesText }]}>{successMsg}</Text>
               </View>
             )}
 
             {/* Submit button */}
             <TouchableOpacity
-              style={[styles.submitBtn, { backgroundColor: colors.primary, opacity: loading ? 0.7 : 1 }]}
+              style={[st.submitBtn, { backgroundColor: C.accent, opacity: loading ? 0.7 : 1 }]}
               onPress={handleSubmit}
               disabled={loading}
               activeOpacity={0.85}
             >
               {loading
-                ? <ActivityIndicator color="#fff" />
-                : <Text style={[styles.submitText, { color: colors.primaryText }]}>{submitLabel()}</Text>
+                ? <ActivityIndicator color={COnAccent.bg} />
+                : <Text style={[st.submitText, { color: COnAccent.bg }]}>{submitLabel()}</Text>
               }
             </TouchableOpacity>
 
@@ -393,15 +376,15 @@ export default function AuthScreen({ initialMode = "login" }) {
             {(isForgotMode || isResetMode) && (
               <TouchableOpacity
                 onPress={() => { setMode("login"); clearMessages(); }}
-                style={styles.backLink}
+                style={st.backLink}
               >
-                <Text style={[styles.backLinkText, { color: colors.link }]}>← Back to login</Text>
+                <Text style={[st.backLinkText, { color: C.accentText }]}>← Back to login</Text>
               </TouchableOpacity>
             )}
           </View>
         </View>
 
-        <Text style={[styles.terms, { color: colors.textMuted }]}>
+        <Text style={[st.terms, { color: C.textMuted }]}>
           By continuing you agree to participate in global opinions.
         </Text>
       </ScrollView>
@@ -409,32 +392,50 @@ export default function AuthScreen({ initialMode = "login" }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = () => StyleSheet.create({
   screen: { flex: 1 },
-  scroll: { flexGrow: 1, justifyContent: "center", paddingHorizontal: 24, paddingVertical: 48 },
-  logoArea: { alignItems: "center", marginBottom: 32 },
-  logoBadge: { width: 64, height: 64, borderRadius: 20, alignItems: "center", justifyContent: "center", marginBottom: 14 },
-  logoEmoji: { fontSize: 32 },
-  appName: { fontSize: 24, fontWeight: "800", letterSpacing: -0.5, marginBottom: 6 },
-  tagline: { fontSize: 14 },
-  card: { borderRadius: 24, borderWidth: 1, overflow: "hidden", marginBottom: 20 },
-  tabRow: { flexDirection: "row", borderBottomWidth: 1 },
-  tab: { flex: 1, paddingVertical: 16, alignItems: "center" },
-  tabText: { fontSize: 15 },
-  form: { padding: 24 },
-  sectionHeader: { marginBottom: 20 },
-  sectionTitle: { fontSize: 20, fontWeight: "700", marginBottom: 6 },
-  sectionSub: { fontSize: 14, lineHeight: 20 },
-  fieldGroup: { marginBottom: 16 },
-  label: { fontSize: 13, fontWeight: "500", marginBottom: 6 },
-  input: { borderWidth: 1.5, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15 },
-  forgotLink: { alignSelf: "flex-end", marginBottom: 16, marginTop: -8 },
-  forgotLinkText: { fontSize: 13 },
-  messageBanner: { borderWidth: 1, borderRadius: 10, padding: 12, marginBottom: 16 },
-  messageText: { fontSize: 13, lineHeight: 18 },
-  submitBtn: { borderRadius: 14, paddingVertical: 16, alignItems: "center", marginTop: 4 },
-  submitText: { fontSize: 16, fontWeight: "700" },
-  backLink: { alignItems: "center", marginTop: 16 },
-  backLinkText: { fontSize: 14 },
-  terms: { fontSize: 11, textAlign: "center", lineHeight: 16 },
+  scroll: {
+    flexGrow: 1,
+    justifyContent: "center",
+    paddingHorizontal: ms(24),
+    paddingVertical: vs(48),
+  },
+  logoArea: { alignItems: "center", marginBottom: vs(32) },
+  logoBadge: {
+    width: s(64),
+    height: s(64),
+    borderRadius: ms(20),
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: vs(14),
+  },
+  logoEmoji: { fontSize: fs(32) },
+  appName: { fontSize: fs(24), fontWeight: "800", letterSpacing: -0.5, marginBottom: vs(6) },
+  tagline: { fontSize: fs(14) },
+  card: { borderRadius: ms(24), borderWidth: ms(1), overflow: "hidden", marginBottom: vs(20) },
+  tabRow: { flexDirection: "row", borderBottomWidth: ms(1) },
+  tab: { flex: 1, paddingVertical: vs(16), alignItems: "center" },
+  tabText: { fontSize: fs(15) },
+  form: { padding: ms(24) },
+  sectionHeader: { marginBottom: vs(20) },
+  sectionTitle: { fontSize: fs(20), fontWeight: "700", marginBottom: vs(6) },
+  sectionSub: { fontSize: fs(14), lineHeight: fs(20) },
+  fieldGroup: { marginBottom: vs(16) },
+  label: { fontSize: fs(13), fontWeight: "500", marginBottom: vs(6) },
+  input: {
+    borderWidth: ms(2),
+    borderRadius: ms(12),
+    paddingHorizontal: ms(14),
+    paddingVertical: vs(12),
+    fontSize: fs(15),
+  },
+  forgotLink: { alignSelf: "flex-end", marginBottom: vs(16), marginTop: vs(-8) },
+  forgotLinkText: { fontSize: fs(13) },
+  messageBanner: { borderWidth: ms(1), borderRadius: ms(10), padding: ms(12), marginBottom: vs(16) },
+  messageText: { fontSize: fs(13), lineHeight: fs(18) },
+  submitBtn: { borderRadius: ms(14), paddingVertical: vs(16), alignItems: "center", marginTop: vs(4) },
+  submitText: { fontSize: fs(16), fontWeight: "700" },
+  backLink: { alignItems: "center", marginTop: vs(16) },
+  backLinkText: { fontSize: fs(14) },
+  terms: { fontSize: fs(11), textAlign: "center", lineHeight: fs(16) },
 });

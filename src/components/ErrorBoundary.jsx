@@ -1,0 +1,77 @@
+// ─────────────────────────────────────────────
+// Peolia — ErrorBoundary
+// src/components/ErrorBoundary.jsx
+//
+// Catches render crashes anywhere in the tree and
+// shows a recoverable error screen instead of the
+// blank white screen RN gives by default.
+// ─────────────────────────────────────────────
+
+import React from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, useColorScheme } from 'react-native';
+import { getPeoliaColors } from '../constants/peoliaTheme';
+import { fs, ms, vs } from '../utils/peoliaScale';
+
+function ErrorFallback({ message, onRetry }) {
+  const scheme = useColorScheme();
+  const C = getPeoliaColors(scheme);
+  const st = makeStyles(C);
+
+  return (
+    <View style={st.screen}>
+      <Text style={st.icon}>🌊</Text>
+      <Text style={st.title}>Something went wrong</Text>
+      <Text style={st.message} numberOfLines={4}>{message}</Text>
+      <TouchableOpacity style={st.retryBtn} onPress={onRetry} activeOpacity={0.7}>
+        <Text style={st.retryText}>Try again</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+export default class ErrorBoundary extends React.Component {
+  state = { error: null };
+
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+
+  componentDidCatch(error, info) {
+    console.error('ErrorBoundary caught', error, info?.componentStack);
+  }
+
+  handleRetry = () => this.setState({ error: null });
+
+  render() {
+    if (this.state.error) {
+      return (
+        <ErrorFallback
+          message={String(this.state.error?.message ?? this.state.error)}
+          onRetry={this.handleRetry}
+        />
+      );
+    }
+    return this.props.children;
+  }
+}
+
+const makeStyles = (C) => StyleSheet.create({
+  screen: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: C.bg,
+    paddingHorizontal: ms(32),
+  },
+  icon:    { fontSize: fs(44), marginBottom: vs(14) },
+  title:   { fontSize: fs(18), fontWeight: '800', color: C.textPrimary, marginBottom: vs(8) },
+  message: {
+    fontSize: fs(14), fontWeight: '500', color: C.textSecondary,
+    textAlign: 'center', lineHeight: fs(21), marginBottom: vs(20),
+  },
+  retryBtn: {
+    paddingVertical: vs(10), paddingHorizontal: ms(28),
+    borderRadius: ms(20), backgroundColor: C.accent,
+  },
+  retryText: { fontSize: fs(15), fontWeight: '700', color: '#FFFFFF' },
+});

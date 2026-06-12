@@ -1,87 +1,66 @@
 // ─────────────────────────────────────────────
-// Peolia — ViewReactsSheet Component
+// Peolia — ViewReactsSheet (Scaled for real devices)
 // src/components/ViewReactsSheet.jsx
-//
-// Bottom sheet that appears when user taps "View reacts"
-// before voting. Overlays vote bar, sits above tab pill.
-//
-// Usage:
-//   <ViewReactsSheet
-//     visible={showSheet}
-//     onCancel={() => setShowSheet(false)}
-//     onConfirm={() => { setShowSheet(false); handleViewReacts(); }}
-//   />
 // ─────────────────────────────────────────────
 
 import React from 'react';
-import {
-  View, Text, TouchableOpacity, StyleSheet,
-  useColorScheme, Modal, Animated,
-} from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Modal, useColorScheme } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getPeoliaColors } from '../constants/peoliaTheme';
-
-// Tab bar height offset — sheet sits above the tab pill
-const TAB_BAR_HEIGHT = 68;
+import { fs, ms, vs } from '../utils/peoliaScale';
 
 export default function ViewReactsSheet({ visible, onCancel, onConfirm }) {
   const scheme = useColorScheme();
   const C = getPeoliaColors(scheme);
-  const s = makeStyles(C);
-
-  if (!visible) return null;
+  const st = makeStyles(C);
+  const insets = useSafeAreaInsets();
 
   return (
-    <View style={s.overlay} pointerEvents="box-none">
-      <View style={s.sheet}>
-        {/* Handle bar */}
-        <View style={s.handle} />
-
-        <Text style={s.title}>Heads up</Text>
-        <Text style={s.body}>
-          Viewing reacts now means you can never react to this senti — ever.
-          This can't be undone.
-        </Text>
-
-        <View style={s.btnRow}>
-          <TouchableOpacity
-            style={[s.btn, s.cancelBtn]}
-            onPress={onCancel}
-            activeOpacity={0.7}
-          >
-            <Text style={[s.btnText, s.cancelText]}>Cancel</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[s.btn, s.confirmBtn]}
-            onPress={onConfirm}
-            activeOpacity={0.7}
-          >
-            <Text style={[s.btnText, s.confirmText]}>View anyway</Text>
-          </TouchableOpacity>
+    // Modal blocks ALL touches behind it (card, vote bar, tab bar) until the
+    // user picks Cancel or "View anyway". Android back button maps to Cancel.
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      statusBarTranslucent
+      onRequestClose={onCancel}
+    >
+      <View style={st.backdrop}>
+        {/* Bottom inset keeps the buttons above the Android system nav bar */}
+        <View style={[st.sheet, { paddingBottom: vs(20) + insets.bottom }]}>
+          <View style={st.handle} />
+          <Text style={st.title}>Heads up</Text>
+          <Text style={st.body}>
+            Viewing reacts now means you can never react to this senti — ever. This can't be undone.
+          </Text>
+          <View style={st.btnRow}>
+            <TouchableOpacity style={[st.btn, st.cancelBtn]} onPress={onCancel} activeOpacity={0.7}>
+              <Text style={[st.btnText, st.cancelText]}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[st.btn, st.confirmBtn]} onPress={onConfirm} activeOpacity={0.7}>
+              <Text style={[st.btnText, st.confirmText]}>View anyway</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
-    </View>
+    </Modal>
   );
 }
 
 const makeStyles = (C) => StyleSheet.create({
-  overlay: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: TAB_BAR_HEIGHT,
-    zIndex: 10,
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
   },
   sheet: {
     backgroundColor: C.sheetBg,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
+    borderTopLeftRadius: ms(18),
+    borderTopRightRadius: ms(18),
     borderTopWidth: 0.5,
     borderColor: C.sheetBorder,
-    paddingHorizontal: 14,
-    paddingTop: 11,
-    paddingBottom: 14,
-    // Shadow for light mode
+    paddingHorizontal: ms(18),
+    paddingTop: vs(16),
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 0.08,
@@ -89,50 +68,20 @@ const makeStyles = (C) => StyleSheet.create({
     elevation: 8,
   },
   handle: {
-    width: 28,
-    height: 3,
-    borderRadius: 2,
+    width: ms(36),
+    height: vs(4),
+    borderRadius: ms(2),
     backgroundColor: C.border,
     alignSelf: 'center',
-    marginBottom: 10,
+    marginBottom: vs(14),
   },
-  title: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: C.textPrimary,
-    marginBottom: 4,
-  },
-  body: {
-    fontSize: 9.5,
-    lineHeight: 14,
-    color: C.textSecondary,
-    marginBottom: 11,
-  },
-  btnRow: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  btn: {
-    flex: 1,
-    paddingVertical: 8,
-    paddingHorizontal: 4,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  cancelBtn: {
-    backgroundColor: C.cancelBg,
-  },
-  confirmBtn: {
-    backgroundColor: C.accent,
-  },
-  btnText: {
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  cancelText: {
-    color: C.cancelText,
-  },
-  confirmText: {
-    color: '#FFFFFF',
-  },
+  title:       { fontSize: fs(18), fontWeight: '700', color: C.textPrimary, marginBottom: vs(8) },
+  body:        { fontSize: fs(15), lineHeight: fs(23), color: C.textSecondary, marginBottom: vs(16) },
+  btnRow:      { flexDirection: 'row', gap: ms(10) },
+  btn:         { flex: 1, paddingVertical: vs(14), paddingHorizontal: ms(4), borderRadius: ms(14), alignItems: 'center' },
+  cancelBtn:   { backgroundColor: C.cancelBg },
+  confirmBtn:  { backgroundColor: C.accent },
+  btnText:     { fontSize: fs(16), fontWeight: '700' },
+  cancelText:  { color: C.textPrimary },
+  confirmText: { color: '#FFFFFF' },
 });

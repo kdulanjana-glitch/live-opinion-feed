@@ -1,11 +1,9 @@
 // ─────────────────────────────────────────────
 // Peolia — TrendingScreen
-// Replaces: old TrendingScreen.jsx
+// src/screens/TrendingScreen.jsx
 //
-// DB mapping:
-//   opinions.text      → item.question
-//   opinions.category  → item.wave (capitalised)
-//   opinions.total_votes → total reacts
+// Queries: trending_sentis view (ordered by velocity_2h desc)
+// Wave filter: passed as .eq('wave', activeWave) to the view
 // ─────────────────────────────────────────────
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -16,6 +14,7 @@ import {
 } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { getPeoliaColors } from '../constants/peoliaTheme';
+import { fs, ms, vs } from '../utils/peoliaScale';
 
 const ALL_WAVES = [
   'All', 'Tech', 'Love', 'Money', 'Life', 'Society',
@@ -38,8 +37,6 @@ const WAVE_GRADIENTS = {
   'Education': '#1A2E05', 'Environment': '#064E3B',
 };
 
-const capitalize = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : 'Tech');
-
 const formatCount = (n) => {
   if (!n) return '0';
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -52,22 +49,27 @@ export default function TrendingScreen({ onOpenSenti }) {
   const C = getPeoliaColors(scheme);
   const s = makeStyles(C);
 
-  const [opinions,   setOpinions]   = useState([]);
+  const [sentis,     setSentis]     = useState([]);
   const [loading,    setLoading]    = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeWave, setActiveWave] = useState('All');
 
-  const fetchTrending = useCallback(async () => {
+  // Query trending_sentis view — pass wave filter directly to Supabase
+  const fetchTrending = useCallback(async (wave = 'All') => {
     try {
-      const { data, error } = await supabase
-        .from('opinions')
-        .select('id, text, category, total_votes, agree_count, disagree_count')
-        .eq('status', 'approved')
-        .order('total_votes', { ascending: false })
-        .limit(50);
+      let query = supabase
+        .from('trending_sentis')
+        .select('id, question, wave, total_reacts, velocity_2h')
+        .order('velocity_2h', { ascending: false })
+        .limit(20);
 
+      if (wave !== 'All') {
+        query = query.eq('wave', wave);
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
-      setOpinions(data ?? []);
+      setSentis(data ?? []);
     } catch (err) {
       console.error('TrendingScreen fetchTrending error', err);
     } finally {
@@ -76,24 +78,28 @@ export default function TrendingScreen({ onOpenSenti }) {
     }
   }, []);
 
-  useEffect(() => { fetchTrending(); }, [fetchTrending]);
+  useEffect(() => {
+    setLoading(true);
+    fetchTrending(activeWave);
+  }, [activeWave, fetchTrending]);
 
-  const handleRefresh = () => { setRefreshing(true); fetchTrending(); };
+  const handleRefresh = () => {
+    setRefreshing(true);
+    fetchTrending(activeWave);
+  };
 
-  // Top 20 per selected wave
-  const filtered = (
-    activeWave === 'All'
-      ? opinions
-      : opinions.filter((o) => capitalize(o.category) === activeWave)
-  ).slice(0, 20);
+  const handleWaveChange = (wave) => {
+    setActiveWave(wave);
+    setLoading(true);
+    setSentis([]);
+  };
 
   const renderCard = ({ item, index }) => {
-    const rank    = index + 1;
-    const wave    = capitalize(item.category);
-    const total   = formatCount(item.total_votes ?? 0);
-    const bgColor = WAVE_GRADIENTS[wave] ?? '#1E1B4B';
-    const emoji   = WAVE_EMOJIS[wave] ?? '🌊';
-    const isFirst = rank === 1;
+    const rank     = index + 1;
+    const wave     = item.wave ?? 'Tech';
+    const bgColor  = WAVE_GRADIENTS[wave] ?? '#1E1B4B';
+    const emoji    = WAVE_EMOJIS[wave] ?? '🌊';
+    const isFirst  = rank === 1;
 
     return (
       <TouchableOpacity
@@ -101,25 +107,25 @@ export default function TrendingScreen({ onOpenSenti }) {
         onPress={() => onOpenSenti?.(item.id)}
         activeOpacity={0.8}
       >
-        {/* Coloured header */}
-        <View style={[s.cardImg, { backgroundColor: bgColor, height: isFirst ? 70 : 60 }]}>
+        {/* Coloured header with rank + question */}
+        <View style={[s.cardImg, { backgroundColor: bgColor, height: isFirst ? vs(80) : vs(66) }]}>
           <View style={s.overlay} />
           <View style={[s.rankBadge, rank === 1 ? s.rankBadge1 : s.rankBadgeN]}>
             <Text style={s.rankText}>#{rank}</Text>
           </View>
-          <Text style={s.cardQuestion} numberOfLines={2}>{item.text}</Text>
+          <Text style={s.cardQuestion} numberOfLines={2}>{item.question}</Text>
         </View>
 
-        {/* Footer */}
+        {/* Footer: wave pill + react count + velocity */}
         <View style={s.cardFooter}>
           <View style={s.cardLeft}>
             <View style={[s.wavePillSmall, { backgroundColor: C.accentLight }]}>
               <Text style={s.wavePillText}>{emoji} {wave}</Text>
             </View>
-            <Text style={s.reactCount}>{total} reacts</Text>
+            <Text style={s.reactCount}>{formatCount(item.total_reacts)} reacts</Text>
           </View>
           <Text style={[s.velocity, { color: C.velocity }]}>
-            ↑ {total} total
+            ↑ {formatCount(item.velocity_2h)} in 2hrs
           </Text>
         </View>
       </TouchableOpacity>
@@ -161,7 +167,7 @@ export default function TrendingScreen({ onOpenSenti }) {
                   ? { backgroundColor: C.accent }
                   : { backgroundColor: C.surfaceAlt, borderWidth: 0.5, borderColor: C.border },
               ]}
-              onPress={() => setActiveWave(wave)}
+              onPress={() => handleWaveChange(wave)}
               activeOpacity={0.7}
             >
               <Text style={[s.filterText, { color: isActive ? '#FFFFFF' : C.textMuted }]}>
@@ -172,14 +178,21 @@ export default function TrendingScreen({ onOpenSenti }) {
         })}
       </ScrollView>
 
-      {/* List */}
+      {/* List / empty / loading */}
       {loading ? (
         <View style={s.loader}>
           <ActivityIndicator color={C.accent} />
         </View>
+      ) : sentis.length === 0 ? (
+        <View style={s.empty}>
+          <Text style={s.emptyIcon}>🌊</Text>
+          <Text style={[s.emptyText, { color: C.textSecondary }]}>
+            No trending sentis{activeWave !== 'All' ? ` in ${activeWave}` : ''} yet.
+          </Text>
+        </View>
       ) : (
         <FlatList
-          data={filtered}
+          data={sentis}
           keyExtractor={(item) => item.id}
           renderItem={renderCard}
           contentContainerStyle={s.list}
@@ -201,41 +214,46 @@ const makeStyles = (C) => StyleSheet.create({
   },
   header: {
     flexDirection: 'row', justifyContent: 'space-between',
-    alignItems: 'center', paddingHorizontal: 14, paddingTop: 8, paddingBottom: 0,
+    alignItems: 'center', paddingHorizontal: ms(16),
+    paddingTop: vs(10), paddingBottom: 0,
   },
-  title:     { fontSize: 13, fontWeight: '800', color: C.textPrimary },
+  title:         { fontSize: fs(17), fontWeight: '800', color: C.textPrimary },
   badge: {
-    backgroundColor: C.surfaceAlt, borderRadius: 20,
-    paddingVertical: 3, paddingHorizontal: 8, borderWidth: 0.5, borderColor: C.border,
+    backgroundColor: C.surfaceAlt, borderRadius: ms(20),
+    paddingVertical: vs(4), paddingHorizontal: ms(10),
+    borderWidth: 0.5, borderColor: C.border,
   },
-  badgeText:     { fontSize: 8, fontWeight: '600', color: C.textMuted },
-  filterScroll:  { marginTop: 8, flexGrow: 0 },
-  filterContent: { paddingHorizontal: 14, gap: 5, paddingBottom: 2 },
-  filterPill:    { paddingVertical: 4, paddingHorizontal: 11, borderRadius: 20 },
-  filterText:    { fontSize: 9, fontWeight: '700' },
-  list:          { paddingHorizontal: 14, paddingTop: 8, gap: 6, paddingBottom: 16 },
-  card:          { borderRadius: 14, borderWidth: 0.5, borderColor: C.border, overflow: 'hidden' },
-  cardImg:       { position: 'relative', justifyContent: 'flex-end', padding: 8 },
+  badgeText:     { fontSize: fs(12), fontWeight: '600', color: C.textMuted },
+  filterScroll:  { marginTop: vs(10), flexGrow: 0 },
+  filterContent: { paddingHorizontal: ms(16), gap: ms(6), paddingBottom: vs(4) },
+  filterPill:    { paddingVertical: vs(5), paddingHorizontal: ms(13), borderRadius: ms(20) },
+  filterText:    { fontSize: fs(13), fontWeight: '700' },
+  list:          { paddingHorizontal: ms(14), paddingTop: vs(10), gap: vs(8), paddingBottom: vs(20) },
+  card:          { borderRadius: ms(14), borderWidth: 0.5, borderColor: C.border, overflow: 'hidden' },
+  cardImg:       { position: 'relative', justifyContent: 'flex-end', padding: ms(10) },
   overlay:       { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.38)' },
   rankBadge: {
-    position: 'absolute', top: 8, left: 8,
-    borderRadius: 8, paddingVertical: 2, paddingHorizontal: 7,
+    position: 'absolute', top: ms(10), left: ms(10),
+    borderRadius: ms(8), paddingVertical: vs(3), paddingHorizontal: ms(8),
   },
   rankBadge1:    { backgroundColor: '#4F46E5' },
   rankBadgeN:    { backgroundColor: 'rgba(255,255,255,0.2)' },
-  rankText:      { fontSize: 9, fontWeight: '800', color: '#FFFFFF' },
+  rankText:      { fontSize: fs(13), fontWeight: '800', color: '#FFFFFF' },
   cardQuestion: {
-    fontSize: 11, fontWeight: '800', color: '#FFFFFF',
-    lineHeight: 15, position: 'relative', zIndex: 1,
+    fontSize: fs(14), fontWeight: '800', color: '#FFFFFF',
+    lineHeight: fs(19), position: 'relative', zIndex: 1,
   },
   cardFooter: {
     flexDirection: 'row', justifyContent: 'space-between',
-    alignItems: 'center', paddingHorizontal: 10, paddingVertical: 6,
+    alignItems: 'center', paddingHorizontal: ms(12), paddingVertical: vs(8),
   },
-  cardLeft:      { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  wavePillSmall: { paddingVertical: 2, paddingHorizontal: 7, borderRadius: 20 },
-  wavePillText:  { fontSize: 7.5, fontWeight: '700', color: '#4338CA' },
-  reactCount:    { fontSize: 8, fontWeight: '600', color: C.textMuted },
-  velocity:      { fontSize: 8, fontWeight: '700' },
+  cardLeft:      { flexDirection: 'row', alignItems: 'center', gap: ms(6) },
+  wavePillSmall: { paddingVertical: vs(3), paddingHorizontal: ms(8), borderRadius: ms(20) },
+  wavePillText:  { fontSize: fs(12), fontWeight: '700', color: '#4338CA' },
+  reactCount:    { fontSize: fs(12), fontWeight: '600', color: C.textMuted },
+  velocity:      { fontSize: fs(12), fontWeight: '700' },
   loader:        { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  empty:         { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: ms(32) },
+  emptyIcon:     { fontSize: fs(40), marginBottom: vs(12) },
+  emptyText:     { fontSize: fs(15), fontWeight: '600', textAlign: 'center' },
 });

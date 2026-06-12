@@ -1,29 +1,13 @@
 // ─────────────────────────────────────────────
-// Peolia — ActionBar Component
+// Peolia — ActionBar (Scaled for real devices)
 // src/components/ActionBar.jsx
-//
-// The vertical right-side action bar on the feed card.
-//
-// Usage:
-//   <ActionBar
-//     likes={24000}
-//     voices={1200}
-//     pins={8400}
-//     onLike={handleLike}
-//     onVoice={handleVoice}
-//     onPin={handlePin}
-//     onAsk={handleAsk}
-//     transparent={false}  // true = on image (white icons)
-//   />
 // ─────────────────────────────────────────────
 
 import React from 'react';
-import {
-  View, Text, TouchableOpacity, StyleSheet, useColorScheme,
-} from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, useColorScheme } from 'react-native';
 import { getPeoliaColors } from '../constants/peoliaTheme';
+import { fs, ms, s, vs } from '../utils/peoliaScale';
 
-// Format large numbers: 24000 → "24K", 1400000 → "1.4M"
 const formatCount = (n) => {
   if (!n && n !== 0) return '0';
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -31,71 +15,86 @@ const formatCount = (n) => {
   return String(n);
 };
 
-// Minimal SVG-like icons rendered as Unicode / Text
-// Replace with real SVG components once icon library is added
-const HeartIcon  = ({ color }) => <Text style={{ fontSize: 20, color }}>♥</Text>;
-const ChatIcon   = ({ color }) => <Text style={{ fontSize: 18, color }}>💬</Text>;
-const PinIcon    = ({ color }) => <Text style={{ fontSize: 18, color }}>🔖</Text>;
-const AskIcon    = ({ color }) => <Text style={{ fontSize: 18, color }}>🙋</Text>;
+// Icons — all sizes increased 25% (×1.25)
+const HeartIcon    = ({ color }) => <Text style={{ fontSize: fs(30), color }}>♥</Text>;
+const ChatIcon     = ({ color }) => <Text style={{ fontSize: fs(28), color }}>💬</Text>;
+const BookmarkIcon = ({ color }) => <Text style={{ fontSize: fs(28), color }}>🔖</Text>; // not pinned
+const PushpinIcon  = ({ color }) => <Text style={{ fontSize: fs(28), color }}>📌</Text>; // pinned
+const AskIcon      = ({ color }) => <Text style={{ fontSize: fs(28), color }}>🙋</Text>;
 
 export default function ActionBar({
-  likes    = 0,
-  voices   = 0,
-  pins     = 0,
+  likes  = 0,
+  voices = 0,
+  pins   = 0,
+  liked  = false,   // true → heart red
+  pinned = false,   // true → pushpin accent, false → bookmark grey
   onLike,
   onVoice,
   onPin,
   onAsk,
-  transparent = false,
 }) {
   const scheme = useColorScheme();
   const C = getPeoliaColors(scheme);
-  const s = makeStyles(C, transparent);
-
-  const iconColor  = transparent ? 'rgba(255,255,255,0.45)' : C.iconMuted;
-  const countColor = transparent ? 'rgba(255,255,255,0.55)' : C.textMuted;
+  const st = makeStyles(C);
 
   const items = [
-    { Icon: HeartIcon, color: '#F87171', count: formatCount(likes),  onPress: onLike  },
-    { Icon: ChatIcon,  color: iconColor, count: formatCount(voices), onPress: onVoice },
-    { Icon: PinIcon,   color: iconColor, count: formatCount(pins),   onPress: onPin   },
-    { Icon: AskIcon,   color: iconColor, count: 'Ask',               onPress: onAsk   },
+    {
+      Icon:    HeartIcon,
+      color:   liked  ? C.likeColor : C.iconMuted,
+      count:   formatCount(likes),
+      onPress: onLike,
+    },
+    {
+      Icon:    ChatIcon,
+      color:   C.iconMuted,
+      count:   formatCount(voices),
+      onPress: onVoice,
+    },
+    {
+      // Distinct icon AND colour change: 📌 (pinned) vs 🔖 (not pinned)
+      Icon:    pinned ? PushpinIcon : BookmarkIcon,
+      color:   pinned ? C.accent    : C.iconMuted,
+      count:   formatCount(pins),
+      onPress: onPin,
+    },
+    {
+      Icon:    AskIcon,
+      color:   C.iconMuted,
+      count:   'Ask',
+      onPress: onAsk,
+    },
   ];
 
   return (
-    <View style={s.bar}>
+    <View style={st.bar}>
       {items.map(({ Icon, color, count, onPress }, i) => (
-        <TouchableOpacity
-          key={i}
-          style={s.item}
-          onPress={onPress}
-          activeOpacity={0.7}
-        >
+        <TouchableOpacity key={i} style={st.item} onPress={onPress} activeOpacity={0.7}>
           <Icon color={color} />
-          <Text style={[s.count, { color: countColor }]}>{count}</Text>
+          <Text style={st.count}>{count}</Text>
         </TouchableOpacity>
       ))}
     </View>
   );
 }
 
-const makeStyles = (C, transparent) => StyleSheet.create({
+const makeStyles = (C) => StyleSheet.create({
   bar: {
-    width: 42,
+    width: s(62),          // slightly wider to fit larger icons
     flexShrink: 0,
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
-    paddingRight: 6,
+    gap: vs(18),           // a touch more breathing room
+    paddingRight: ms(8),
   },
   item: {
     flexDirection: 'column',
     alignItems: 'center',
-    gap: 2,
+    gap: vs(3),
   },
   count: {
-    fontSize: 8,
+    fontSize: fs(18),      // was fs(14), now ×1.25
     fontWeight: '600',
+    color: C.textMuted,
   },
 });
