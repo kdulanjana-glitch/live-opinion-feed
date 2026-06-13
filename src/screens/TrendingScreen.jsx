@@ -15,6 +15,8 @@ import {
 import { supabase } from '../lib/supabase';
 import { getPeoliaColors } from '../constants/peoliaTheme';
 import { fs, ms, vs } from '../utils/peoliaScale';
+import EmptyState from '../components/EmptyState';
+import { TrendingSkeleton } from '../components/Skeletons';
 
 const ALL_WAVES = [
   'All', 'Tech', 'Love', 'Money', 'Life', 'Society',
@@ -180,16 +182,13 @@ export default function TrendingScreen({ onOpenSenti }) {
 
       {/* List / empty / loading */}
       {loading ? (
-        <View style={s.loader}>
-          <ActivityIndicator color={C.accent} />
-        </View>
+        <TrendingSkeleton />
       ) : sentis.length === 0 ? (
-        <View style={s.empty}>
-          <Text style={s.emptyIcon}>🌊</Text>
-          <Text style={[s.emptyText, { color: C.textSecondary }]}>
-            No trending sentis{activeWave !== 'All' ? ` in ${activeWave}` : ''} yet.
-          </Text>
-        </View>
+        <EmptyState
+          icon="🔥"
+          headline="Nothing trending yet"
+          subtext="Check back soon or explore a different wave"
+        />
       ) : (
         <FlatList
           data={sentis}

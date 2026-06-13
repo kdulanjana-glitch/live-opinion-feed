@@ -12,12 +12,14 @@ import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   Modal, KeyboardAvoidingView, Platform,
-  useColorScheme, ActivityIndicator,
+  useColorScheme, ActivityIndicator, Alert, Image,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { decode } from 'base64-arraybuffer';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../lib/supabase';
 import { getPeoliaColors } from '../constants/peoliaTheme';
-import { fs, ms, vs } from '../utils/peoliaScale';
+import { fs, ms, vs, s } from '../utils/peoliaScale';
 
 const USERNAME_MAX = 20;
 const DISPLAY_MAX  = 30;
@@ -32,6 +34,8 @@ export default function EditProfileSheet({ visible, onClose, initial, onSaved })
   const [username,    setUsername]    = useState('');
   const [displayName, setDisplayName] = useState('');
   const [bio,         setBio]         = useState('');
+  const [avatarUrl,   setAvatarUrl]   = useState(null);  // current saved/displayed avatar
+  const [newAvatar,   setNewAvatar]   = useState(null);  // freshly picked asset, uploaded on Save
   const [saving,      setSaving]      = useState(false);
   const [error,       setError]       = useState(null);
 
@@ -41,9 +45,44 @@ export default function EditProfileSheet({ visible, onClose, initial, onSaved })
       setUsername(initial?.username ?? '');
       setDisplayName(initial?.displayName ?? '');
       setBio(initial?.bio ?? '');
+      setAvatarUrl(initial?.avatarUrl ?? null);
+      setNewAvatar(null);
       setError(null);
     }
   }, [visible, initial]);
+
+  const previewUri = newAvatar?.uri ?? avatarUrl;   // what the avatar circle shows
+  const letter     = (username || '?')[0].toUpperCase();
+
+  const pickAvatar = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Allow photo access to set a profile picture.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],         // square avatar (display clips it to a circle)
+      quality: 0.85,
+      base64: true,           // needed for upload (RN can't read the file via fetch)
+    });
+    if (!result.canceled) setNewAvatar(result.assets[0]);
+  };
+
+  // Upload the picked avatar to senti-images/{userId}/avatar-*.jpg → public URL.
+  // Decode the picker's base64 → ArrayBuffer. NOTE: fetch(localUri).arrayBuffer() does
+  // NOT work in React Native — it yields a ~14-byte stub, not the real file bytes.
+  const uploadAvatar = async (userId) => {
+    if (!newAvatar?.base64) throw new Error('No image data to upload');
+    const ext  = (newAvatar.uri.split('.').pop() || 'jpg').toLowerCase();
+    const path = `${userId}/avatar-${Date.now()}.${ext}`;
+    const { error } = await supabase.storage
+      .from('senti-images')
+      .upload(path, decode(newAvatar.base64), { contentType: newAvatar.mimeType ?? 'image/jpeg' });
+    if (error) throw error;
+    return supabase.storage.from('senti-images').getPublicUrl(path).data.publicUrl;
+  };
 
   const handleSave = async () => {
     if (saving) return;
@@ -63,10 +102,24 @@ export default function EditProfileSheet({ visible, onClose, initial, onSaved })
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { setError('You need to be signed in.'); return; }
 
+      // Upload a newly-picked avatar first; abort save on upload failure
+      let uploadedAvatarUrl;
+      if (newAvatar) {
+        try {
+          uploadedAvatarUrl = await uploadAvatar(user.id);
+        } catch (e) {
+          console.error('EditProfileSheet avatar upload error', e);
+          setError('Could not upload the photo. Please try again.');
+          return;
+        }
+      }
+
       const updates = {
         username:     uname,
         display_name: displayName.trim() || null,
         bio:          bio.trim() || null,
+        // only set avatar_url when a new photo was picked (don't wipe the existing one)
+        ...(uploadedAvatarUrl ? { avatar_url: uploadedAvatarUrl } : {}),
       };
       const { error: dbError } = await supabase
         .from('users')
@@ -110,6 +163,25 @@ export default function EditProfileSheet({ visible, onClose, initial, onSaved })
               <Text style={st.title}>Edit profile</Text>
               <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                 <Text style={st.closeBtn}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Avatar */}
+            <View style={st.avatarRow}>
+              <TouchableOpacity style={st.avatarWrap} onPress={pickAvatar} activeOpacity={0.8}>
+                <View style={st.avatarCircle}>
+                  {previewUri ? (
+                    <Image source={{ uri: previewUri }} style={st.avatarFill} resizeMode="cover" />
+                  ) : (
+                    <Text style={st.avatarLetter}>{letter}</Text>
+                  )}
+                </View>
+                <View style={st.avatarEdit}>
+                  <Text style={st.avatarEditIcon}>📷</Text>
+                </View>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={pickAvatar} activeOpacity={0.7}>
+                <Text style={st.avatarChange}>Change photo</Text>
               </TouchableOpacity>
             </View>
 
@@ -204,6 +276,22 @@ const makeStyles = (C) => StyleSheet.create({
   },
   title:    { fontSize: fs(17), fontWeight: '700', color: C.textPrimary },
   closeBtn: { fontSize: fs(18), color: C.textSecondary, padding: ms(4) },
+  avatarRow:   { alignItems: 'center', gap: vs(6), marginBottom: vs(6) },
+  avatarWrap:  { position: 'relative', width: s(76), height: s(76) },
+  avatarCircle: {
+    width: '100%', height: '100%', borderRadius: s(38), overflow: 'hidden',
+    backgroundColor: C.accent, alignItems: 'center', justifyContent: 'center',
+  },
+  avatarFill:   { width: '100%', height: '100%' },
+  avatarLetter: { fontSize: fs(30), fontWeight: '800', color: '#FFFFFF' },
+  avatarEdit: {
+    position: 'absolute', bottom: 0, right: 0,
+    width: s(26), height: s(26), borderRadius: s(13),
+    backgroundColor: C.sheetBg, borderWidth: 1.5, borderColor: C.sheetBg,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  avatarEditIcon: { fontSize: fs(13) },
+  avatarChange:   { fontSize: fs(13), fontWeight: '700', color: C.accent },
   labelRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',

@@ -14,14 +14,18 @@
 import React, { useState } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
-  StyleSheet, useColorScheme, Alert, StatusBar, Platform,
+  StyleSheet, useColorScheme, Alert, StatusBar, Platform, Image,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { Image } from 'expo-image';
+import { decode } from 'base64-arraybuffer';
 import { supabase } from '../lib/supabase';
 import WaveImageSheet from '../components/WaveImageSheet';
 import { getPeoliaColors } from '../constants/peoliaTheme';
-import { fs, ms, vs } from '../utils/peoliaScale';
+import { fs as fsBase, ms, vs } from '../utils/peoliaScale';
+
+// FloatScreen text + icons run 50% larger than the rest of the app (user request).
+// Every fs() in this file's styles routes through this scaled wrapper.
+const fs = (n) => fsBase(Math.round(n * 1.5));
 
 const SENTI_LIMIT = 150;
 const DESC_LIMIT  = 300;
@@ -67,18 +71,37 @@ export default function FloatScreen({ onBack, onFloated }) {
       allowsEditing: true,
       aspect: [9, 16],        // full-bleed card background — crop to portrait
       quality: 0.8,
+      base64: true,           // needed for upload (RN can't read the file via fetch)
     });
     if (!result.canceled) setImage(result.assets[0]);
   };
 
-  // Upload a picked gallery asset to senti-images/{userId}/... and return the public URL
+  // GIF picker — no crop (keep the animation) so the file uploads as image/gif
+  const pickGif = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Allow photo access to attach a GIF.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],   // GIFs live under images
+      allowsEditing: false,     // cropping would flatten the animation
+      quality: 1,
+      base64: true,
+    });
+    if (!result.canceled) setImage(result.assets[0]);
+  };
+
+  // Upload a picked gallery asset to senti-images/{userId}/... and return the public URL.
+  // Decode the picker's base64 → ArrayBuffer. NOTE: fetch(localUri).arrayBuffer() does
+  // NOT work in React Native — it yields a ~14-byte stub, not the real file bytes.
   const uploadImage = async (userId) => {
+    if (!image?.base64) throw new Error('No image data to upload');
     const ext  = (image.uri.split('.').pop() || 'jpg').toLowerCase();
     const path = `${userId}/${Date.now()}.${ext}`;
-    const arrayBuffer = await fetch(image.uri).then((r) => r.arrayBuffer());
     const { error } = await supabase.storage
       .from('senti-images')
-      .upload(path, arrayBuffer, { contentType: image.mimeType ?? 'image/jpeg' });
+      .upload(path, decode(image.base64), { contentType: image.mimeType ?? 'image/jpeg' });
     if (error) throw error;
     return supabase.storage.from('senti-images').getPublicUrl(path).data.publicUrl;
   };
@@ -247,24 +270,34 @@ export default function FloatScreen({ onBack, onFloated }) {
           </ScrollView>
         </View>
 
-        {/* Media row */}
+        {/* Media row — Image | GIF | Track */}
         <View style={s.mediaRow}>
           {image ? (
             <View style={s.imageThumbWrap}>
-              <Image source={{ uri: image.uri }} style={s.imageThumb} contentFit="cover" />
+              <Image source={{ uri: image.uri }} style={s.imageThumb} resizeMode="cover" />
               <TouchableOpacity style={s.imageRemoveBtn} onPress={() => setImage(null)} activeOpacity={0.7}>
                 <Text style={s.imageRemoveText}>✕</Text>
               </TouchableOpacity>
             </View>
           ) : (
-            <TouchableOpacity
-              style={[s.mediaBtn, { backgroundColor: C.surfaceAlt, borderColor: C.border }]}
-              activeOpacity={0.7}
-              onPress={() => setImageSheet(true)}
-            >
-              <Text style={s.mediaBtnIcon}>🖼️</Text>
-              <Text style={[s.mediaBtnLabel, { color: C.textSecondary }]}>Wave image</Text>
-            </TouchableOpacity>
+            <>
+              <TouchableOpacity
+                style={[s.mediaBtn, { backgroundColor: C.surfaceAlt, borderColor: C.border }]}
+                activeOpacity={0.7}
+                onPress={() => setImageSheet(true)}
+              >
+                <Text style={s.mediaBtnIcon}>🖼️</Text>
+                <Text style={[s.mediaBtnLabel, { color: C.textSecondary }]}>Image</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.mediaBtn, { backgroundColor: C.surfaceAlt, borderColor: C.border }]}
+                activeOpacity={0.7}
+                onPress={pickGif}
+              >
+                <Text style={s.mediaBtnIcon}>🎞️</Text>
+                <Text style={[s.mediaBtnLabel, { color: C.textSecondary }]}>GIF</Text>
+              </TouchableOpacity>
+            </>
           )}
           <TouchableOpacity
             style={[s.mediaBtn, { backgroundColor: C.surfaceAlt, borderColor: C.border }]}
@@ -316,7 +349,7 @@ function FloatPreview({ question, description, wave, image, onBack, onFloat, flo
       </View>
       <View style={[s.previewCard, { backgroundColor: '#1E1B4B' }]}>
         {image && (
-          <Image source={{ uri: image.uri }} style={StyleSheet.absoluteFill} contentFit="cover" />
+          <Image source={{ uri: image.uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
         )}
         <View style={s.previewOverlay} />
         <View style={s.previewWavePill}>
@@ -374,23 +407,27 @@ const makeStyles = (C) => StyleSheet.create({
     borderRadius: ms(12), paddingHorizontal: ms(12), paddingVertical: vs(10),
     fontSize: fs(15), lineHeight: fs(21), color: C.textPrimary, textAlignVertical: 'top', // was fs(14) ×1.10
   },
-  inputSenti: { minHeight: vs(70) },
-  inputDesc:  { minHeight: vs(70) },
+  // Default box heights: ~3 lines (senti), ~4 lines (description). Derived from the
+  // input line height (fs(21)) + vertical padding (vs(10)*2) so they track the font size.
+  inputSenti: { minHeight: fs(21) * 3 + vs(20) },
+  inputDesc:  { minHeight: fs(21) * 4 + vs(20) },
   waveScroll:   { flexGrow: 0 },
   waveContent:  { gap: ms(8), paddingBottom: vs(4) },
-  wavePill:     { paddingVertical: vs(6), paddingHorizontal: ms(16), borderRadius: ms(20) },
-  wavePillText: { fontSize: fs(14), fontWeight: '700' },          // was fs(13) ×1.10
+  // Wave pills ~15% smaller
+  wavePill:     { paddingVertical: vs(5), paddingHorizontal: ms(14), borderRadius: ms(18) },
+  wavePillText: { fontSize: fs(12), fontWeight: '700' },
   mediaRow: {
     flexDirection: 'row', gap: ms(12),
     paddingHorizontal: ms(16), paddingTop: vs(12), paddingBottom: vs(24),
   },
+  // Media buttons ~10% smaller
   mediaBtn: {
     flexDirection: 'column', alignItems: 'center', gap: vs(4),
-    paddingVertical: vs(10), paddingHorizontal: ms(16),
-    borderRadius: ms(12), borderWidth: 0.5,
+    paddingVertical: vs(9), paddingHorizontal: ms(14),
+    borderRadius: ms(11), borderWidth: 0.5,
   },
-  mediaBtnIcon:  { fontSize: fs(24) },                            // was fs(22) ×1.10
-  mediaBtnLabel: { fontSize: fs(13), fontWeight: '600' },         // was fs(12) ×1.10
+  mediaBtnIcon:  { fontSize: fs(22) },
+  mediaBtnLabel: { fontSize: fs(12), fontWeight: '600' },
   imageThumbWrap: { position: 'relative' },
   imageThumb: {
     width: ms(72), height: ms(128),                               // 9:16, matches crop aspect

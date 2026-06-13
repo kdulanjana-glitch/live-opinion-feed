@@ -21,6 +21,18 @@ const ChatIcon     = ({ color }) => <Text style={{ fontSize: fs(28), color }}>�
 const BookmarkIcon = ({ color }) => <Text style={{ fontSize: fs(28), color }}>🔖</Text>; // not pinned
 const PushpinIcon  = ({ color }) => <Text style={{ fontSize: fs(28), color }}>📌</Text>; // pinned
 const AskIcon      = ({ color }) => <Text style={{ fontSize: fs(28), color }}>🙋</Text>;
+const FlagIcon     = ({ color }) => <Text style={{ fontSize: fs(26), color }}>🚩</Text>; // report
+// Eye built from Views so it actually tints with `color` (emoji would ignore it) —
+// used for the results toggle; turns accent when results are open.
+const EyeIcon      = ({ color }) => (
+  <View style={{
+    width: s(30), height: s(19), borderRadius: s(10),
+    borderWidth: 2, borderColor: color,
+    alignItems: 'center', justifyContent: 'center',
+  }}>
+    <View style={{ width: s(8), height: s(8), borderRadius: s(4), backgroundColor: color }} />
+  </View>
+);
 
 export default function ActionBar({
   likes  = 0,
@@ -29,10 +41,14 @@ export default function ActionBar({
   liked  = false,   // true → heart red
   pinned = false,   // true → pushpin accent, false → bookmark grey
   onImage = false,  // true → card has full-bleed image; use light icon/count colors
+  hasVoted = false,
+  resultsOpen = false,
+  onToggleResults,
   onLike,
   onVoice,
   onPin,
   onAsk,
+  onFlag,
 }) {
   const scheme = useColorScheme();
   const C = getPeoliaColors(scheme);
@@ -61,19 +77,33 @@ export default function ActionBar({
       onPress: onPin,
     },
     {
+      // Results toggle — accent when open; no count label
+      Icon:    EyeIcon,
+      color:   resultsOpen ? C.accent : mutedColor,
+      onPress: onToggleResults,
+      noCount: true,
+    },
+    {
       Icon:    AskIcon,
       color:   mutedColor,
       count:   'Ask',
       onPress: onAsk,
     },
+    {
+      // Report / flag — emoji renders its own red regardless of `color`
+      Icon:    FlagIcon,
+      color:   mutedColor,
+      count:   'Flag',
+      onPress: onFlag,
+    },
   ];
 
   return (
     <View style={st.bar}>
-      {items.map(({ Icon, color, count, onPress }, i) => (
+      {items.map(({ Icon, color, count, onPress, noCount }, i) => (
         <TouchableOpacity key={i} style={st.item} onPress={onPress} activeOpacity={0.7}>
           <Icon color={color} />
-          <Text style={[st.count, onImage && st.countOnImage]}>{count}</Text>
+          {!noCount && <Text style={[st.count, onImage && st.countOnImage]}>{count}</Text>}
         </TouchableOpacity>
       ))}
     </View>
@@ -86,8 +116,8 @@ const makeStyles = (C) => StyleSheet.create({
     flexShrink: 0,
     flexDirection: 'column',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: vs(18),           // a touch more breathing room
+    justifyContent: 'flex-start',   // top-aligned & stable (doesn't shift when towers appear)
+    gap: vs(10),                     // compact spacing between icons
     paddingRight: ms(8),
   },
   item: {

@@ -16,13 +16,16 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, FlatList, StyleSheet,
   useColorScheme, ActivityIndicator, Text,
-  StatusBar, Platform, TouchableOpacity, Share,
+  StatusBar, Platform, TouchableOpacity, Share, Alert,
 } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { getPeoliaColors } from '../constants/peoliaTheme';
 import { SCREEN_HEIGHT, ms, vs, fs } from '../utils/peoliaScale';
 import SentiCard   from '../components/SentiCard';
 import VoiceSheet  from '../components/VoiceSheet';
+import ReportSheet from '../components/ReportSheet';
+import EmptyState  from '../components/EmptyState';
+import { FeedSkeleton } from '../components/Skeletons';
 
 // ── Constants ─────────────────────────────────
 const PAGE_SIZE   = 10;
@@ -95,6 +98,8 @@ export default function SentariumScreen({
   const [likedSentis,   setLikedSentis]   = useState({}); // { sentiId: true/false }
   const [pinnedSentis,  setPinnedSentis]  = useState({}); // { sentiId: true/false }
   const [voiceSentiId,  setVoiceSentiId]  = useState(null); // sentiId for open VoiceSheet
+  const [reportSentiId, setReportSentiId] = useState(null); // sentiId for open ReportSheet
+  const [reportBusy,    setReportBusy]    = useState(false);
 
   // Refs — avoid stale closures in callbacks
   const flatListRef       = useRef(null);
@@ -491,6 +496,34 @@ export default function SentariumScreen({
     setVoiceSentiId(sentiId);
   }, [onRequireAuth]);
 
+  // ── Flag (report) — opens ReportSheet ─────────
+  const handleFlag = useCallback((sentiId) => {
+    if (!sessionRef.current?.user?.id) { onRequireAuth?.(); return; }
+    setReportSentiId(sentiId);
+  }, [onRequireAuth]);
+
+  // Insert the report, then remove the senti from this user's feed
+  const submitReport = useCallback(async (reason) => {
+    const sentiId = reportSentiId;
+    const uid     = sessionRef.current?.user?.id;
+    if (!sentiId || !uid) { setReportSentiId(null); return; }
+
+    setReportBusy(true);
+    const { error } = await supabase.from('senti_reports')
+      .insert({ senti_id: sentiId, reporter_id: uid, reason });
+    setReportBusy(false);
+    setReportSentiId(null);
+
+    // 23505 = this user already reported it → treat as success (still hide)
+    if (error && error.code !== '23505') {
+      console.error('submitReport error', error);
+      Alert.alert('Could not report', 'Please try again.');
+      return;
+    }
+    setSentis((prev) => prev.filter((item) => item.id !== sentiId));
+    Alert.alert('Thanks for reporting', "We'll review this senti.");
+  }, [reportSentiId]);
+
   // ── Pin — in-flight guard, optimistic update, rollback on failure ──────────
   const handlePin = useCallback(async (sentiId) => {
     if (!sessionRef.current?.user?.id) { onRequireAuth?.(); return; }
@@ -545,23 +578,27 @@ export default function SentariumScreen({
 
   // ── Render ────────────────────────────────────
   if (loading) {
-    return <View style={st.loader}><ActivityIndicator color={C.accent} size="large" /></View>;
+    return <FeedSkeleton />;
   }
 
   if (sentis.length === 0) {
+    if (loadError) {
+      return (
+        <View style={st.empty}>
+          <Text style={st.emptyText}>Couldn't reach the Sentarium.{'\n'}Check your connection.</Text>
+          <TouchableOpacity style={st.retryBtn} onPress={fetchSentis} activeOpacity={0.7}>
+            <Text style={st.retryText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
     return (
-      <View style={st.empty}>
-        {loadError ? (
-          <>
-            <Text style={st.emptyText}>Couldn't reach the Sentarium.{'\n'}Check your connection.</Text>
-            <TouchableOpacity style={st.retryBtn} onPress={fetchSentis} activeOpacity={0.7}>
-              <Text style={st.retryText}>Retry</Text>
-            </TouchableOpacity>
-          </>
-        ) : (
-          <Text style={st.emptyText}>The Sentarium is quiet. Be the first to float.</Text>
-        )}
-      </View>
+      <EmptyState
+        icon="🌊"
+        headline="The Sentarium is quiet"
+        subtext="Be the first citizen to float a senti into the waves"
+        style={{ backgroundColor: C.bg }}
+      />
     );
   }
 
@@ -602,6 +639,7 @@ export default function SentariumScreen({
               onVoice={handleVoice}
               onPin={handlePin}
               onAsk={handleAsk}
+              onFlag={handleFlag}
               onAvatarPress={
                 // Guests may view profiles — no auth gate here (follow inside
                 // ProfileScreen is a no-op without a session)
@@ -630,6 +668,14 @@ export default function SentariumScreen({
             item.id !== voiceSentiId ? item : { ...item, voices: item.voices + 1 }
           ));
         }}
+      />
+
+      {/* Report sheet — opens on Flag button tap */}
+      <ReportSheet
+        visible={!!reportSentiId}
+        submitting={reportBusy}
+        onClose={() => setReportSentiId(null)}
+        onSubmit={submitReport}
       />
     </View>
   );

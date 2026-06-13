@@ -4,12 +4,12 @@
 // ─────────────────────────────────────────────
 
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, useColorScheme } from 'react-native';
-import { Image } from 'expo-image';
+import { View, Text, TouchableOpacity, StyleSheet, useColorScheme, Image } from 'react-native';
 import { getPeoliaColors } from '../constants/peoliaTheme';
 import { fs, ms, s, vs } from '../utils/peoliaScale';
 import WavePill from './WavePill';
 import VoteBar from './VoteBar';
+import VoteResultsPanel from './VoteResultsPanel';
 import ActionBar from './ActionBar';
 import ViewReactsSheet from './ViewReactsSheet';
 
@@ -22,6 +22,7 @@ export default function SentiCard({
   onVoice,
   onPin,
   onAsk,
+  onFlag,
   onAvatarPress,
   onViewLocked,
   liked  = false,   // ← true when user has liked this senti
@@ -36,13 +37,20 @@ export default function SentiCard({
   const [expanded,     setExpanded]    = useState(false);
   const [showSheet,    setShowSheet]   = useState(false);
   const [viewedReacts, setViewedReacts] = useState(userViewedReacts);
+  const [resultsOpen,  setResultsOpen] = useState(false);
 
   const hasVoted    = !!userVote;
-  const showReacts  = hasVoted || viewedReacts;
   const desc        = senti?.description ?? '';
   const truncated   = desc.length > CHAR_TRUNCATE && !expanded;
   const displayDesc = truncated ? desc.slice(0, CHAR_TRUNCATE) : desc;
   const hasImage    = !!senti?.imageUrl;
+
+  // Eye tap for a not-yet-voted user → the view-reacts gate (ViewReactsSheet).
+  // Once unlocked (or already viewed), it just toggles the results panel.
+  const handleViewReacts = () => {
+    if (viewedReacts) { setResultsOpen((prev) => !prev); return; }
+    setShowSheet(true);
+  };
 
   return (
     <View style={s_.card}>
@@ -53,8 +61,7 @@ export default function SentiCard({
           <Image
             source={{ uri: senti.imageUrl }}
             style={StyleSheet.absoluteFill}
-            contentFit="cover"
-            transition={150}
+            resizeMode="cover"
           />
           <View style={s_.imageOverlay} />
         </>
@@ -65,14 +72,9 @@ export default function SentiCard({
           FloatScreen preview puts zIndex:1 on every element over its image). */}
       <View style={s_.content}>
 
-      {/* Top row */}
+      {/* Top row — wave pill (left) + creator avatar (right) */}
       <View style={s_.topRow}>
-        {!hasVoted ? (
-          <TouchableOpacity style={s_.vrBtn} onPress={() => setShowSheet(true)} activeOpacity={0.7}>
-            <Text style={s_.vrIcon}>👁</Text>
-            <Text style={s_.vrText}>View reacts</Text>
-          </TouchableOpacity>
-        ) : <View />}
+        <WavePill wave={senti?.wave ?? 'Tech'} transparent={hasImage} />
 
         <TouchableOpacity
           style={s_.avatar}
@@ -81,15 +83,12 @@ export default function SentiCard({
           disabled={!onAvatarPress}
         >
           {senti?.creator?.avatarUrl ? (
-            <Image source={{ uri: senti.creator.avatarUrl }} style={s_.avatarImg} contentFit="cover" />
+            <Image source={{ uri: senti.creator.avatarUrl }} style={s_.avatarImg} resizeMode="cover" />
           ) : (
             <Text style={s_.avatarText}>{senti?.creator?.initials ?? '?'}</Text>
           )}
         </TouchableOpacity>
       </View>
-
-      {/* Wave pill */}
-      <WavePill wave={senti?.wave ?? 'Tech'} transparent={hasImage} style={s_.wavePill} />
 
       {/* Main row */}
       <View style={s_.mainRow}>
@@ -102,32 +101,41 @@ export default function SentiCard({
             {truncated && <Text style={[s_.seeMore, hasImage && s_.seeMoreOnImage]} onPress={() => setExpanded(true)}> see more</Text>}
             {expanded  && <Text style={[s_.seeMore, hasImage && s_.seeMoreOnImage]} onPress={() => setExpanded(false)}> see less</Text>}
           </Text>
+
+          {/* Swell / Rare badge — right after the description */}
+          {hasVoted && (
+            <View style={s_.swellBadge}>
+              <Text style={s_.swellText}>
+                {userVote === 'yes' && "You said Yes · You're in the swell 🌊"}
+                {userVote === 'hmm' && "You said Hmm · You're still thinking 🤔"}
+                {userVote === 'nah' && "You said Nah · You're one of The Rare ✨"}
+              </Text>
+            </View>
+          )}
         </View>
         <ActionBar
           likes={senti?.likes}   voices={senti?.voices}  pins={senti?.pins}
           liked={liked}
           pinned={pinned}
           onImage={hasImage}
+          hasVoted={hasVoted}
+          resultsOpen={resultsOpen}
+          onToggleResults={() => {
+            if (!hasVoted) { handleViewReacts(); return; }
+            setResultsOpen((prev) => !prev);
+          }}
           onLike={() => onLike?.(senti?.id)}   onVoice={() => onVoice?.(senti?.id)}
           onPin={() => onPin?.(senti?.id)}     onAsk={() => onAsk?.(senti?.id)}
+          onFlag={() => onFlag?.(senti?.id)}
         />
       </View>
 
-      {/* Swell badge */}
-      {hasVoted && (
-        <View style={s_.swellBadge}>
-          <Text style={s_.swellText}>
-            {userVote === 'yes' && "You said Yes · You're in the swell 🌊"}
-            {userVote === 'hmm' && "You said Hmm · You're still thinking 🤔"}
-            {userVote === 'nah' && "You said Nah · You're one of The Rare ✨"}
-          </Text>
-        </View>
-      )}
+      {/* Results panel (toggled by the eye) sits directly above the vote bar */}
+      <VoteResultsPanel visible={resultsOpen} results={senti?.results} />
 
       {/* Vote bar */}
       <VoteBar
         voted={hasVoted ? userVote : null}
-        results={showReacts ? senti?.results : null}
         onVote={(choice) => onVote?.(senti?.id, choice)}
       />
 
@@ -139,7 +147,8 @@ export default function SentiCard({
         onConfirm={() => {
           setShowSheet(false);
           setViewedReacts(true);
-          onViewLocked?.();   // ← bubble up so screen can persist to senti_view_locks
+          setResultsOpen(true);   // reveal the results panel right after unlocking
+          onViewLocked?.();       // ← bubble up so screen can persist to senti_view_locks
         }}
       />
     </View>
@@ -163,19 +172,6 @@ const makeStyles = (C) => StyleSheet.create({
     paddingTop: vs(10),
     minHeight: vs(40),
   },
-  vrBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: ms(5),
-    paddingVertical: vs(7),
-    paddingHorizontal: ms(14),
-    borderRadius: ms(20),
-    backgroundColor: C.surfaceAlt,
-    borderWidth: 0.5,
-    borderColor: C.borderStrong,
-  },
-  vrIcon:       { fontSize: fs(15) },
-  vrText:       { fontSize: fs(15), fontWeight: '600', color: C.textPrimary },
   avatar: {
     width: s(40),
     height: s(40),
@@ -185,13 +181,12 @@ const makeStyles = (C) => StyleSheet.create({
     justifyContent: 'center',
     overflow: 'hidden',
   },
-  avatarImg:    { width: s(40), height: s(40), borderRadius: s(20) },
+  avatarImg:    { width: '100%', height: '100%' },   // fill parent (matches working preset tiles)
   avatarText:   { fontSize: fs(17), fontWeight: '800', color: '#FFFFFF' },
   imageOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.48)',   // matches FloatScreen preview overlay
   },
-  wavePill:     { marginTop: vs(8), marginHorizontal: ms(16) },
   mainRow: {
     flex: 1,
     flexDirection: 'row',
@@ -227,9 +222,7 @@ const makeStyles = (C) => StyleSheet.create({
   },
   seeMoreOnImage: { color: '#C7D2FE' },
   swellBadge: {
-    marginTop: vs(4),
-    marginBottom: vs(2),
-    marginHorizontal: ms(16),
+    marginTop: vs(10),
     backgroundColor: C.badgeBg,
     borderRadius: ms(20),
     paddingVertical: vs(6),

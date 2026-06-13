@@ -14,29 +14,15 @@ import {
 } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { getPeoliaColors } from '../constants/peoliaTheme';
-import { fs, ms, vs, s } from '../utils/peoliaScale';
+import { fs, ms, vs, SCREEN_WIDTH } from '../utils/peoliaScale';
+import SentiTile from '../components/SentiTile';
+import EmptyState from '../components/EmptyState';
+import { GridSkeleton } from '../components/Skeletons';
 
-const WAVE_EMOJIS = {
-  'Tech': '💻', 'Love': '❤️', 'Money': '💰', 'Life': '🌱',
-  'Society': '🌍', 'Politics': '🏛️', 'Food': '🍕', 'Health': '💪',
-  'Sports': '⚽', 'Entertainment': '🎬', 'Science': '🔬',
-  'Education': '📚', 'Environment': '🌿',
-};
-
-const WAVE_GRADIENTS = {
-  'Tech': '#1E1B4B', 'Love': '#831843', 'Money': '#78350F',
-  'Life': '#134E4A', 'Society': '#1F2937', 'Politics': '#7F1D1D',
-  'Food': '#7C2D12', 'Health': '#064E3B', 'Sports': '#1E3A5F',
-  'Entertainment': '#3B0764', 'Science': '#0C4A6E',
-  'Education': '#1A2E05', 'Environment': '#064E3B',
-};
-
-const formatCount = (n) => {
-  if (!n) return '0';
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000)     return `${(n / 1_000).toFixed(1)}K`;
-  return String(n);
-};
+// 2-column grid metrics
+const GAP    = ms(10);
+const H_PAD  = ms(14);
+const TILE_W = Math.floor((SCREEN_WIDTH - H_PAD * 2 - GAP) / 2);
 
 export default function PinScreen({ session, onOpenSenti }) {
   const scheme = useColorScheme();
@@ -58,8 +44,7 @@ export default function PinScreen({ session, onOpenSenti }) {
         .select(`
           senti_id,
           sentis!inner(
-            id, question, wave, status, created_at,
-            senti_counts(total_reacts, yes_count, hmm_count, nah_count, likes, pins)
+            id, question, wave, image_url, status, created_at
           )
         `)
         .eq('user_id', uid)
@@ -73,15 +58,12 @@ export default function PinScreen({ session, onOpenSenti }) {
         (data ?? [])
           .filter((row) => row.sentis)
           .map((row) => {
-            const senti  = row.sentis;
-            const counts = senti.senti_counts?.[0] ?? senti.senti_counts ?? {};
+            const senti = row.sentis;
             return {
               id:       senti.id,
-              question:        senti.question,
-              wave:            senti.wave ?? 'Tech',
-              totalReacts:     counts.total_reacts ?? 0,
-              likes:           counts.likes ?? 0,
-              pins:            counts.pins  ?? 0,
+              question: senti.question,
+              wave:     senti.wave ?? 'Tech',
+              imageUrl: senti.image_url ?? null,
             };
           })
       );
@@ -117,57 +99,15 @@ export default function PinScreen({ session, onOpenSenti }) {
     }
   }, [uid, fetchPins]);
 
-  // ── Render card ───────────────────────────────
-  const renderItem = ({ item }) => {
-    const bgColor = WAVE_GRADIENTS[item.wave] ?? '#1E1B4B';
-    const emoji   = WAVE_EMOJIS[item.wave] ?? '🌊';
-
-    return (
-      <TouchableOpacity
-        style={st.card}
-        onPress={() => onOpenSenti?.(item.id)}
-        activeOpacity={0.85}
-      >
-        {/* Wave colour strip */}
-        <View style={[st.strip, { backgroundColor: bgColor }]}>
-          <View style={st.stripOverlay} />
-          <View style={[st.wavePill, { backgroundColor: 'rgba(255,255,255,0.18)' }]}>
-            <Text style={st.wavePillText}>{emoji} {item.wave?.toUpperCase()} WAVE</Text>
-          </View>
-        </View>
-
-        {/* Content row */}
-        <View style={st.cardBody}>
-          <View style={st.cardContent}>
-            <Text style={[st.question, { color: C.textPrimary }]} numberOfLines={2}>
-              {item.question}
-            </Text>
-            <View style={st.countRow}>
-              <Text style={[st.countText, { color: C.textMuted }]}>
-                🌊 {formatCount(item.totalReacts)} reacts
-              </Text>
-              <Text style={[st.countText, { color: C.textMuted }]}>
-                ♥ {formatCount(item.likes)}
-              </Text>
-              <Text style={[st.countText, { color: C.textMuted }]}>
-                🔖 {formatCount(item.pins)}
-              </Text>
-            </View>
-          </View>
-
-          {/* Unpin button — direct tap, optimistic remove (restored on DB failure) */}
-          <TouchableOpacity
-            style={st.unpinBtn}
-            onPress={() => handleUnpin(item.id)}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            activeOpacity={0.7}
-          >
-            <Text style={[st.unpinIcon, { color: C.accent }]}>🔖</Text>
-          </TouchableOpacity>
-        </View>
-      </TouchableOpacity>
-    );
-  };
+  // ── Render tile (9:16, image or wave colour) — tap opens, 📌 unpins ──
+  const renderItem = ({ item }) => (
+    <SentiTile
+      senti={item}
+      width={TILE_W}
+      onPress={() => onOpenSenti?.(item.id)}
+      onUnpin={() => handleUnpin(item.id)}
+    />
+  );
 
   // ── Screen ────────────────────────────────────
   return (
@@ -186,24 +126,23 @@ export default function PinScreen({ session, onOpenSenti }) {
       </View>
 
       {loading ? (
-        <View style={st.loader}>
-          <ActivityIndicator color={C.accent} size="large" />
-        </View>
+        <GridSkeleton columns={2} count={6} paddingHorizontal={H_PAD} gap={GAP} />
       ) : pins.length === 0 ? (
-        <View style={st.empty}>
-          <Text style={st.emptyIcon}>🔖</Text>
-          <Text style={[st.emptyText, { color: C.textSecondary }]}>
-            Nothing pinned yet.{'\n'}Pin sentis you want to revisit.
-          </Text>
-        </View>
+        <EmptyState
+          icon="📌"
+          headline="Nothing pinned yet"
+          subtext="Tap the pin icon on any senti to save it here"
+        />
       ) : (
         <FlatList
           data={pins}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
+          numColumns={2}
+          columnWrapperStyle={{ gap: GAP }}
           contentContainerStyle={st.list}
           showsVerticalScrollIndicator={false}
-          ItemSeparatorComponent={() => <View style={{ height: vs(10) }} />}
+          ItemSeparatorComponent={() => <View style={{ height: GAP }} />}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={C.accent} />
           }

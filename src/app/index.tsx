@@ -183,8 +183,10 @@ export default function Index() {
         {renderScreen()}
       </View>
 
-      {/* Floating pill tab bar — hidden on auth screens */}
-      {!hiddenTabs.includes(activeTab) && !userProfileId && (
+      {/* Floating pill tab bar — hidden only on auth screens. Kept visible on the
+          user-profile overlay so the bottom nav doesn't vanish and its bottom inset
+          stops content running under the Android system nav buttons. */}
+      {!hiddenTabs.includes(activeTab) && (
         <View style={{ backgroundColor: bg, paddingBottom: Math.max(insets.bottom, 0) }}>
           <TabBar activeTab={visibleTab} onTabPress={handleTabPress} />
         </View>

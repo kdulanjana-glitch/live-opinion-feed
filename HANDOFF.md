@@ -59,6 +59,7 @@ src/
     VoiceSheet.jsx       — Modal bottom sheet for voices (comments)
     EditProfileSheet.jsx — Modal: edit username / display_name / bio
     WaveImageSheet.jsx   — Modal: FloatScreen image picker (presets grid + Photos)
+    ReportSheet.jsx      — Modal: reason picker for flagging/reporting a senti
     TabBar.jsx, WavePill.jsx, ErrorBoundary.jsx
   constants/peoliaTheme.js   — colors (getPeoliaColors), typography, spacing — DO NOT BREAK
   utils/peoliaScale.js       — fs/ms/vs/s scaling — DO NOT BREAK
@@ -80,7 +81,8 @@ Removed deps: `@expo/ui`, `expo-glass-effect`, `expo-symbols`, `expo-web-browser
 
 **Tables:** sentis, senti_reactions, senti_counts (trigger-maintained — never write),
 senti_likes, senti_pins, senti_view_locks, voices, follows (follower_id, following_id),
-users (id, username, display_name, bio), user_stats, user_wave_stats.
+users (id, username, display_name, bio, avatar_url), user_stats, user_wave_stats,
+senti_reports (id, senti_id, reporter_id, reason, status, created_at — one per user per senti).
 
 **Views:** `sentarium_feed` (feed queries), `trending_sentis` (velocity_2h desc).
 
@@ -101,6 +103,14 @@ users (id, username, display_name, bio), user_stats, user_wave_stats.
    upload restricted to own `{user_id}/` folder. Confirmed: a real image float uploaded
    and is publicly readable. The `presets/` subfolder (for the preset picker) is listable
    by anon and managed via the dashboard.
+
+**⚠️ SQL PENDING — run `supabase/sprint3-reports-and-avatars.sql` in the dashboard
+before testing the Flag/report feature:**
+- Creates `senti_reports` (id, senti_id→sentis, reporter_id→users, reason CHECK 7 values,
+  status default 'pending', UNIQUE(senti_id, reporter_id)) + RLS: authenticated insert/select
+  own only; no update/delete from client. Until applied, tapping Flag → "Could not report".
+- Profile-picture upload needs NO SQL — avatars go to `senti-images/{uid}/avatar-*.jpg`
+  (existing own-folder upload policy + public read already cover it) → `users.avatar_url`.
 
 **Rules:** votes immutable (`ignoreDuplicates: true` upsert); one like/pin per user per senti
 (toggle insert/delete); always filter sentis by `status = 'approved'`; cursor pagination only.
@@ -183,6 +193,29 @@ All in `src/app/index.tsx` via `activeTab` state. Tab keys:
 `presets/` folder → upload jpg/png/webp. They appear in the Float image sheet automatically
 (anon list confirmed working; public-read policy covers it). No SQL, no rebuild.
 
+## Changelog — 2026-06-13 (profile pic + report)
+
+| Change | Where |
+|---|---|
+| Profile picture: square-crop picker in Edit Profile → upload to `senti-images/{uid}/avatar-*` → `users.avatar_url`; circle preview + "Change photo" | EditProfileSheet.jsx, ProfileScreen onSaved |
+| Flag/report a senti: 🚩 "Flag" added below Ask in the action column | ActionBar.jsx, SentiCard `onFlag` |
+| ReportSheet: 7-reason picker → insert into `senti_reports` → senti removed from feed + "Thanks" (23505 dup treated as success) | ReportSheet.jsx, SentariumScreen `handleFlag`/`submitReport` |
+| `senti_reports` table + RLS SQL (**PENDING — run in dashboard**) | supabase/sprint3-reports-and-avatars.sql |
+| **Fix: NO remote images rendered (senti bg, presets, avatars)** — expo-image loads nothing in this Expo Go SDK 56 build; switched all `<Image>` to react-native (`resizeMode` not `contentFit`). Do not reintroduce expo-image without a dev build. | SentiCard, ProfileScreen, EditProfileSheet, FloatScreen, WaveImageSheet |
+| **Fix: app-uploaded images were corrupt 14-byte files** — `fetch(localUri).arrayBuffer()` doesn't work in RN; switched to picker `base64:true` + `decode()` (base64-arraybuffer). Old avatars/senti images uploaded before this are broken — re-upload to fix. | FloatScreen `uploadImage`, EditProfileSheet `uploadAvatar` |
+| Tap profile picture → full-screen viewer (own + other profiles) | ProfileScreen `viewerOpen` Modal |
+| Avatars switched to fill pattern (image fills fixed-size clipped parent, matches preset tiles) | SentiCard, ProfileScreen, EditProfileSheet |
+| User-profile overlay no longer runs under the system nav / loses the tab bar — TabBar now stays visible on the overlay (its bottom inset reserves the nav space) | index.tsx |
+| FloatScreen text + icons 50% larger via aliased `fs` (`fs = fsBase(n*1.5)`) | FloatScreen |
+| New `SentiTile` — 9:16 grid tile showing senti image_url (full-bleed) or wave colour + question | SentiTile.jsx |
+| Profile "Floated sentis" and Pin grids → 2-per-row 9:16 SentiTiles (both fetch image_url; Pin tile has 📌 unpin) | ProfileScreen, PinScreen |
+| Vote interaction redesign: VoteBar shows only emoji (chosen→Chosen colour, locks after vote, no %); new VoteResultsPanel (animated % towers) toggled by an eye icon in ActionBar; WavePill moved into topRow; swell badge moved under description | VoteBar, VoteResultsPanel.jsx (new), ActionBar, SentiCard |
+| Light expo-haptics tap on Yes/Hmm/Nah vote | VoteBar |
+| Branded empty states (EmptyState.jsx) + static skeleton loaders (Skeletons.jsx: FeedSkeleton/TrendingSkeleton/GridSkeleton, C.surfaceAlt shapes) replacing spinners/plain text | EmptyState.jsx, Skeletons.jsx (new); Sentarium, Trending, Pin, Profile |
+| Float page polish: senti box ~3 lines / desc ~4 lines; wave pills −15%; media btns −10%; "Wave image"→"Image"; added GIF picker → media row is Image \| GIF \| Track (GIF = no-crop gallery pick, uploads image/gif) | FloatScreen |
+| ActionBar shifted to top (`justifyContent:flex-start`) + compacted (`gap vs(18)→vs(10)`) — stable when results towers appear | ActionBar |
+| GIF uploads: bucket allowed_mime_types += image/gif (**run allow-gif-uploads.sql**). RN Image animates GIFs in Expo Go. | supabase/allow-gif-uploads.sql |
+
 ---
 
 ## Known Issues
@@ -204,12 +237,13 @@ All in `src/app/index.tsx` via `activeTab` state. Tab keys:
 
 ## Future Development (priority order)
 
-1. ~~**Sprint 2 — image picker**~~ DONE 2026-06-12 (senti images end-to-end). Remaining:
-   **avatar upload** — picker in EditProfileSheet → storage → `users.avatar_url`
-   (rendering already done in SentiCard + ProfileScreen).
+1. ~~**Sprint 2 — image picker**~~ DONE 2026-06-12. ~~**Avatar upload**~~ DONE 2026-06-13
+   (EditProfileSheet square picker → `users.avatar_url`).
 2. **Voices polish** — realtime subscription while sheet open, pagination past 50,
    delete-own-voice.
-3. **Report / block** — REQUIRED by Google Play for UGC apps before launch.
+3. ~~**Report**~~ DONE 2026-06-13 (Flag → senti_reports, hides senti). Remaining for full
+   Play UGC compliance: **block user** (user_blocks table + filter blocked users' sentis
+   from feed/trending/profile) and a dashboard/moderation path on senti_reports.
 4. **OnboardingScreen** — splash, walkthrough, wave picker.
 5. **NotificationsScreen** — nudges, voices, reacts (expo-notifications + Edge Function).
 6. **Search** — Postgres full-text on sentis.question.

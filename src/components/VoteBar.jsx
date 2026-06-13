@@ -1,12 +1,17 @@
 // ─────────────────────────────────────────────
 // Peolia — VoteBar (Scaled for real devices)
 // src/components/VoteBar.jsx
+//
+// Only ever shows the 3 emoji buttons. Percentages/counts now live in
+// VoteResultsPanel. After voting, the chosen button takes its "Chosen" colour
+// and the bar becomes non-pressable.
 // ─────────────────────────────────────────────
 
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, useColorScheme } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import { getPeoliaColors } from '../constants/peoliaTheme';
-import { fs, ms, s, vs } from '../utils/peoliaScale';
+import { fs, ms, vs } from '../utils/peoliaScale';
 
 const VOTES = [
   { key: 'yes', emoji: '👍' },
@@ -14,55 +19,33 @@ const VOTES = [
   { key: 'nah', emoji: '👎' },
 ];
 
-export default function VoteBar({ onVote, voted = null, results = null }) {
+export default function VoteBar({ onVote, voted = null }) {
   const scheme = useColorScheme();
   const C = getPeoliaColors(scheme);
   const st = makeStyles(C);
 
-  const hasVoted      = !!voted;
-  const hasResults    = results !== null && results !== undefined;
-  // Show result view if user voted OR if results are passed (view-only mode)
-  const showResultsView = hasVoted || hasResults;
-  // View-only: results visible but user hasn't voted yet
-  const viewOnly      = hasResults && !hasVoted;
+  const hasVoted = !!voted;
 
   return (
     <View style={st.bar}>
       {VOTES.map(({ key, emoji }) => {
         const isChosen  = voted === key;
-        // Fade others only when user has voted — not in view-only mode
-        const isFaded   = hasVoted && !isChosen;
-        const result    = results?.[key];
         const chosenBg  = key === 'yes' ? C.yesChosen : key === 'hmm' ? C.hmmChosen : C.nahChosen;
         const defaultBg = key === 'yes' ? C.yesBg     : key === 'hmm' ? C.hmmBg     : C.nahBg;
-        const textColor = key === 'yes' ? C.yesText   : key === 'hmm' ? C.hmmText   : C.nahText;
 
         return (
           <TouchableOpacity
             key={key}
-            style={[
-              st.btn,
-              { backgroundColor: isChosen ? chosenBg : defaultBg },
-              isFaded && st.faded,
-            ]}
-            // Disable once results are visible (voted or view-only)
-            onPress={() => !showResultsView && onVote?.(key)}
-            activeOpacity={showResultsView ? 1 : 0.7}
+            style={[st.btn, { backgroundColor: isChosen ? chosenBg : defaultBg }]}
+            onPress={() => {
+              // Light tactile tap on vote (best-effort — never block the vote)
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+              onVote?.(key);
+            }}
+            disabled={hasVoted}                       // not pressable after voting
+            activeOpacity={hasVoted ? 1 : 0.7}
           >
-            {showResultsView ? (
-              // Results view — show % and count
-              <>
-                <Text style={[st.pct, isChosen ? st.chosenText : { color: textColor }]}>
-                  {result?.pct ?? 0}%
-                </Text>
-                <Text style={[st.cnt, isChosen ? st.chosenText : { color: textColor }]}>
-                  {result?.count ?? '0'}
-                </Text>
-              </>
-            ) : (
-              // Pre-vote — show emoji only
-              <Text style={st.emoji}>{emoji}</Text>
-            )}
+            <Text style={st.emoji}>{emoji}</Text>
           </TouchableOpacity>
         );
       })}
@@ -85,11 +68,6 @@ const makeStyles = (C) => StyleSheet.create({
     paddingVertical: vs(12),
     paddingHorizontal: ms(4),
     borderRadius: ms(14),
-    gap: vs(3),
   },
-  faded:      { opacity: 0.32 },
-  emoji:      { fontSize: fs(30), lineHeight: fs(36) },
-  pct:        { fontSize: fs(17), fontWeight: '800', lineHeight: fs(22) },
-  cnt:        { fontSize: fs(14), fontWeight: '600' },
-  chosenText: { color: '#FFFFFF' },
+  emoji: { fontSize: fs(30), lineHeight: fs(36) },
 });

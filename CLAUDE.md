@@ -36,10 +36,17 @@ DATABASE RULES:
 - Trigger functions on interaction tables are SECURITY DEFINER (applied 2026-06-12)
 - users has display_name + bio + avatar_url columns; users_update_own RLS policy allows own-row updates
 - users.avatar_initials is STALE ('??') — never read it; derive the letter from username
-- senti images: senti-images storage bucket (public read, auth upload to own {user_id}/ folder only);
-  upload BEFORE sentis insert, store the public URL in sentis.image_url
+- senti images: senti-images storage bucket (public read, auth upload to own {user_id}/ folder only;
+  allowed mime jpeg/png/webp/gif); upload BEFORE sentis insert, store the public URL in sentis.image_url
+- avatars reuse the senti-images bucket at {user_id}/avatar-*.jpg → store public URL in users.avatar_url
+- senti_reports table: one row per (senti_id, reporter_id); insert reason ∈ (spam, harassment, hate,
+  misinformation, sexual, violence, other); RLS = insert/select own only; never update/delete from client
 
 CODE RULES:
+- Images: use React Native's <Image> (resizeMode), NOT expo-image. expo-image renders
+  nothing (no remote images load) in this Expo Go SDK 56 build — verified on device 2026-06-13
+- Image upload to Storage: picker base64:true + decode() from base64-arraybuffer. NEVER
+  fetch(localUri).arrayBuffer() in RN — it writes a corrupt ~14-byte file
 - No hover states — Android only
 - Always use peoliaScale functions for sizing
 - Always use getPeoliaColors() for colors
@@ -68,4 +75,4 @@ TABLES:
 public.sentis, public.senti_reactions, public.senti_counts,
 public.senti_likes, public.senti_pins, public.senti_view_locks,
 public.voices, public.follows, public.user_stats,
-public.user_wave_stats, public.users
+public.user_wave_stats, public.users, public.senti_reports

@@ -18,18 +18,20 @@ import {
   View, Text, ScrollView, TouchableOpacity,
   StyleSheet, useColorScheme,
   ActivityIndicator, Dimensions, StatusBar, Platform,
-  RefreshControl,
+  RefreshControl, Image, Modal,
 } from 'react-native';
 import Svg, { Polygon, Circle, Line, Text as SvgText } from 'react-native-svg';
-import { Image } from 'expo-image';
 import { supabase } from '../lib/supabase';
+import SentiTile from '../components/SentiTile';
+import EmptyState from '../components/EmptyState';
+import { GridSkeleton } from '../components/Skeletons';
 import { getPeoliaColors } from '../constants/peoliaTheme';
 import { fs, ms, vs, s, SCREEN_WIDTH } from '../utils/peoliaScale';
 
-const GRID_GAP  = ms(4);
-const GRID_COLS = 3;
+const GRID_GAP  = ms(8);
+const GRID_COLS = 2;
 // ms(16)*2 matches gridSection paddingHorizontal on both sides
-const TILE_SIZE = Math.floor((SCREEN_WIDTH - ms(16) * 2 - GRID_GAP * (GRID_COLS - 1)) / GRID_COLS);
+const TILE_W = Math.floor((SCREEN_WIDTH - ms(16) * 2 - GRID_GAP * (GRID_COLS - 1)) / GRID_COLS);
 
 const WAVE_EMOJIS = {
   'Tech': '💻', 'Love': '❤️', 'Money': '💰', 'Life': '🌱',
@@ -66,6 +68,7 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti }) {
   const [following,  setFollowing]  = useState(false);
   const [myId,       setMyId]       = useState(null);
   const [editVisible, setEditVisible] = useState(false);
+  const [viewerOpen,  setViewerOpen]  = useState(false);   // full-screen avatar viewer
 
   const fetchProfile = useCallback(async () => {
     setLoading(true);
@@ -106,7 +109,7 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti }) {
         // Floated sentis grid
         supabase
           .from('sentis')
-          .select('id, question, wave')
+          .select('id, question, wave, image_url')
           .eq('user_id', targetId)
           .eq('status', 'approved')
           .order('created_at', { ascending: false }),
@@ -153,6 +156,7 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti }) {
         id:       s.id,
         question: s.question,
         wave:     s.wave ?? 'Tech',
+        imageUrl: s.image_url ?? null,
       })));
 
     } catch (err) {
@@ -199,7 +203,11 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti }) {
   }, [myId, userId, following]);
 
   if (loading) {
-    return <View style={st.loader}><ActivityIndicator color={C.accent} /></View>;
+    return (
+      <View style={st.screen}>
+        <GridSkeleton columns={2} count={4} />
+      </View>
+    );
   }
 
   const stats = profile?.stats ?? {};
@@ -233,15 +241,20 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti }) {
 
         {/* Avatar + name + action */}
         <View style={st.avatarRow}>
-          <View style={[st.avatar, { backgroundColor: isOwnProfile ? C.accent : '#059669' }]}>
+          <TouchableOpacity
+            style={[st.avatar, { backgroundColor: isOwnProfile ? C.accent : '#059669' }]}
+            activeOpacity={profile?.avatarUrl ? 0.85 : 1}
+            disabled={!profile?.avatarUrl}
+            onPress={() => setViewerOpen(true)}
+          >
             {profile?.avatarUrl ? (
-              <Image source={{ uri: profile.avatarUrl }} style={st.avatarImg} contentFit="cover" />
+              <Image source={{ uri: profile.avatarUrl }} style={st.avatarImg} resizeMode="cover" />
             ) : (
               <Text style={st.avatarText}>
                 {(profile?.username || '?')[0].toUpperCase()}
               </Text>
             )}
-          </View>
+          </TouchableOpacity>
           <View style={st.nameBlock}>
             <Text style={st.displayName}>{profile?.displayName || profile?.username || '—'}</Text>
             <Text style={st.username}>@{profile?.username ?? '—'}</Text>
@@ -320,22 +333,22 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti }) {
             <Text style={st.gridCount}>{sentis.length} total</Text>
           </View>
           {sentis.length === 0 ? (
-            <Text style={[st.gridEmpty, { color: C.textMuted }]}>No sentis floated yet.</Text>
+            <EmptyState
+              icon="🌊"
+              headline="No sentis floated yet"
+              subtext="Your floated sentis will appear here"
+              style={st.gridEmptyState}
+            />
           ) : (
             <View style={st.grid}>
-              {sentis.map((item) => {
-                const bg = WAVE_GRADIENTS[item.wave] ?? '#1E1B4B';
-                return (
-                  <TouchableOpacity
-                    key={item.id}
-                    style={[st.tile, { backgroundColor: bg, width: TILE_SIZE, height: TILE_SIZE }]}
-                    onPress={() => onOpenSenti?.(item.id)}   // passes UUID to navigate in Sentarium
-                    activeOpacity={0.8}
-                  >
-                    <Text style={st.tileText} numberOfLines={3}>{item.question}</Text>
-                  </TouchableOpacity>
-                );
-              })}
+              {sentis.map((item) => (
+                <SentiTile
+                  key={item.id}
+                  senti={item}
+                  width={TILE_W}
+                  onPress={() => onOpenSenti?.(item.id)}   // passes UUID to navigate in Sentarium
+                />
+              ))}
             </View>
           )}
         </View>
@@ -350,14 +363,32 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti }) {
           username:    profile?.username ?? '',
           displayName: profile?.displayName ?? '',
           bio:         profile?.bio ?? '',
+          avatarUrl:   profile?.avatarUrl ?? null,
         }}
         onSaved={(u) => setProfile((prev) => prev ? {
           ...prev,
           username:    u.username,
           displayName: u.display_name ?? '',
           bio:         u.bio ?? '',
+          // avatar_url is only present in the update when a new photo was uploaded
+          avatarUrl:   u.avatar_url !== undefined ? u.avatar_url : prev.avatarUrl,
         } : prev)}
       />
+
+      {/* Full-screen avatar viewer — tap the profile picture to open */}
+      <Modal
+        visible={viewerOpen}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => setViewerOpen(false)}
+      >
+        <TouchableOpacity style={st.viewerBackdrop} activeOpacity={1} onPress={() => setViewerOpen(false)}>
+          {profile?.avatarUrl && (
+            <Image source={{ uri: profile.avatarUrl }} style={st.viewerImg} resizeMode="contain" />
+          )}
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -438,7 +469,9 @@ const makeStyles = (C) => StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', flexShrink: 0,
     overflow: 'hidden',
   },
-  avatarImg: { width: s(50), height: s(50), borderRadius: s(25) },
+  avatarImg: { width: '100%', height: '100%' },   // fill parent circle
+  viewerBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.93)', alignItems: 'center', justifyContent: 'center' },
+  viewerImg:      { width: '92%', height: '72%' },
   avatarText:  { fontSize: fs(22), fontWeight: '800', color: '#FFFFFF' },   // was fs(20) ×1.10
   nameBlock:   { flex: 1 },
   displayName: { fontSize: fs(18), fontWeight: '800', color: C.textPrimary }, // was fs(16) ×1.10
@@ -479,6 +512,9 @@ const makeStyles = (C) => StyleSheet.create({
   gridTitle:   { fontSize: fs(14), fontWeight: '700', color: C.textPrimary },   // was fs(13) ×1.10
   gridCount:   { fontSize: fs(13), fontWeight: '600', color: C.textMuted },     // was fs(12) ×1.10
   gridEmpty:   { fontSize: fs(15), textAlign: 'center', paddingVertical: vs(24) }, // was fs(14) ×1.10
+  // EmptyState defaults to flex:1; inside this ScrollView section we need a
+  // content-sized block instead, so override flex and give it vertical room.
+  gridEmptyState: { flex: 0, paddingVertical: vs(32) },
   grid:        { flexDirection: 'row', flexWrap: 'wrap', gap: GRID_GAP },
   // Tile: square, text centered and filling the box
   tile:        { borderRadius: ms(10), overflow: 'hidden', justifyContent: 'center', alignItems: 'center', padding: ms(6) },

@@ -15,9 +15,8 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView, ActivityIndicator,
-  StyleSheet, Modal, useColorScheme,
+  StyleSheet, Modal, useColorScheme, Image,
 } from 'react-native';
-import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../lib/supabase';
 import { getPeoliaColors } from '../constants/peoliaTheme';
@@ -116,7 +115,7 @@ export default function WaveImageSheet({ visible, onClose, onSelectPreset, onPic
                     activeOpacity={0.8}
                     onPress={() => onSelectPreset(url)}
                   >
-                    <Image source={{ uri: url }} style={st.tileImg} contentFit="cover" transition={120} />
+                    <Image source={{ uri: url }} style={st.tileImg} resizeMode="cover" />
                   </TouchableOpacity>
                 ))}
               </ScrollView>
