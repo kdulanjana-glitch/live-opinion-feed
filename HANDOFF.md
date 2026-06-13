@@ -58,6 +58,7 @@ src/
     ViewReactsSheet.jsx  — MODAL (blocks all background taps) — confirm before viewing reacts
     VoiceSheet.jsx       — Modal bottom sheet for voices (comments)
     EditProfileSheet.jsx — Modal: edit username / display_name / bio
+    WaveImageSheet.jsx   — Modal: FloatScreen image picker (presets grid + Photos)
     TabBar.jsx, WavePill.jsx, ErrorBoundary.jsx
   constants/peoliaTheme.js   — colors (getPeoliaColors), typography, spacing — DO NOT BREAK
   utils/peoliaScale.js       — fs/ms/vs/s scaling — DO NOT BREAK
@@ -65,6 +66,7 @@ src/
 supabase/
   migration.sql          — STALE (old opinions/votes schema). Real schema lives in dashboard only.
   seed-sentis.sql        — seed data for sentis
+  sprint2-feed-avatar-and-images.sql — view v2 + senti-images bucket (see SQL PENDING below)
 ```
 
 Deleted 2026-06-12 (do not resurrect): `App.js`, `FeedScreen`, `CreateScreen`, `SavedScreen`,
@@ -90,8 +92,20 @@ users (id, username, display_name, bio), user_stats, user_wave_stats.
 3. `users.display_name` + `users.bio` columns added + `users_update_own` RLS policy
    (UPDATE USING/WITH CHECK auth.uid() = id).
 
+**SQL applied + verified (2026-06-12, `supabase/sprint2-feed-avatar-and-images.sql`):**
+1. `sentarium_feed` v2 — old view returned stale `'??'` initials and had NO `user_id`,
+   so the creator avatar showed nothing useful and could never navigate. v2 computes
+   initials from username and appends `user_id` + `avatar_url`. Confirmed: feed now
+   returns `avatar_initials: "K"`, `user_id`, `avatar_url`.
+2. `senti-images` storage bucket — public read, 5 MB cap, jpeg/png/webp; authenticated
+   upload restricted to own `{user_id}/` folder. Confirmed: a real image float uploaded
+   and is publicly readable. The `presets/` subfolder (for the preset picker) is listable
+   by anon and managed via the dashboard.
+
 **Rules:** votes immutable (`ignoreDuplicates: true` upsert); one like/pin per user per senti
 (toggle insert/delete); always filter sentis by `status = 'approved'`; cursor pagination only.
+`users.avatar_initials` is a STALE stored column ('??') — never read it; derive the letter
+from `username` client-side.
 
 ---
 
@@ -101,7 +115,8 @@ All in `src/app/index.tsx` via `activeTab` state. Tab keys:
 `trending | float | sentarium | pin | profile` + hidden `auth | reset-password`.
 
 - Guest mode: sentarium + trending browsable; float/pin/profile and all interactions
-  route to auth via `onRequireAuth()`.
+  route to auth via `onRequireAuth()`. Exception: tapping a creator avatar opens their
+  profile for guests too (Follow inside is a session-gated no-op).
 - **Always use `goToTab(tab)`, never `setActiveTab` directly** (keeps `activeTabRef` in
   sync for the `onAuthStateChange` closure).
 - Cross-screen: `onNavigateToUser(userId)` → ProfileScreen overlay;
@@ -147,7 +162,26 @@ All in `src/app/index.tsx` via `activeTab` state. Tab keys:
 | Dead starter/legacy code deleted (~29 modules, 4 deps) | repo-wide |
 | `.env` added to .gitignore | .gitignore |
 
-**Note:** all of this is uncommitted on `main` — commit after device verification.
+**Note:** committed to `main` as `5085294`.
+
+## Changelog — 2026-06-12 second session (Sprint 2)
+
+| Change | Where |
+|---|---|
+| Feed creator avatar fixed: letter derived from `username` (view's stored initials were stale '??') | SentariumScreen `normalise()` |
+| Avatar tap → creator's profile (view v2 adds `user_id`); guests allowed, no auth gate | SentariumScreen, index.tsx overlay |
+| Avatar restyled to ProfileScreen pattern: solid accent circle + white letter; renders `avatar_url` photo when set | SentiCard |
+| Full-bleed senti image: absolute-fill expo-image + 0.48 black overlay, white text, transparent WavePill, light ActionBar | SentiCard, ActionBar `onImage` |
+| Image picker: 9:16 crop → upload to `senti-images/{uid}/` → `image_url` on insert; thumbnail + remove in media row; real image in preview | FloatScreen |
+| ProfileScreen renders `avatar_url` photo (letter = fallback) | ProfileScreen |
+| `expo-image-picker` installed + config plugin | package.json, app.json |
+| sentarium_feed v2 + senti-images bucket SQL | supabase/sprint2-feed-avatar-and-images.sql (**applied + verified** — feed returns user_id/avatar_url, initials = first letter, image upload confirmed) |
+| **Fix: image cards showed only the wave** — content now wrapped in a `zIndex:1` layer above the absolute image/overlay (Android ignores paint order; same reason FloatScreen preview uses zIndex:1) | SentiCard `content` |
+| Preset image picker: WaveImageSheet lists `senti-images/presets/` at runtime; tap a preset → URL used directly (no upload); Photos option still launches gallery | WaveImageSheet.jsx + FloatScreen |
+
+**Presets — how to add images:** Supabase dashboard → Storage → `senti-images` → create/open
+`presets/` folder → upload jpg/png/webp. They appear in the Float image sheet automatically
+(anon list confirmed working; public-read policy covers it). No SQL, no rebuild.
 
 ---
 
@@ -170,8 +204,9 @@ All in `src/app/index.tsx` via `activeTab` state. Tab keys:
 
 ## Future Development (priority order)
 
-1. **Sprint 2 — image picker** for FloatScreen (`sentis.image_url` + SentiCard `imageUrl`
-   already exist; needs Supabase Storage bucket + expo-image rendering) and avatar upload.
+1. ~~**Sprint 2 — image picker**~~ DONE 2026-06-12 (senti images end-to-end). Remaining:
+   **avatar upload** — picker in EditProfileSheet → storage → `users.avatar_url`
+   (rendering already done in SentiCard + ProfileScreen).
 2. **Voices polish** — realtime subscription while sheet open, pagination past 50,
    delete-own-voice.
 3. **Report / block** — REQUIRED by Google Play for UGC apps before launch.

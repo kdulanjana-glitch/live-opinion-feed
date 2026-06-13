@@ -21,6 +21,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import Svg, { Polygon, Circle, Line, Text as SvgText } from 'react-native-svg';
+import { Image } from 'expo-image';
 import { supabase } from '../lib/supabase';
 import { getPeoliaColors } from '../constants/peoliaTheme';
 import { fs, ms, vs, s, SCREEN_WIDTH } from '../utils/peoliaScale';
@@ -85,7 +86,7 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti }) {
       // Run all queries in parallel
       const [userRes, sentisRes, dnaRes, floatedRes, userStatsRes, followRes] = await Promise.all([
         // Basic user info
-        supabase.from('users').select('id, username, display_name, bio').eq('id', targetId).single(),
+        supabase.from('users').select('id, username, display_name, bio, avatar_url').eq('id', targetId).single(),
 
         // Sentis count — derived directly from sentis table (always accurate)
         supabase
@@ -138,6 +139,7 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti }) {
         username:    userRes.data?.username ?? 'unknown',
         displayName: userRes.data?.display_name ?? '',
         bio:         userRes.data?.bio ?? '',
+        avatarUrl:   userRes.data?.avatar_url ?? null,
         stats: {
           sentis_count:    sentisRes.count    ?? 0,  // always live from sentis table
           reacts_count:    reactsCount,
@@ -232,9 +234,13 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti }) {
         {/* Avatar + name + action */}
         <View style={st.avatarRow}>
           <View style={[st.avatar, { backgroundColor: isOwnProfile ? C.accent : '#059669' }]}>
-            <Text style={st.avatarText}>
-              {(profile?.username || '?')[0].toUpperCase()}
-            </Text>
+            {profile?.avatarUrl ? (
+              <Image source={{ uri: profile.avatarUrl }} style={st.avatarImg} contentFit="cover" />
+            ) : (
+              <Text style={st.avatarText}>
+                {(profile?.username || '?')[0].toUpperCase()}
+              </Text>
+            )}
           </View>
           <View style={st.nameBlock}>
             <Text style={st.displayName}>{profile?.displayName || profile?.username || '—'}</Text>
@@ -430,7 +436,9 @@ const makeStyles = (C) => StyleSheet.create({
   avatar: {
     width: s(50), height: s(50), borderRadius: s(25),
     alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+    overflow: 'hidden',
   },
+  avatarImg: { width: s(50), height: s(50), borderRadius: s(25) },
   avatarText:  { fontSize: fs(22), fontWeight: '800', color: '#FFFFFF' },   // was fs(20) ×1.10
   nameBlock:   { flex: 1 },
   displayName: { fontSize: fs(18), fontWeight: '800', color: C.textPrimary }, // was fs(16) ×1.10

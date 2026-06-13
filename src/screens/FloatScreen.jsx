@@ -7,7 +7,8 @@
 //   description — optional context
 //   wave        — capitalized category string ('Tech', 'Love', etc.)
 //   user_id     — auth.uid()
-//   status      — 'approved'
+//   image_url   — public URL in senti-images bucket (optional)
+//   (status is never sent — DB column default owns it)
 // ─────────────────────────────────────────────
 
 import React, { useState } from 'react';
@@ -15,7 +16,10 @@ import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
   StyleSheet, useColorScheme, Alert, StatusBar, Platform,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { Image } from 'expo-image';
 import { supabase } from '../lib/supabase';
+import WaveImageSheet from '../components/WaveImageSheet';
 import { getPeoliaColors } from '../constants/peoliaTheme';
 import { fs, ms, vs } from '../utils/peoliaScale';
 
@@ -43,10 +47,41 @@ export default function FloatScreen({ onBack, onFloated }) {
   const [question,    setQuestion]    = useState('');
   const [description, setDescription] = useState('');
   const [wave,        setWave]        = useState('Tech');
-  const [preview,     setPreview]     = useState(false);
-  const [floating,    setFloating]    = useState(false);
+  // image holds either a picked gallery asset { uri, mimeType } or a preset
+  // { uri, isPreset: true }. Presets are already-hosted URLs — no upload needed.
+  const [image,        setImage]        = useState(null);
+  const [imageSheet,   setImageSheet]   = useState(false);
+  const [preview,      setPreview]      = useState(false);
+  const [floating,     setFloating]     = useState(false);
 
   const canFloat = question.trim().length > 0 && wave;
+
+  const pickImage = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Allow photo access to attach an image to your senti.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [9, 16],        // full-bleed card background — crop to portrait
+      quality: 0.8,
+    });
+    if (!result.canceled) setImage(result.assets[0]);
+  };
+
+  // Upload a picked gallery asset to senti-images/{userId}/... and return the public URL
+  const uploadImage = async (userId) => {
+    const ext  = (image.uri.split('.').pop() || 'jpg').toLowerCase();
+    const path = `${userId}/${Date.now()}.${ext}`;
+    const arrayBuffer = await fetch(image.uri).then((r) => r.arrayBuffer());
+    const { error } = await supabase.storage
+      .from('senti-images')
+      .upload(path, arrayBuffer, { contentType: image.mimeType ?? 'image/jpeg' });
+    if (error) throw error;
+    return supabase.storage.from('senti-images').getPublicUrl(path).data.publicUrl;
+  };
 
   const handleFloat = async () => {
     if (!canFloat) return;
@@ -59,6 +94,12 @@ export default function FloatScreen({ onBack, onFloated }) {
         return;
       }
 
+      // Presets are already hosted → use the URL directly. Gallery picks upload
+      // first (abort the float on upload failure so the user can retry).
+      const imageUrl = image
+        ? (image.isPreset ? image.uri : await uploadImage(user.id))
+        : null;
+
       // Insert into public.sentis (new schema)
       // status is NOT sent — the DB column default controls it so the client
       // can never bypass moderation. Requires: ALTER COLUMN status SET DEFAULT 'approved'
@@ -67,6 +108,7 @@ export default function FloatScreen({ onBack, onFloated }) {
         description: description.trim() || null,
         wave,                   // capitalized: 'Tech', 'Love', etc.
         user_id:     user.id,   // sentis.user_id (not created_by)
+        image_url:   imageUrl,
       });
 
       if (error) throw error;
@@ -75,6 +117,7 @@ export default function FloatScreen({ onBack, onFloated }) {
       setQuestion('');
       setDescription('');
       setWave('Tech');
+      setImage(null);
       setPreview(false);
       onFloated?.();
       onBack?.();
@@ -92,6 +135,7 @@ export default function FloatScreen({ onBack, onFloated }) {
         question={question}
         description={description}
         wave={wave}
+        image={image}
         onBack={() => setPreview(false)}
         onFloat={handleFloat}
         floating={floating}
@@ -203,16 +247,25 @@ export default function FloatScreen({ onBack, onFloated }) {
           </ScrollView>
         </View>
 
-        {/* Media row (stubs) */}
+        {/* Media row */}
         <View style={s.mediaRow}>
-          <TouchableOpacity
-            style={[s.mediaBtn, { backgroundColor: C.surfaceAlt, borderColor: C.border }]}
-            activeOpacity={0.7}
-            onPress={() => Alert.alert('Coming soon', 'Image picker — Sprint 2')}
-          >
-            <Text style={s.mediaBtnIcon}>🖼️</Text>
-            <Text style={[s.mediaBtnLabel, { color: C.textSecondary }]}>Wave image</Text>
-          </TouchableOpacity>
+          {image ? (
+            <View style={s.imageThumbWrap}>
+              <Image source={{ uri: image.uri }} style={s.imageThumb} contentFit="cover" />
+              <TouchableOpacity style={s.imageRemoveBtn} onPress={() => setImage(null)} activeOpacity={0.7}>
+                <Text style={s.imageRemoveText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={[s.mediaBtn, { backgroundColor: C.surfaceAlt, borderColor: C.border }]}
+              activeOpacity={0.7}
+              onPress={() => setImageSheet(true)}
+            >
+              <Text style={s.mediaBtnIcon}>🖼️</Text>
+              <Text style={[s.mediaBtnLabel, { color: C.textSecondary }]}>Wave image</Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
             style={[s.mediaBtn, { backgroundColor: C.surfaceAlt, borderColor: C.border }]}
             activeOpacity={0.7}
@@ -224,12 +277,26 @@ export default function FloatScreen({ onBack, onFloated }) {
         </View>
 
       </ScrollView>
+
+      <WaveImageSheet
+        visible={imageSheet}
+        onClose={() => setImageSheet(false)}
+        onSelectPreset={(url) => {
+          setImage({ uri: url, isPreset: true });
+          setImageSheet(false);
+        }}
+        onPickGallery={() => {
+          // Dismiss the sheet before launching the OS gallery (avoids a modal-over-intent flash)
+          setImageSheet(false);
+          pickImage();
+        }}
+      />
     </View>
   );
 }
 
 // ── Preview sub-screen ─────────────────────────
-function FloatPreview({ question, description, wave, onBack, onFloat, floating, C, s }) {
+function FloatPreview({ question, description, wave, image, onBack, onFloat, floating, C, s }) {
   const emoji = WAVE_EMOJIS[wave] ?? '🌊';
   return (
     <View style={s.screen}>
@@ -248,6 +315,9 @@ function FloatPreview({ question, description, wave, onBack, onFloat, floating, 
         </TouchableOpacity>
       </View>
       <View style={[s.previewCard, { backgroundColor: '#1E1B4B' }]}>
+        {image && (
+          <Image source={{ uri: image.uri }} style={StyleSheet.absoluteFill} contentFit="cover" />
+        )}
         <View style={s.previewOverlay} />
         <View style={s.previewWavePill}>
           <Text style={s.previewWaveText}>{emoji} {wave.toUpperCase()} WAVE</Text>
@@ -321,6 +391,18 @@ const makeStyles = (C) => StyleSheet.create({
   },
   mediaBtnIcon:  { fontSize: fs(24) },                            // was fs(22) ×1.10
   mediaBtnLabel: { fontSize: fs(13), fontWeight: '600' },         // was fs(12) ×1.10
+  imageThumbWrap: { position: 'relative' },
+  imageThumb: {
+    width: ms(72), height: ms(128),                               // 9:16, matches crop aspect
+    borderRadius: ms(12), borderWidth: 0.5, borderColor: C.border,
+  },
+  imageRemoveBtn: {
+    position: 'absolute', top: ms(-6), right: ms(-6),
+    width: ms(24), height: ms(24), borderRadius: ms(12),
+    backgroundColor: 'rgba(0,0,0,0.72)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  imageRemoveText: { fontSize: fs(12), fontWeight: '700', color: '#FFFFFF' },
   // Preview
   previewCard: { flex: 1, position: 'relative', padding: ms(16), justifyContent: 'center' },
   previewOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.48)' },

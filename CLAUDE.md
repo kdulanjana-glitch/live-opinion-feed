@@ -34,7 +34,10 @@ DATABASE RULES:
 - One like per user per senti — toggle delete/insert
 - One pin per user per senti — toggle delete/insert
 - Trigger functions on interaction tables are SECURITY DEFINER (applied 2026-06-12)
-- users has display_name + bio columns; users_update_own RLS policy allows own-row updates
+- users has display_name + bio + avatar_url columns; users_update_own RLS policy allows own-row updates
+- users.avatar_initials is STALE ('??') — never read it; derive the letter from username
+- senti images: senti-images storage bucket (public read, auth upload to own {user_id}/ folder only);
+  upload BEFORE sentis insert, store the public URL in sentis.image_url
 
 CODE RULES:
 - No hover states — Android only

@@ -56,9 +56,13 @@ const normalise = (item) => ({
   wave:        capitalize(item.wave ?? 'tech'),
   imageUrl:    item.image_url ?? null,
   creator: {
-    initials: item.creator_initials
-              ?? (item.creator_username?.[0]?.toUpperCase() ?? '?'),
-    userId:   item.user_id ?? null,          // sentis.user_id
+    // View's stored avatar_initials is stale ('??') — always derive from username.
+    // user_id / avatar_url exist only after the sentarium_feed v2 SQL is applied;
+    // until then they come back undefined and the avatar tap stays disabled.
+    initials:  item.username?.[0]?.toUpperCase() ?? '?',
+    username:  item.username ?? null,
+    userId:    item.user_id ?? null,         // sentis.user_id
+    avatarUrl: item.avatar_url ?? null,
   },
   likes:      item.likes   ?? 0,
   voices:     item.voices  ?? 0,
@@ -599,11 +603,10 @@ export default function SentariumScreen({
               onPin={handlePin}
               onAsk={handleAsk}
               onAvatarPress={
+                // Guests may view profiles — no auth gate here (follow inside
+                // ProfileScreen is a no-op without a session)
                 item.creator?.userId
-                  ? () => {
-                      if (!sessionRef.current?.user?.id) { onRequireAuth?.(); return; }
-                      onNavigateToUser?.(item.creator.userId);
-                    }
+                  ? () => onNavigateToUser?.(item.creator.userId)
                   : undefined
               }
               onViewLocked={() => handleViewLocked(item.id)}

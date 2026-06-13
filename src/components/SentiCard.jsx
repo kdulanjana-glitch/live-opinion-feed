@@ -5,6 +5,7 @@
 
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, useColorScheme } from 'react-native';
+import { Image } from 'expo-image';
 import { getPeoliaColors } from '../constants/peoliaTheme';
 import { fs, ms, s, vs } from '../utils/peoliaScale';
 import WavePill from './WavePill';
@@ -41,9 +42,28 @@ export default function SentiCard({
   const desc        = senti?.description ?? '';
   const truncated   = desc.length > CHAR_TRUNCATE && !expanded;
   const displayDesc = truncated ? desc.slice(0, CHAR_TRUNCATE) : desc;
+  const hasImage    = !!senti?.imageUrl;
 
   return (
     <View style={s_.card}>
+
+      {/* Full-bleed senti image + dark overlay (text switches to light) */}
+      {hasImage && (
+        <>
+          <Image
+            source={{ uri: senti.imageUrl }}
+            style={StyleSheet.absoluteFill}
+            contentFit="cover"
+            transition={150}
+          />
+          <View style={s_.imageOverlay} />
+        </>
+      )}
+
+      {/* Content layer — zIndex lifts it above the absolute image/overlay.
+          Android does NOT reliably honor paint order here (same reason the
+          FloatScreen preview puts zIndex:1 on every element over its image). */}
+      <View style={s_.content}>
 
       {/* Top row */}
       <View style={s_.topRow}>
@@ -60,29 +80,34 @@ export default function SentiCard({
           activeOpacity={onAvatarPress ? 0.7 : 1}
           disabled={!onAvatarPress}
         >
-          <Text style={s_.avatarText}>{senti?.creator?.initials ?? '??'}</Text>
+          {senti?.creator?.avatarUrl ? (
+            <Image source={{ uri: senti.creator.avatarUrl }} style={s_.avatarImg} contentFit="cover" />
+          ) : (
+            <Text style={s_.avatarText}>{senti?.creator?.initials ?? '?'}</Text>
+          )}
         </TouchableOpacity>
       </View>
 
       {/* Wave pill */}
-      <WavePill wave={senti?.wave ?? 'Tech'} style={s_.wavePill} />
+      <WavePill wave={senti?.wave ?? 'Tech'} transparent={hasImage} style={s_.wavePill} />
 
       {/* Main row */}
       <View style={s_.mainRow}>
         <View style={s_.textCol}>
-          <Text style={[s_.question, expanded && s_.questionSmall]}>
+          <Text style={[s_.question, expanded && s_.questionSmall, hasImage && s_.questionOnImage]}>
             {senti?.question ?? ''}
           </Text>
-          <Text style={s_.description}>
+          <Text style={[s_.description, hasImage && s_.descriptionOnImage]}>
             {displayDesc}
-            {truncated && <Text style={s_.seeMore} onPress={() => setExpanded(true)}> see more</Text>}
-            {expanded  && <Text style={s_.seeMore} onPress={() => setExpanded(false)}> see less</Text>}
+            {truncated && <Text style={[s_.seeMore, hasImage && s_.seeMoreOnImage]} onPress={() => setExpanded(true)}> see more</Text>}
+            {expanded  && <Text style={[s_.seeMore, hasImage && s_.seeMoreOnImage]} onPress={() => setExpanded(false)}> see less</Text>}
           </Text>
         </View>
         <ActionBar
           likes={senti?.likes}   voices={senti?.voices}  pins={senti?.pins}
           liked={liked}
           pinned={pinned}
+          onImage={hasImage}
           onLike={() => onLike?.(senti?.id)}   onVoice={() => onVoice?.(senti?.id)}
           onPin={() => onPin?.(senti?.id)}     onAsk={() => onAsk?.(senti?.id)}
         />
@@ -106,6 +131,8 @@ export default function SentiCard({
         onVote={(choice) => onVote?.(senti?.id, choice)}
       />
 
+      </View>{/* end content layer */}
+
       <ViewReactsSheet
         visible={showSheet}
         onCancel={() => setShowSheet(false)}
@@ -123,6 +150,10 @@ const makeStyles = (C) => StyleSheet.create({
   card: {
     flex: 1,
     backgroundColor: C.bg,
+  },
+  content: {
+    flex: 1,
+    zIndex: 1,   // sit above the full-bleed image + overlay (Android paint-order fix)
   },
   topRow: {
     flexDirection: 'row',
@@ -149,13 +180,17 @@ const makeStyles = (C) => StyleSheet.create({
     width: s(40),
     height: s(40),
     borderRadius: s(20),
-    backgroundColor: C.accentLight,
-    borderWidth: 1.5,
-    borderColor: C.accentMid,
+    backgroundColor: C.accent,   // solid circle + white letter — same as ProfileScreen
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
   },
-  avatarText:   { fontSize: fs(15), fontWeight: '700', color: C.accent },
+  avatarImg:    { width: s(40), height: s(40), borderRadius: s(20) },
+  avatarText:   { fontSize: fs(17), fontWeight: '800', color: '#FFFFFF' },
+  imageOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.48)',   // matches FloatScreen preview overlay
+  },
   wavePill:     { marginTop: vs(8), marginHorizontal: ms(16) },
   mainRow: {
     flex: 1,
@@ -177,17 +212,20 @@ const makeStyles = (C) => StyleSheet.create({
     color: C.textPrimary,
     marginBottom: vs(8),
   },
-  questionSmall: { fontSize: fs(21) },  // was fs(17) → ×1.25
+  questionSmall:   { fontSize: fs(21) },  // was fs(17) → ×1.25
+  questionOnImage: { color: '#FFFFFF' },
   description: {
     fontSize: fs(19),        // was fs(15) → ×1.25
     lineHeight: fs(23),
     color: C.textSecondary,
   },
+  descriptionOnImage: { color: 'rgba(255,255,255,0.72)' },  // matches preview
   seeMore: {
     fontSize: fs(19),        // was fs(15) → ×1.25
     fontWeight: '700',
     color: C.accentText,
   },
+  seeMoreOnImage: { color: '#C7D2FE' },
   swellBadge: {
     marginTop: vs(4),
     marginBottom: vs(2),

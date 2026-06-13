@@ -28,6 +28,7 @@ export default function ActionBar({
   pins   = 0,
   liked  = false,   // true → heart red
   pinned = false,   // true → pushpin accent, false → bookmark grey
+  onImage = false,  // true → card has full-bleed image; use light icon/count colors
   onLike,
   onVoice,
   onPin,
@@ -37,29 +38,31 @@ export default function ActionBar({
   const C = getPeoliaColors(scheme);
   const st = makeStyles(C);
 
+  const mutedColor = onImage ? 'rgba(255,255,255,0.85)' : C.iconMuted;
+
   const items = [
     {
       Icon:    HeartIcon,
-      color:   liked  ? C.likeColor : C.iconMuted,
+      color:   liked  ? C.likeColor : mutedColor,
       count:   formatCount(likes),
       onPress: onLike,
     },
     {
       Icon:    ChatIcon,
-      color:   C.iconMuted,
+      color:   mutedColor,
       count:   formatCount(voices),
       onPress: onVoice,
     },
     {
       // Distinct icon AND colour change: 📌 (pinned) vs 🔖 (not pinned)
       Icon:    pinned ? PushpinIcon : BookmarkIcon,
-      color:   pinned ? C.accent    : C.iconMuted,
+      color:   pinned ? C.accent    : mutedColor,
       count:   formatCount(pins),
       onPress: onPin,
     },
     {
       Icon:    AskIcon,
-      color:   C.iconMuted,
+      color:   mutedColor,
       count:   'Ask',
       onPress: onAsk,
     },
@@ -70,7 +73,7 @@ export default function ActionBar({
       {items.map(({ Icon, color, count, onPress }, i) => (
         <TouchableOpacity key={i} style={st.item} onPress={onPress} activeOpacity={0.7}>
           <Icon color={color} />
-          <Text style={st.count}>{count}</Text>
+          <Text style={[st.count, onImage && st.countOnImage]}>{count}</Text>
         </TouchableOpacity>
       ))}
     </View>
@@ -97,4 +100,5 @@ const makeStyles = (C) => StyleSheet.create({
     fontWeight: '600',
     color: C.textMuted,
   },
+  countOnImage: { color: 'rgba(255,255,255,0.85)' },
 });
