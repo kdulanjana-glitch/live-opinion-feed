@@ -169,7 +169,7 @@ const makeStyles = (C) => StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: ms(16),
-    paddingTop: vs(10),
+    paddingTop: vs(48),
     minHeight: vs(40),
   },
   avatar: {

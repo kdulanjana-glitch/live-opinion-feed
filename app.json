@@ -21,7 +21,19 @@
       "permissions": [
         "android.permission.RECORD_AUDIO"
       ],
-     "package": "com.peolia.app"
+      "package": "com.peolia.app",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "peolia"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
     },
     "web": {
       "output": "static",
@@ -40,7 +52,8 @@
         }
       ],
       "expo-image",
-      "expo-image-picker"
+      "expo-image-picker",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,

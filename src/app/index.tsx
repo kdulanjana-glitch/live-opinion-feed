@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   StyleSheet,
   View,
   useColorScheme,
@@ -32,6 +33,7 @@ export default function Index() {
   const [activeTab,     setActiveTab]     = useState('sentarium');
   const [userProfileId, setUserProfileId] = useState<string | null>(null);
   const [feedScrollToId, setFeedScrollToId] = useState<string | null>(null);
+  const [isGuest, setIsGuest] = useState(false);
 
   // Refs so onAuthStateChange callback never captures stale state
   const activeTabRef = useRef('sentarium');
@@ -53,6 +55,7 @@ export default function Index() {
       (event, session) => {
         if (event === 'SIGNED_IN') {
           setSession(session);
+          setIsGuest(false);
           if (activeTabRef.current === 'auth') {
             goToTab(prevTabRef.current || 'sentarium');
           }
@@ -82,8 +85,26 @@ export default function Index() {
 
   // ── Tab press handler ─────────────────────────
   const handleTabPress = (tabKey: string) => {
-    // Require auth for float / pin / profile
-    if (!session && ['float', 'pin', 'profile'].includes(tabKey)) {
+    // Guest — block Float, Pin, Profile
+    if (isGuest && ['float', 'pin', 'profile'].includes(tabKey)) {
+      Alert.alert(
+        'Sign in required',
+        'Create a free account to access this.',
+        [
+          { text: 'Not now', style: 'cancel' },
+          {
+            text: 'Sign in',
+            onPress: () => {
+              prevTabRef.current = activeTabRef.current;
+              goToTab('auth');
+            },
+          },
+        ]
+      );
+      return;
+    }
+    // Not logged in and not guest — require auth
+    if (!session && !isGuest && ['float', 'pin', 'profile'].includes(tabKey)) {
       prevTabRef.current = activeTabRef.current;
       goToTab('auth');
       return;
@@ -93,6 +114,23 @@ export default function Index() {
   };
 
   const handleRequireAuth = () => {
+    if (isGuest) {
+      Alert.alert(
+        'Sign in required',
+        'Create a free account to do that.',
+        [
+          { text: 'Not now', style: 'cancel' },
+          {
+            text: 'Sign in',
+            onPress: () => {
+              prevTabRef.current = activeTabRef.current;
+              goToTab('auth');
+            },
+          },
+        ]
+      );
+      return;
+    }
     prevTabRef.current = activeTabRef.current;
     goToTab('auth');
   };
@@ -126,10 +164,32 @@ export default function Index() {
 
     switch (activeTab) {
       case 'auth':
-        return <AuthScreen />;
+        return (
+          <AuthScreen
+            onAuth={(s) => {
+              setSession(s);
+              setIsGuest(false);
+            }}
+            onGuest={() => {
+              setIsGuest(true);
+              goToTab(prevTabRef.current || 'sentarium');
+            }}
+          />
+        );
 
       case 'reset-password':
-        return <AuthScreen initialMode="reset-password" />;
+        return (
+          <AuthScreen
+            onAuth={(s) => {
+              setSession(s);
+              setIsGuest(false);
+            }}
+            onGuest={() => {
+              setIsGuest(true);
+              goToTab('sentarium');
+            }}
+          />
+        );
 
       case 'sentarium':
         return null;   // persistent feed layer (rendered below) handles this tab
@@ -147,7 +207,18 @@ export default function Index() {
             onBack={() => goToTab('sentarium')}
             onFloated={() => goToTab('sentarium')}
           />
-        ) : <AuthScreen />;
+        ) : (
+          <AuthScreen
+            onAuth={(s) => {
+              setSession(s);
+              setIsGuest(false);
+            }}
+            onGuest={() => {
+              setIsGuest(true);
+              goToTab('sentarium');
+            }}
+          />
+        );
 
       case 'pin':
         return session ? (
@@ -155,7 +226,18 @@ export default function Index() {
             session={session}
             onOpenSenti={handleNavigateToFeedOpinion}   // UUID → Sentarium
           />
-        ) : <AuthScreen />;
+        ) : (
+          <AuthScreen
+            onAuth={(s) => {
+              setSession(s);
+              setIsGuest(false);
+            }}
+            onGuest={() => {
+              setIsGuest(true);
+              goToTab('sentarium');
+            }}
+          />
+        );
 
       case 'profile':
         return session ? (
@@ -163,7 +245,18 @@ export default function Index() {
             onOpenSenti={handleNavigateToFeedOpinion}
             onOpenUser={handleNavigateToUser}
           />
-        ) : <AuthScreen />;
+        ) : (
+          <AuthScreen
+            onAuth={(s) => {
+              setSession(s);
+              setIsGuest(false);
+            }}
+            onGuest={() => {
+              setIsGuest(true);
+              goToTab('sentarium');
+            }}
+          />
+        );
 
       default:
         return null;
@@ -185,6 +278,7 @@ export default function Index() {
         <View style={feedActive ? styles.fill : styles.hidden}>
           <SentariumScreen
             session={session}
+            isGuest={isGuest}
             onRequireAuth={handleRequireAuth}
             onNavigateToUser={handleNavigateToUser}
             scrollToId={feedScrollToId}

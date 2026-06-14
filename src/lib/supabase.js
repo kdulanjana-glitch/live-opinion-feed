@@ -1,3 +1,5 @@
+import 'react-native-get-random-values';
+import 'react-native-get-random-values';
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createClient } from "@supabase/supabase-js";
 import { Platform } from "react-native";
@@ -11,6 +13,9 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: Platform.OS === "web",
+    // PKCE so OAuth returns ?code=… (which _layout.tsx exchanges) instead of an
+    // #access_token fragment that native can't auto-consume.
+    flowType: "pkce",
   },
 });
 

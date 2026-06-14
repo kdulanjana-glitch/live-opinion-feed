@@ -14,7 +14,8 @@ import {
 } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { getPeoliaColors } from '../constants/peoliaTheme';
-import { fs, ms, vs } from '../utils/peoliaScale';
+import { fs, ms, vs, SCREEN_WIDTH } from '../utils/peoliaScale';
+import SentiTile from '../components/SentiTile';
 import EmptyState from '../components/EmptyState';
 import { TrendingSkeleton } from '../components/Skeletons';
 
@@ -46,6 +47,12 @@ const formatCount = (n) => {
   return String(n);
 };
 
+// 2-column grid metrics (like Pin, but 2 per row)
+const COLS   = 2;
+const GAP    = ms(8);
+const H_PAD  = ms(14);
+const TILE_W = Math.floor((SCREEN_WIDTH - H_PAD * 2 - GAP * (COLS - 1)) / COLS);
+
 export default function TrendingScreen({ onOpenSenti }) {
   const scheme = useColorScheme();
   const C = getPeoliaColors(scheme);
@@ -61,8 +68,8 @@ export default function TrendingScreen({ onOpenSenti }) {
     try {
       let query = supabase
         .from('trending_sentis')
-        .select('id, question, wave, total_reacts, velocity_2h')
-        .order('velocity_2h', { ascending: false })
+        .select('id, question, wave, total_reacts, velocity_2h, velocity_24h')
+        .order('velocity_24h', { ascending: false })
         .limit(20);
 
       if (wave !== 'All') {
@@ -96,43 +103,14 @@ export default function TrendingScreen({ onOpenSenti }) {
     setSentis([]);
   };
 
-  const renderCard = ({ item, index }) => {
-    const rank     = index + 1;
-    const wave     = item.wave ?? 'Tech';
-    const bgColor  = WAVE_GRADIENTS[wave] ?? '#1E1B4B';
-    const emoji    = WAVE_EMOJIS[wave] ?? '🌊';
-    const isFirst  = rank === 1;
-
-    return (
-      <TouchableOpacity
-        style={[s.card, { backgroundColor: C.surface }]}
-        onPress={() => onOpenSenti?.(item.id)}
-        activeOpacity={0.8}
-      >
-        {/* Coloured header with rank + question */}
-        <View style={[s.cardImg, { backgroundColor: bgColor, height: isFirst ? vs(80) : vs(66) }]}>
-          <View style={s.overlay} />
-          <View style={[s.rankBadge, rank === 1 ? s.rankBadge1 : s.rankBadgeN]}>
-            <Text style={s.rankText}>#{rank}</Text>
-          </View>
-          <Text style={s.cardQuestion} numberOfLines={2}>{item.question}</Text>
-        </View>
-
-        {/* Footer: wave pill + react count + velocity */}
-        <View style={s.cardFooter}>
-          <View style={s.cardLeft}>
-            <View style={[s.wavePillSmall, { backgroundColor: C.accentLight }]}>
-              <Text style={s.wavePillText}>{emoji} {wave}</Text>
-            </View>
-            <Text style={s.reactCount}>{formatCount(item.total_reacts)} reacts</Text>
-          </View>
-          <Text style={[s.velocity, { color: C.velocity }]}>
-            ↑ {formatCount(item.velocity_2h)} in 2hrs
-          </Text>
-        </View>
-      </TouchableOpacity>
-    );
-  };
+  // 9:16 tile grid (like Pin). trending_sentis has no image_url → wave colour.
+  const renderCard = ({ item }) => (
+    <SentiTile
+      senti={{ id: item.id, question: item.question, wave: item.wave ?? 'Tech', imageUrl: null }}
+      width={TILE_W}
+      onPress={() => onOpenSenti?.(item.id)}
+    />
+  );
 
   return (
     <View style={s.screen}>
@@ -194,7 +172,10 @@ export default function TrendingScreen({ onOpenSenti }) {
           data={sentis}
           keyExtractor={(item) => item.id}
           renderItem={renderCard}
-          contentContainerStyle={s.list}
+          numColumns={COLS}
+          columnWrapperStyle={{ gap: GAP }}
+          ItemSeparatorComponent={() => <View style={{ height: GAP }} />}
+          contentContainerStyle={s.grid}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={C.accent} />
@@ -228,6 +209,7 @@ const makeStyles = (C) => StyleSheet.create({
   filterPill:    { paddingVertical: vs(5), paddingHorizontal: ms(13), borderRadius: ms(20) },
   filterText:    { fontSize: fs(13), fontWeight: '700' },
   list:          { paddingHorizontal: ms(14), paddingTop: vs(10), gap: vs(8), paddingBottom: vs(20) },
+  grid:          { paddingHorizontal: H_PAD, paddingTop: vs(10), paddingBottom: vs(20) },
   card:          { borderRadius: ms(14), borderWidth: 0.5, borderColor: C.border, overflow: 'hidden' },
   cardImg:       { position: 'relative', justifyContent: 'flex-end', padding: ms(10) },
   overlay:       { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.38)' },

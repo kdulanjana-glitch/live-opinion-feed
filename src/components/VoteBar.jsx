@@ -36,7 +36,11 @@ export default function VoteBar({ onVote, voted = null }) {
         return (
           <TouchableOpacity
             key={key}
-            style={[st.btn, { backgroundColor: isChosen ? chosenBg : defaultBg }]}
+            style={[
+              st.btn,
+              { backgroundColor: isChosen ? chosenBg : defaultBg },
+              hasVoted && !isChosen && st.fadedBtn,
+            ]}
             onPress={() => {
               // Light tactile tap on vote (best-effort — never block the vote)
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
@@ -68,6 +72,9 @@ const makeStyles = (C) => StyleSheet.create({
     paddingVertical: vs(12),
     paddingHorizontal: ms(4),
     borderRadius: ms(14),
+  },
+  fadedBtn: {
+    opacity: 0.32,
   },
   emoji: { fontSize: fs(30), lineHeight: fs(36) },
 });
