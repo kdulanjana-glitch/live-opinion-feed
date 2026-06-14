@@ -221,6 +221,9 @@ All in `src/app/index.tsx` via `activeTab` state. Tab keys:
 | Edit profile: username + email read-only; new phone/birthday/gender (stored in private user_private table, own-row RLS); in-app change-password (auth.updateUser); sheet now scrollable | EditProfileSheet, user_private table |
 | Followers/Following counts now derived live from follows (count head queries) — user_stats follower counts have no maintaining trigger, so don't read them | ProfileScreen fetchProfile |
 | Feed index for sentarium_feed ordering (run feed-index.sql). Feed slowness is mostly Supabase free-tier latency + SentariumScreen re-mounting/refetching on every tab return | supabase/feed-index.sql |
+| Feed keep-alive: SentariumScreen is now a persistent layer in index.tsx (always mounted, display:none when inactive) → returning to the tab is instant, no refetch. scrollToId effect now fetches off-page targets itself (was relying on remount→fetchSentis) | index.tsx, SentariumScreen |
+| Profile own-view: modern Edit (filled accent) + Log out (outlined red, signOut with confirm) buttons; removed dead ⚙️ | ProfileScreen |
+| Edit sheet polish (section headers Public/Private/Security + helpers); phone must be E.164 (+country code); password change now requires the current password (verified via signInWithPassword before any writes) | EditProfileSheet |
 
 ---
 

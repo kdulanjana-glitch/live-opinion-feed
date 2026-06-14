@@ -108,7 +108,10 @@ export default function Index() {
   };
 
   // ── Screen renderer ───────────────────────────
-  const renderScreen = () => {
+  // Returns the non-feed view for the current tab, or null when the Sentarium
+  // feed should show (the feed is rendered as a persistent layer so it doesn't
+  // re-fetch every time you leave and return to the tab).
+  const renderOverlay = () => {
     // User profile overlay — slides over any tab
     if (userProfileId) {
       return (
@@ -129,15 +132,7 @@ export default function Index() {
         return <AuthScreen initialMode="reset-password" />;
 
       case 'sentarium':
-        return (
-          <SentariumScreen
-            session={session}
-            onRequireAuth={handleRequireAuth}
-            onNavigateToUser={handleNavigateToUser}
-            scrollToId={feedScrollToId}
-            onScrolled={() => setFeedScrollToId(null)}
-          />
-        );
+        return null;   // persistent feed layer (rendered below) handles this tab
 
       case 'trending':
         return (
@@ -179,10 +174,26 @@ export default function Index() {
   const hiddenTabs  = ['auth', 'reset-password'];
   const visibleTab  = userProfileId || hiddenTabs.includes(activeTab) ? '' : activeTab;
 
+  const feedActive = !userProfileId && activeTab === 'sentarium';
+  const overlay    = renderOverlay();
+
   return (
     <View style={[styles.container, { backgroundColor: bg }]}>
       <View style={styles.content}>
-        {renderScreen()}
+        {/* Persistent Sentarium feed — always mounted, just hidden (not unmounted)
+            when another view is active, so returning to the tab is instant. */}
+        <View style={feedActive ? styles.fill : styles.hidden}>
+          <SentariumScreen
+            session={session}
+            onRequireAuth={handleRequireAuth}
+            onNavigateToUser={handleNavigateToUser}
+            scrollToId={feedScrollToId}
+            onScrolled={() => setFeedScrollToId(null)}
+          />
+        </View>
+
+        {/* Everything else renders on top when active */}
+        {overlay !== null && <View style={styles.fill}>{overlay}</View>}
       </View>
 
       {/* Floating pill tab bar — hidden only on auth screens. Kept visible on the
@@ -201,4 +212,6 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   centered:  { flex: 1, alignItems: 'center', justifyContent: 'center' },
   content:   { flex: 1 },
+  fill:      { flex: 1 },
+  hidden:    { display: 'none' },
 });

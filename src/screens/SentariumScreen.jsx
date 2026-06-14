@@ -331,27 +331,38 @@ export default function SentariumScreen({
   }, [fetchSentis]);
 
   // ── scrollToId prop change ────────────────────
+  // The feed stays mounted across tab switches, so this effect (not a remount +
+  // fetchSentis) is what handles "open this senti" from Trending/Pin. If the target
+  // isn't on a loaded page, fetch it individually and prepend it.
   useEffect(() => {
     if (!scrollToId) return;
     pendingScrollRef.current = scrollToId;
-
-    // Pre-fetch state for the scroll target in parallel with the 200 ms
-    // scroll animation. Handles cards that live outside the current page batch.
     fetchSentiState(scrollToId);
 
-    const list = sentisRef.current;
-    if (list.length === 0) return;
-    setSentis((prev) => {
-      const target = prev.find((i) => i.id === scrollToId);
-      if (!target) return prev;
-      return [target, ...prev.filter((i) => i.id !== scrollToId)];
-    });
-    setTimeout(() => {
-      flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
-      pendingScrollRef.current = null;
-      onScrolledRef.current?.();
-    }, 200);
-  }, [scrollToId, fetchSentiState]);
+    let cancelled = false;
+    (async () => {
+      const existing = sentisRef.current.find((i) => i.id === scrollToId);
+      if (existing) {
+        setSentis((prev) => [existing, ...prev.filter((i) => i.id !== scrollToId)]);
+      } else {
+        const { data } = await supabase.from('sentarium_feed').select('*').eq('id', scrollToId).maybeSingle();
+        if (cancelled) return;
+        if (data) {
+          const item = normalise(data);
+          setSentis((prev) => (prev.some((i) => i.id === item.id) ? prev : [item, ...prev]));
+          batchFetchStates([item.id]);
+        }
+      }
+      setTimeout(() => {
+        if (cancelled) return;
+        flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+        pendingScrollRef.current = null;
+        onScrolledRef.current?.();
+      }, 200);
+    })();
+
+    return () => { cancelled = true; };
+  }, [scrollToId, fetchSentiState, batchFetchStates]);
 
   // ── Card becomes visible ──────────────────────
   const onViewableItemsChanged = useRef(({ viewableItems }) => {

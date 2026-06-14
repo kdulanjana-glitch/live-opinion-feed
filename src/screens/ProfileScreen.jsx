@@ -18,7 +18,7 @@ import {
   View, Text, ScrollView, TouchableOpacity,
   StyleSheet, useColorScheme,
   ActivityIndicator, Dimensions, StatusBar, Platform,
-  RefreshControl, Image, Modal,
+  RefreshControl, Image, Modal, Alert,
 } from 'react-native';
 import Svg, { Polygon, Circle, Line, Text as SvgText } from 'react-native-svg';
 import { supabase } from '../lib/supabase';
@@ -248,6 +248,13 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser 
     setRefreshing(false);
   };
 
+  const handleLogout = () => {
+    Alert.alert('Log out', 'Are you sure you want to log out?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Log out', style: 'destructive', onPress: () => supabase.auth.signOut() },
+    ]);
+  };
+
   // ── Follow / unfollow — optimistic with rollback ─
   const bumpFollowers = (delta) => setProfile((prev) => prev ? {
     ...prev,
@@ -303,7 +310,6 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser 
         ) : (
           <Text style={st.headerTitle}>Profile</Text>
         )}
-        {isOwnProfile && <Text style={st.settingsIcon}>⚙️</Text>}
       </View>
 
       <ScrollView
@@ -335,9 +341,15 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser 
           </View>
           <View style={st.actionButtons}>
             {(isOwnProfile || userId === myId) ? (
-              <TouchableOpacity style={st.editBtn} onPress={() => setEditVisible(true)} activeOpacity={0.7}>
-                <Text style={st.editText}>Edit</Text>
-              </TouchableOpacity>
+              <>
+                <TouchableOpacity style={st.editBtn} onPress={() => setEditVisible(true)} activeOpacity={0.85}>
+                  <Text style={st.editIcon}>✏️</Text>
+                  <Text style={st.editText}>Edit</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={st.logoutBtn} onPress={handleLogout} activeOpacity={0.85}>
+                  <Text style={st.logoutText}>Log out</Text>
+                </TouchableOpacity>
+              </>
             ) : (
               <>
                 <TouchableOpacity
@@ -588,12 +600,19 @@ const makeStyles = (C) => StyleSheet.create({
   nameBlock:   { flex: 1 },
   displayName: { fontSize: fs(18), fontWeight: '800', color: C.textPrimary }, // was fs(16) ×1.10
   username:    { fontSize: fs(14), fontWeight: '500', color: C.textMuted },   // was fs(13) ×1.10
-  actionButtons: { flexDirection: 'column', gap: vs(5), alignItems: 'flex-end', flexShrink: 0 },
+  actionButtons: { flexDirection: 'column', gap: vs(6), alignItems: 'flex-end', flexShrink: 0 },
   editBtn: {
-    paddingVertical: vs(5), paddingHorizontal: ms(14), borderRadius: ms(20),
-    backgroundColor: C.surfaceAlt, borderWidth: 0.5, borderColor: C.border,
+    flexDirection: 'row', alignItems: 'center', gap: ms(5),
+    paddingVertical: vs(6), paddingHorizontal: ms(16), borderRadius: ms(20),
+    backgroundColor: C.accent,
   },
-  editText:    { fontSize: fs(14), fontWeight: '700', color: C.textSecondary }, // was fs(13) ×1.10
+  editIcon:    { fontSize: fs(12) },
+  editText:    { fontSize: fs(14), fontWeight: '700', color: '#FFFFFF' },
+  logoutBtn: {
+    paddingVertical: vs(6), paddingHorizontal: ms(16), borderRadius: ms(20),
+    borderWidth: 1, borderColor: C.nahText, backgroundColor: 'transparent',
+  },
+  logoutText:  { fontSize: fs(13), fontWeight: '700', color: C.nahText },
   followBtn:   { paddingVertical: vs(5), paddingHorizontal: ms(14), borderRadius: ms(20), backgroundColor: C.accent },
   followingBtn: { backgroundColor: C.surfaceAlt, borderWidth: 0.5, borderColor: C.border },
   followText:   { fontSize: fs(14), fontWeight: '700', color: '#FFFFFF' },      // was fs(13) ×1.10

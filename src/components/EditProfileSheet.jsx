@@ -38,6 +38,7 @@ export default function EditProfileSheet({ visible, onClose, initial, onSaved })
   const [phone,       setPhone]       = useState('');
   const [birthday,    setBirthday]    = useState('');
   const [gender,      setGender]      = useState(null);
+  const [currentPw,   setCurrentPw]   = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPw,   setConfirmPw]   = useState('');
   const [avatarUrl,   setAvatarUrl]   = useState(null);
@@ -53,6 +54,7 @@ export default function EditProfileSheet({ visible, onClose, initial, onSaved })
     setBio(initial?.bio ?? '');
     setAvatarUrl(initial?.avatarUrl ?? null);
     setNewAvatar(null);
+    setCurrentPw('');
     setNewPassword('');
     setConfirmPw('');
     setError(null);
@@ -107,9 +109,19 @@ export default function EditProfileSheet({ visible, onClose, initial, onSaved })
       setError('Birthday must be in YYYY-MM-DD format.');
       return;
     }
-    if (newPassword || confirmPw) {
-      if (newPassword.length < 6) { setError('Password must be at least 6 characters.'); return; }
-      if (newPassword !== confirmPw) { setError('Passwords do not match.'); return; }
+
+    // Phone must be E.164 (international, with country code) — e.g. +94771234567
+    const phoneClean = phone.replace(/[\s-]/g, '');
+    if (phoneClean && !/^\+[1-9]\d{6,14}$/.test(phoneClean)) {
+      setError('Enter a valid phone with country code, e.g. +94771234567');
+      return;
+    }
+
+    const wantsPwChange = !!(currentPw || newPassword || confirmPw);
+    if (wantsPwChange) {
+      if (!currentPw) { setError('Enter your current password.'); return; }
+      if (newPassword.length < 6) { setError('New password must be at least 6 characters.'); return; }
+      if (newPassword !== confirmPw) { setError('New passwords do not match.'); return; }
     }
 
     setSaving(true);
@@ -117,6 +129,12 @@ export default function EditProfileSheet({ visible, onClose, initial, onSaved })
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { setError('You need to be signed in.'); return; }
+
+      // Verify the current password BEFORE any writes (so nothing saves on a bad password)
+      if (wantsPwChange) {
+        const { error: reauthErr } = await supabase.auth.signInWithPassword({ email, password: currentPw });
+        if (reauthErr) { setError('Current password is incorrect.'); return; }
+      }
 
       let uploadedAvatarUrl;
       if (newAvatar) {
@@ -145,7 +163,7 @@ export default function EditProfileSheet({ visible, onClose, initial, onSaved })
       // Private fields
       const { error: pErr } = await supabase.from('user_private').upsert({
         user_id:  user.id,
-        phone:    phone.trim() || null,
+        phone:    phoneClean || null,
         birthday: bday || null,
         gender:   gender || null,
         updated_at: new Date().toISOString(),
@@ -156,8 +174,8 @@ export default function EditProfileSheet({ visible, onClose, initial, onSaved })
         return;
       }
 
-      // Optional password change
-      if (newPassword) {
+      // Password change (current password already verified above)
+      if (wantsPwChange) {
         const { error: pwErr } = await supabase.auth.updateUser({ password: newPassword });
         if (pwErr) {
           console.error('EditProfileSheet password error', pwErr);
@@ -207,6 +225,8 @@ export default function EditProfileSheet({ visible, onClose, initial, onSaved })
                 </TouchableOpacity>
               </View>
 
+              <Text style={st.sectionHead}>Public profile</Text>
+
               {/* Username (read-only) */}
               <Text style={st.label}>Username</Text>
               <View style={[st.input, st.inputDisabled]}>
@@ -237,12 +257,16 @@ export default function EditProfileSheet({ visible, onClose, initial, onSaved })
                 multiline maxLength={BIO_MAX} textAlignVertical="top"
               />
 
+              <Text style={st.sectionHead}>Private details</Text>
+              <Text style={st.sectionNote}>Only you can see these.</Text>
+
               {/* Phone */}
               <Text style={st.label}>Phone</Text>
               <TextInput
                 style={st.input} value={phone} onChangeText={setPhone}
-                placeholder="Phone number" placeholderTextColor={C.textMuted} keyboardType="phone-pad"
+                placeholder="+94 77 123 4567" placeholderTextColor={C.textMuted} keyboardType="phone-pad"
               />
+              <Text style={st.helper}>Include your country code (e.g. +94).</Text>
 
               {/* Birthday */}
               <Text style={st.label}>Birthday</Text>
@@ -270,10 +294,16 @@ export default function EditProfileSheet({ visible, onClose, initial, onSaved })
                 })}
               </View>
 
-              {/* Change password */}
-              <Text style={[st.label, st.sectionLabel]}>Change password</Text>
+              {/* Security */}
+              <Text style={st.sectionHead}>Security</Text>
+              <Text style={st.label}>Change password</Text>
               <TextInput
-                style={st.input} value={newPassword} onChangeText={setNewPassword}
+                style={st.input} value={currentPw} onChangeText={setCurrentPw}
+                placeholder="Current password" placeholderTextColor={C.textMuted}
+                secureTextEntry autoCapitalize="none"
+              />
+              <TextInput
+                style={[st.input, { marginTop: vs(8) }]} value={newPassword} onChangeText={setNewPassword}
                 placeholder="New password" placeholderTextColor={C.textMuted}
                 secureTextEntry autoCapitalize="none"
               />
@@ -282,6 +312,7 @@ export default function EditProfileSheet({ visible, onClose, initial, onSaved })
                 placeholder="Confirm new password" placeholderTextColor={C.textMuted}
                 secureTextEntry autoCapitalize="none"
               />
+              <Text style={st.helper}>Your current password is required. Leave blank to keep it.</Text>
 
               {error && <Text style={st.error}>{error}</Text>}
 
@@ -333,7 +364,13 @@ const makeStyles = (C) => StyleSheet.create({
   avatarChange:   { fontSize: fs(13), fontWeight: '700', color: C.accent },
   labelRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   label:    { fontSize: fs(13), fontWeight: '700', color: C.textSecondary, marginTop: vs(10), marginBottom: vs(5) },
-  sectionLabel: { marginTop: vs(16) },
+  sectionHead: {
+    fontSize: fs(12), fontWeight: '800', color: C.textMuted, letterSpacing: 0.6,
+    textTransform: 'uppercase', marginTop: vs(18), paddingTop: vs(12),
+    borderTopWidth: 0.5, borderTopColor: C.border,
+  },
+  sectionNote: { fontSize: fs(11), color: C.textMuted, marginTop: vs(2) },
+  helper:      { fontSize: fs(11), color: C.textMuted, marginTop: vs(4) },
   charCount: { fontSize: fs(12), fontWeight: '600', color: C.textMuted, marginTop: vs(10) },
   input: {
     backgroundColor: C.surfaceAlt, borderWidth: 1, borderColor: C.border, borderRadius: ms(12),

@@ -70,6 +70,9 @@ CODE PATTERNS (see HANDOFF.md for full details):
 - Bottom sheets are Modal components with paddingBottom: vs(20) + insets.bottom
   (Android nav-bar clearance)
 - In index.tsx always navigate via goToTab(), never setActiveTab directly
+- SentariumScreen is a PERSISTENT layer in index.tsx (always mounted, hidden via display:none
+  when inactive) so the feed never re-fetches on tab return. Its scrollToId effect fetches
+  off-page targets itself (no remount). Don't move it back into the renderOverlay switch.
 
 TABLES:
 public.sentis, public.senti_reactions, public.senti_counts,
