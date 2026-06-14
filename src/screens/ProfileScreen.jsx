@@ -23,13 +23,14 @@ import {
 import Svg, { Polygon, Circle, Line, Text as SvgText } from 'react-native-svg';
 import { supabase } from '../lib/supabase';
 import SentiTile from '../components/SentiTile';
+import PersonTile from '../components/PersonTile';
 import EmptyState from '../components/EmptyState';
 import { GridSkeleton } from '../components/Skeletons';
 import { getPeoliaColors } from '../constants/peoliaTheme';
 import { fs, ms, vs, s, SCREEN_WIDTH } from '../utils/peoliaScale';
 
 const GRID_GAP  = ms(8);
-const GRID_COLS = 2;
+const GRID_COLS = 3;
 // ms(16)*2 matches gridSection paddingHorizontal on both sides
 const TILE_W = Math.floor((SCREEN_WIDTH - ms(16) * 2 - GRID_GAP * (GRID_COLS - 1)) / GRID_COLS);
 
@@ -55,7 +56,7 @@ const formatCount = (n) => {
   return String(n);
 };
 
-export default function ProfileScreen({ userId, onBack, onOpenSenti }) {
+export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser }) {
   const scheme       = useColorScheme();
   const C            = getPeoliaColors(scheme);
   const st           = makeStyles(C);
@@ -69,6 +70,13 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti }) {
   const [myId,       setMyId]       = useState(null);
   const [editVisible, setEditVisible] = useState(false);
   const [viewerOpen,  setViewerOpen]  = useState(false);   // full-screen avatar viewer
+
+  // Tabbed content under the stats: 'sentis' | 'reacts' | 'followers' | 'following'
+  const [tab,        setTab]        = useState('sentis');
+  const [reacts,     setReacts]     = useState(null);      // null = not loaded yet
+  const [followers,  setFollowers]  = useState(null);
+  const [followingList, setFollowingList] = useState(null);
+  const [tabBusy,    setTabBusy]    = useState(false);
 
   const fetchProfile = useCallback(async () => {
     setLoading(true);
@@ -87,7 +95,7 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti }) {
         : Promise.resolve({ data: null });
 
       // Run all queries in parallel
-      const [userRes, sentisRes, dnaRes, floatedRes, userStatsRes, followRes] = await Promise.all([
+      const [userRes, sentisRes, dnaRes, floatedRes, userStatsRes, followRes, followersRes, followingRes] = await Promise.all([
         // Basic user info
         supabase.from('users').select('id, username, display_name, bio, avatar_url').eq('id', targetId).single(),
 
@@ -114,7 +122,7 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti }) {
           .eq('status', 'approved')
           .order('created_at', { ascending: false }),
 
-        // user_stats — for followers/following and reacts_count (trigger-maintained)
+        // user_stats — for reacts_count (trigger-maintained)
         supabase
           .from('user_stats')
           .select('reacts_count, followers_count, following_count')
@@ -122,6 +130,11 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti }) {
           .maybeSingle(),
 
         followCheck,
+
+        // Follower / following counts — derived directly from follows (always accurate;
+        // user_stats counts aren't maintained, so don't rely on them)
+        supabase.from('follows').select('follower_id', { count: 'exact', head: true }).eq('following_id', targetId),
+        supabase.from('follows').select('following_id', { count: 'exact', head: true }).eq('follower_id', targetId),
       ]);
 
       setFollowing(!!followRes.data);
@@ -146,8 +159,8 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti }) {
         stats: {
           sentis_count:    sentisRes.count    ?? 0,  // always live from sentis table
           reacts_count:    reactsCount,
-          followers_count: ustats.followers_count ?? 0,
-          following_count: ustats.following_count ?? 0,
+          followers_count: followersRes.count ?? 0,  // live from follows
+          following_count: followingRes.count ?? 0,  // live from follows
         },
         dna: dnaRes.data ?? [],
       });
@@ -168,8 +181,69 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti }) {
 
   useEffect(() => { fetchProfile(); }, [fetchProfile]);
 
+  // Reset the tab + cached lists whenever we switch to a different profile
+  useEffect(() => {
+    setTab('sentis');
+    setReacts(null);
+    setFollowers(null);
+    setFollowingList(null);
+  }, [userId]);
+
+  const targetId = userId ?? myId;
+
+  // ── Lazy-load tab content the first time each tab is opened ──
+  const loadReacts = useCallback(async (uid) => {
+    setTabBusy(true);
+    const { data, error } = await supabase
+      .from('senti_reactions')
+      .select('reacted_at, sentis(id, question, wave, image_url)')
+      .eq('user_id', uid)
+      .order('reacted_at', { ascending: false })
+      .limit(20);
+    if (error) console.error('loadReacts error', error);
+    setReacts(
+      (data ?? [])
+        .map((r) => r.sentis)
+        .filter(Boolean)
+        .map((s) => ({ id: s.id, question: s.question, wave: s.wave ?? 'Tech', imageUrl: s.image_url ?? null }))
+    );
+    setTabBusy(false);
+  }, []);
+
+  const loadPeople = useCallback(async (uid, direction) => {
+    setTabBusy(true);
+    // followers: rows where following_id = uid → their follower_id
+    // following: rows where follower_id  = uid → their following_id
+    const matchCol  = direction === 'followers' ? 'following_id' : 'follower_id';
+    const pickCol   = direction === 'followers' ? 'follower_id'  : 'following_id';
+    const { data: rows, error } = await supabase.from('follows').select(pickCol).eq(matchCol, uid);
+    if (error) console.error('loadPeople error', error);
+    const ids = (rows ?? []).map((r) => r[pickCol]);
+    let people = [];
+    if (ids.length) {
+      const { data: users } = await supabase
+        .from('users')
+        .select('id, username, display_name, avatar_url')
+        .in('id', ids);
+      people = users ?? [];
+    }
+    if (direction === 'followers') setFollowers(people);
+    else setFollowingList(people);
+    setTabBusy(false);
+  }, []);
+
+  useEffect(() => {
+    if (!targetId) return;
+    if (tab === 'reacts'    && reacts === null)        loadReacts(targetId);
+    if (tab === 'followers' && followers === null)     loadPeople(targetId, 'followers');
+    if (tab === 'following' && followingList === null) loadPeople(targetId, 'following');
+  }, [tab, targetId, reacts, followers, followingList, loadReacts, loadPeople]);
+
   const handleRefresh = async () => {
     setRefreshing(true);
+    setReacts(null);
+    setFollowers(null);
+    setFollowingList(null);
     await fetchProfile();
     setRefreshing(false);
   };
@@ -205,7 +279,7 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti }) {
   if (loading) {
     return (
       <View style={st.screen}>
-        <GridSkeleton columns={2} count={4} />
+        <GridSkeleton columns={3} count={6} />
       </View>
     );
   }
@@ -288,22 +362,26 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti }) {
           <Text style={st.bioText}>{profile.bio}</Text>
         )}
 
-        {/* Stats row — reads from user_stats (not COUNT(*)) */}
+        {/* Stats row — tappable tabs (Sentis / Reacts / Followers / Following) */}
         <View style={st.statsRow}>
           {[
-            { label: 'Sentis',    value: formatCount(stats.sentis_count)    },
-            { label: 'Reacts',    value: formatCount(stats.reacts_count)    },
-            { label: 'Followers', value: formatCount(stats.followers_count) },
-            { label: 'Following', value: formatCount(stats.following_count) },
-          ].map(({ label, value }, i, arr) => (
-            <React.Fragment key={label}>
-              <View style={st.statItem}>
-                <Text style={st.statValue}>{value}</Text>
-                <Text style={st.statLabel}>{label}</Text>
-              </View>
-              {i < arr.length - 1 && <View style={st.statDivider} />}
-            </React.Fragment>
-          ))}
+            { key: 'sentis',    label: 'Sentis',    value: formatCount(stats.sentis_count)    },
+            { key: 'reacts',    label: 'Reacts',    value: formatCount(stats.reacts_count)    },
+            { key: 'followers', label: 'Followers', value: formatCount(stats.followers_count) },
+            { key: 'following', label: 'Following', value: formatCount(stats.following_count) },
+          ].map(({ key, label, value }, i, arr) => {
+            const active = tab === key;
+            return (
+              <React.Fragment key={key}>
+                <TouchableOpacity style={st.statItem} onPress={() => setTab(key)} activeOpacity={0.7}>
+                  <Text style={[st.statValue, active && st.statValueActive]}>{value}</Text>
+                  <Text style={[st.statLabel, active && st.statLabelActive]}>{label}</Text>
+                  <View style={[st.statUnderline, active && st.statUnderlineActive]} />
+                </TouchableOpacity>
+                {i < arr.length - 1 && <View style={st.statDivider} />}
+              </React.Fragment>
+            );
+          })}
         </View>
 
         {/* Citizen DNA — shown when user_wave_stats data is available */}
@@ -326,30 +404,64 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti }) {
           </View>
         )}
 
-        {/* Floated sentis grid — each tile navigates to that senti in Sentarium */}
+        {/* Tab content */}
         <View style={st.gridSection}>
-          <View style={st.gridHeader}>
-            <Text style={st.gridTitle}>Floated sentis</Text>
-            <Text style={st.gridCount}>{sentis.length} total</Text>
-          </View>
-          {sentis.length === 0 ? (
-            <EmptyState
-              icon="🌊"
-              headline="No sentis floated yet"
-              subtext="Your floated sentis will appear here"
-              style={st.gridEmptyState}
-            />
-          ) : (
-            <View style={st.grid}>
-              {sentis.map((item) => (
-                <SentiTile
-                  key={item.id}
-                  senti={item}
-                  width={TILE_W}
-                  onPress={() => onOpenSenti?.(item.id)}   // passes UUID to navigate in Sentarium
-                />
-              ))}
-            </View>
+          {tab === 'sentis' && (
+            sentis.length === 0 ? (
+              <EmptyState icon="🌊" headline="No sentis floated yet"
+                subtext="Your floated sentis will appear here" style={st.gridEmptyState} />
+            ) : (
+              <View style={st.grid}>
+                {sentis.map((item) => (
+                  <SentiTile key={item.id} senti={item} width={TILE_W} onPress={() => onOpenSenti?.(item.id)} />
+                ))}
+              </View>
+            )
+          )}
+
+          {tab === 'reacts' && (
+            reacts === null || tabBusy ? (
+              <View style={st.tabLoader}><ActivityIndicator color={C.accent} /></View>
+            ) : reacts.length === 0 ? (
+              <EmptyState icon="🌊" headline="No reactions yet"
+                subtext="Sentis this citizen reacts to show up here" style={st.gridEmptyState} />
+            ) : (
+              <View style={st.grid}>
+                {reacts.map((item) => (
+                  <SentiTile key={item.id} senti={item} width={TILE_W} onPress={() => onOpenSenti?.(item.id)} />
+                ))}
+              </View>
+            )
+          )}
+
+          {tab === 'followers' && (
+            followers === null || tabBusy ? (
+              <View style={st.tabLoader}><ActivityIndicator color={C.accent} /></View>
+            ) : followers.length === 0 ? (
+              <EmptyState icon="🫂" headline="No followers yet"
+                subtext="When citizens follow, they appear here" style={st.gridEmptyState} />
+            ) : (
+              <View style={st.grid}>
+                {followers.map((p) => (
+                  <PersonTile key={p.id} person={p} width={TILE_W} onPress={onOpenUser ? () => onOpenUser(p.id) : undefined} />
+                ))}
+              </View>
+            )
+          )}
+
+          {tab === 'following' && (
+            followingList === null || tabBusy ? (
+              <View style={st.tabLoader}><ActivityIndicator color={C.accent} /></View>
+            ) : followingList.length === 0 ? (
+              <EmptyState icon="🫂" headline="Not following anyone"
+                subtext="Profiles this citizen follows appear here" style={st.gridEmptyState} />
+            ) : (
+              <View style={st.grid}>
+                {followingList.map((p) => (
+                  <PersonTile key={p.id} person={p} width={TILE_W} onPress={onOpenUser ? () => onOpenUser(p.id) : undefined} />
+                ))}
+              </View>
+            )
           )}
         </View>
 
@@ -498,8 +610,13 @@ const makeStyles = (C) => StyleSheet.create({
   statsRow:    { flexDirection: 'row', paddingHorizontal: ms(16), paddingTop: vs(12) },
   statItem:    { flex: 1, alignItems: 'center', gap: vs(2) },
   statValue:   { fontSize: fs(19), fontWeight: '800', color: C.textPrimary },   // was fs(17) ×1.10
+  statValueActive: { color: C.accent },
   statLabel:   { fontSize: fs(12), fontWeight: '600', color: C.textMuted },     // was fs(11) ×1.10
+  statLabelActive: { color: C.accent },
+  statUnderline:       { marginTop: vs(4), height: vs(2), width: ms(22), borderRadius: ms(2), backgroundColor: 'transparent' },
+  statUnderlineActive: { backgroundColor: C.accent },
   statDivider: { width: 0.5, backgroundColor: C.border, marginHorizontal: ms(4) },
+  tabLoader:   { paddingVertical: vs(36), alignItems: 'center', justifyContent: 'center' },
   dnaSection:  { paddingHorizontal: ms(16), paddingTop: vs(12) },
   dnaSectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: vs(6) },
   dnaSectionTitle:  { fontSize: fs(14), fontWeight: '700', color: C.textPrimary }, // was fs(13) ×1.10

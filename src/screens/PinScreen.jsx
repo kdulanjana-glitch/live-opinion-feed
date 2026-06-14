@@ -19,10 +19,11 @@ import SentiTile from '../components/SentiTile';
 import EmptyState from '../components/EmptyState';
 import { GridSkeleton } from '../components/Skeletons';
 
-// 2-column grid metrics
-const GAP    = ms(10);
+// 3-column grid metrics
+const COLS   = 3;
+const GAP    = ms(8);
 const H_PAD  = ms(14);
-const TILE_W = Math.floor((SCREEN_WIDTH - H_PAD * 2 - GAP) / 2);
+const TILE_W = Math.floor((SCREEN_WIDTH - H_PAD * 2 - GAP * (COLS - 1)) / COLS);
 
 export default function PinScreen({ session, onOpenSenti }) {
   const scheme = useColorScheme();
@@ -126,7 +127,7 @@ export default function PinScreen({ session, onOpenSenti }) {
       </View>
 
       {loading ? (
-        <GridSkeleton columns={2} count={6} paddingHorizontal={H_PAD} gap={GAP} />
+        <GridSkeleton columns={COLS} count={9} paddingHorizontal={H_PAD} gap={GAP} />
       ) : pins.length === 0 ? (
         <EmptyState
           icon="📌"
@@ -138,7 +139,7 @@ export default function PinScreen({ session, onOpenSenti }) {
           data={pins}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
-          numColumns={2}
+          numColumns={COLS}
           columnWrapperStyle={{ gap: GAP }}
           contentContainerStyle={st.list}
           showsVerticalScrollIndicator={false}

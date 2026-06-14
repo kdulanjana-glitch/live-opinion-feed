@@ -116,6 +116,7 @@ export default function Index() {
           userId={userProfileId}
           onBack={() => setUserProfileId(null)}
           onOpenSenti={handleNavigateToFeedOpinion}
+          onOpenUser={handleNavigateToUser}
         />
       );
     }
@@ -165,6 +166,7 @@ export default function Index() {
         return session ? (
           <ProfileScreen
             onOpenSenti={handleNavigateToFeedOpinion}
+            onOpenUser={handleNavigateToUser}
           />
         ) : <AuthScreen />;
 

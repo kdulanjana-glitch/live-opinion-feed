@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "LiveOpinionFeed",
+    "name": "Peolia",
     "slug": "LiveOpinionFeed",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -21,7 +21,7 @@
       "permissions": [
         "android.permission.RECORD_AUDIO"
       ],
-      "package": "com.anonymous.LiveOpinionFeed"
+     "package": "com.peolia.app"
     },
     "web": {
       "output": "static",
@@ -45,6 +45,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": false
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "2758f81b-81a2-46bb-906a-c5b1106f89f3"
+      }
     }
   }
 }

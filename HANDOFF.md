@@ -215,6 +215,12 @@ All in `src/app/index.tsx` via `activeTab` state. Tab keys:
 | Float page polish: senti box ~3 lines / desc ~4 lines; wave pills −15%; media btns −10%; "Wave image"→"Image"; added GIF picker → media row is Image \| GIF \| Track (GIF = no-crop gallery pick, uploads image/gif) | FloatScreen |
 | ActionBar shifted to top (`justifyContent:flex-start`) + compacted (`gap vs(18)→vs(10)`) — stable when results towers appear | ActionBar |
 | GIF uploads: bucket allowed_mime_types += image/gif (**run allow-gif-uploads.sql**). RN Image animates GIFs in Expo Go. | supabase/allow-gif-uploads.sql |
+| Pin + Profile grids → 3-per-row | PinScreen, ProfileScreen |
+| Profile stats are now tabs: Sentis / Reacts (20 recent reacted sentis, desc) / Followers / Following. Followers/Following render PersonTile avatar grids (3-col, tap → that profile via onOpenUser) | ProfileScreen, PersonTile.jsx (new), index.tsx |
+| Fix Follow button: follows RLS (insert/delete/select) + SECURITY DEFINER on follows triggers (**run sprint5 SQL**) | supabase/sprint5-follows-and-private-profile.sql |
+| Edit profile: username + email read-only; new phone/birthday/gender (stored in private user_private table, own-row RLS); in-app change-password (auth.updateUser); sheet now scrollable | EditProfileSheet, user_private table |
+| Followers/Following counts now derived live from follows (count head queries) — user_stats follower counts have no maintaining trigger, so don't read them | ProfileScreen fetchProfile |
+| Feed index for sentarium_feed ordering (run feed-index.sql). Feed slowness is mostly Supabase free-tier latency + SentariumScreen re-mounting/refetching on every tab return | supabase/feed-index.sql |
 
 ---
 

@@ -75,4 +75,4 @@ TABLES:
 public.sentis, public.senti_reactions, public.senti_counts,
 public.senti_likes, public.senti_pins, public.senti_view_locks,
 public.voices, public.follows, public.user_stats,
-public.user_wave_stats, public.users, public.senti_reports
+public.user_wave_stats, public.users, public.senti_reports, public.user_private
