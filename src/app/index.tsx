@@ -369,6 +369,7 @@ export default function Index() {
           <View style={[styles.container, { backgroundColor: bg }]}>
             <WavePickerScreen
               userId={session?.user?.id ?? ''}
+              onBack={() => setOnboardingStep('phone-dob-gender')}
               onDone={() => setOnboardingStep('youre-in')}
             />
           </View>

@@ -34,7 +34,7 @@ const ALL_WAVES = [
 
 const MIN_WAVES = 3;
 
-export default function WavePickerScreen({ onDone, userId }) {
+export default function WavePickerScreen({ onDone, onBack, userId }) {
   const scheme = useColorScheme();
   const C = getPeoliaColors(scheme);
   const st = makeStyles(C);
@@ -52,10 +52,15 @@ export default function WavePickerScreen({ onDone, userId }) {
     if (!canContinue) return;
     setSaving(true);
     try {
+      // Use the LIVE authenticated user so user_id always equals auth.uid()
+      // (the RLS WITH CHECK). A stale/empty userId prop would fail the insert.
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { Alert.alert('Session expired', 'Please sign in again to continue.'); return; }
+
       const { error } = await supabase
         .from('user_wave_stats')
         .upsert(
-          selected.map((wave) => ({ user_id: userId, wave, react_count: 0 })),
+          selected.map((wave) => ({ user_id: user.id, wave, react_count: 0 })),
           { onConflict: 'user_id,wave' }
         );
       if (error) throw error;
@@ -73,6 +78,12 @@ export default function WavePickerScreen({ onDone, userId }) {
       contentContainerStyle={st.content}
       showsVerticalScrollIndicator={false}
     >
+      {onBack && (
+        <TouchableOpacity onPress={onBack} style={st.backBtn} activeOpacity={0.7}>
+          <Text style={st.backText}>← Back</Text>
+        </TouchableOpacity>
+      )}
+
       <Text style={st.step}>Step 3 of 4</Text>
       <Text style={st.title}>Pick your waves</Text>
       <Text style={st.subtitle}>Choose at least 3 topics that interest you.</Text>
@@ -116,6 +127,8 @@ export default function WavePickerScreen({ onDone, userId }) {
 const makeStyles = (C) => StyleSheet.create({
   screen:  { flex: 1, backgroundColor: C.bg },
   content: { paddingHorizontal: ms(24), paddingTop: vs(56), paddingBottom: vs(32) },
+  backBtn:  { marginBottom: vs(10) },
+  backText: { fontSize: fs(13), fontWeight: '600', color: C.textSecondary },
   step:     { fontSize: fs(10), color: C.textMuted },
   title:    { fontSize: fs(22), fontWeight: '800', color: C.textPrimary, marginTop: vs(8) },
   subtitle: { fontSize: fs(12), color: C.textSecondary, marginTop: vs(4) },
