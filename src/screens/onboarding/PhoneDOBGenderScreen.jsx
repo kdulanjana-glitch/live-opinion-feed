@@ -1,0 +1,248 @@
+// ─────────────────────────────────────────────
+// Peolia — Onboarding / PhoneDOBGenderScreen (Step 2 of 4)
+// src/screens/onboarding/PhoneDOBGenderScreen.jsx
+//
+// Country-code + phone, date of birth (day/month/year), gender. Private info.
+//
+// Props: onDone: () => void, userId: string
+// ─────────────────────────────────────────────
+
+import React, { useState } from 'react';
+import {
+  View, Text, TextInput, TouchableOpacity,
+  ScrollView, StyleSheet, useColorScheme,
+  Alert, ActivityIndicator, KeyboardAvoidingView,
+} from 'react-native';
+import { Picker } from '@react-native-picker/picker';
+import CountryPicker from 'react-native-country-picker-modal';
+import { supabase } from '../../lib/supabase';
+import { getPeoliaColors } from '../../constants/peoliaTheme';
+import { fs, ms, vs, s } from '../../utils/peoliaScale';
+
+const MONTHS = [
+  { label: 'Jan', value: '01' }, { label: 'Feb', value: '02' }, { label: 'Mar', value: '03' },
+  { label: 'Apr', value: '04' }, { label: 'May', value: '05' }, { label: 'Jun', value: '06' },
+  { label: 'Jul', value: '07' }, { label: 'Aug', value: '08' }, { label: 'Sep', value: '09' },
+  { label: 'Oct', value: '10' }, { label: 'Nov', value: '11' }, { label: 'Dec', value: '12' },
+];
+const DAYS = Array.from({ length: 31 }, (_, i) => String(i + 1).padStart(2, '0'));
+const CURRENT_YEAR = new Date().getFullYear();
+const YEARS = Array.from({ length: 85 }, (_, i) => String(CURRENT_YEAR - 16 - i)); // newest first, 16→100
+
+const GENDERS = [
+  { label: 'Male',              value: 'male' },
+  { label: 'Female',            value: 'female' },
+  { label: 'Prefer not to say', value: 'prefer_not_to_say' },
+];
+
+export default function PhoneDOBGenderScreen({ onDone, userId }) {
+  const scheme = useColorScheme();
+  const C = getPeoliaColors(scheme);
+  const st = makeStyles(C);
+
+  const [countryCode,   setCountryCode]   = useState('AE');
+  const [callingCode,   setCallingCode]   = useState('971');
+  const [pickerVisible, setPickerVisible] = useState(false);
+  const [phone,         setPhone]         = useState('');
+  const [day,           setDay]           = useState('');
+  const [month,         setMonth]         = useState('');
+  const [year,          setYear]          = useState('');
+  const [gender,        setGender]        = useState('');
+  const [phoneTaken,    setPhoneTaken]    = useState(false);
+  const [saving,        setSaving]        = useState(false);
+
+  const phoneDigits = phone.replace(/\D/g, '');
+  const canContinue =
+    phoneDigits.length > 0 && !!day && !!month && !!year && !!gender && !saving;
+
+  const handleContinue = async () => {
+    if (!canContinue) return;
+
+    // Age check
+    const dob = new Date(Number(year), Number(month) - 1, Number(day));
+    const age = Math.floor((Date.now() - dob.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
+    if (age < 16)  { Alert.alert('Too young', 'You must be at least 16 years old.'); return; }
+    if (age > 100) { Alert.alert('Invalid date', 'Please enter a valid date of birth.'); return; }
+
+    const fullPhone = '+' + callingCode + phoneDigits;
+    setSaving(true);
+    setPhoneTaken(false);
+    try {
+      // Phone uniqueness check
+      const { data: existing, error: checkErr } = await supabase
+        .from('users')
+        .select('id')
+        .eq('phone', fullPhone)
+        .neq('id', userId);
+      if (checkErr) throw checkErr;
+      if ((existing?.length ?? 0) > 0) { setPhoneTaken(true); return; }
+
+      const { error } = await supabase
+        .from('users')
+        .update({
+          phone:         fullPhone,
+          date_of_birth: `${year}-${month}-${day}`,
+          gender,
+        })
+        .eq('id', userId);
+      if (error) {
+        if (error.code === '23505') { setPhoneTaken(true); return; }
+        throw error;
+      }
+      onDone?.();
+    } catch (err) {
+      Alert.alert('Could not save', err.message ?? 'Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <KeyboardAvoidingView style={st.screen} behavior="height">
+      <ScrollView
+        contentContainerStyle={st.content}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        <Text style={st.step}>Step 2 of 4</Text>
+        <Text style={st.title}>A bit about you</Text>
+        <Text style={st.subtitle}>Private info — never shown to other citizens.</Text>
+
+        {/* Phone */}
+        <Text style={st.label}>Phone Number</Text>
+        <View style={st.phoneRow}>
+          <TouchableOpacity style={st.countryBox} onPress={() => setPickerVisible(true)} activeOpacity={0.7}>
+            <CountryPicker
+              countryCode={countryCode}
+              withFlag
+              withFilter
+              withAlphaFilter
+              withCallingCode
+              visible={pickerVisible}
+              onClose={() => setPickerVisible(false)}
+              onSelect={(country) => {
+                setCountryCode(country.cca2);
+                setCallingCode(country.callingCode?.[0] ?? '');
+                setPickerVisible(false);
+              }}
+            />
+            <Text style={st.callingCode}>+{callingCode}</Text>
+          </TouchableOpacity>
+          <TextInput
+            style={st.phoneInput}
+            value={phone}
+            onChangeText={(t) => { setPhone(t); setPhoneTaken(false); }}
+            placeholder="501234567"
+            placeholderTextColor={C.textMuted}
+            keyboardType="phone-pad"
+          />
+        </View>
+        {phoneTaken && (
+          <Text style={st.errorText}>This number is already registered to another account.</Text>
+        )}
+
+        {/* Date of birth */}
+        <Text style={[st.label, st.labelSpaced]}>Date of Birth</Text>
+        <Text style={st.helper}>You must be at least 16 years old.</Text>
+        <View style={st.dobRow}>
+          <View style={st.pickerBox}>
+            <Picker selectedValue={day} onValueChange={setDay} style={st.picker} dropdownIconColor={C.textMuted}>
+              <Picker.Item label="Day" value="" color={C.textMuted} />
+              {DAYS.map((d) => <Picker.Item key={d} label={d} value={d} color={C.textPrimary} />)}
+            </Picker>
+          </View>
+          <View style={st.pickerBox}>
+            <Picker selectedValue={month} onValueChange={setMonth} style={st.picker} dropdownIconColor={C.textMuted}>
+              <Picker.Item label="Month" value="" color={C.textMuted} />
+              {MONTHS.map((m) => <Picker.Item key={m.value} label={m.label} value={m.value} color={C.textPrimary} />)}
+            </Picker>
+          </View>
+          <View style={st.pickerBox}>
+            <Picker selectedValue={year} onValueChange={setYear} style={st.picker} dropdownIconColor={C.textMuted}>
+              <Picker.Item label="Year" value="" color={C.textMuted} />
+              {YEARS.map((y) => <Picker.Item key={y} label={y} value={y} color={C.textPrimary} />)}
+            </Picker>
+          </View>
+        </View>
+
+        {/* Gender */}
+        <Text style={[st.label, st.labelSpaced]}>Gender</Text>
+        <View style={st.genderRow}>
+          {GENDERS.map((g) => {
+            const active = gender === g.value;
+            return (
+              <TouchableOpacity
+                key={g.value}
+                style={[st.genderPill, active ? st.genderPillActive : st.genderPillInactive]}
+                onPress={() => setGender(g.value)}
+                activeOpacity={0.8}
+              >
+                <Text style={[st.genderText, active ? st.genderTextActive : st.genderTextInactive]}>
+                  {g.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        {/* Continue */}
+        <TouchableOpacity
+          style={[st.continueBtn, !canContinue && st.continueDisabled]}
+          onPress={handleContinue}
+          disabled={!canContinue}
+          activeOpacity={0.85}
+        >
+          {saving
+            ? <ActivityIndicator color="#FFFFFF" size="small" />
+            : <Text style={st.continueText}>Continue</Text>}
+        </TouchableOpacity>
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
+}
+
+const makeStyles = (C) => StyleSheet.create({
+  screen:  { flex: 1, backgroundColor: C.bg },
+  content: { paddingHorizontal: ms(24), paddingTop: vs(56), paddingBottom: vs(32) },
+  step:     { fontSize: fs(10), color: C.textMuted },
+  title:    { fontSize: fs(22), fontWeight: '800', color: C.textPrimary, marginTop: vs(8) },
+  subtitle: { fontSize: fs(12), color: C.textSecondary, marginTop: vs(4) },
+  label:       { fontSize: fs(10), fontWeight: '700', color: C.textSecondary, marginTop: vs(20), marginBottom: vs(6) },
+  labelSpaced: { marginTop: vs(24) },
+  helper:   { fontSize: fs(9), color: C.textMuted, marginTop: vs(-2), marginBottom: vs(6) },
+  phoneRow: { flexDirection: 'row', gap: ms(8), alignItems: 'center' },
+  countryBox: {
+    flexDirection: 'row', alignItems: 'center', gap: ms(4),
+    backgroundColor: C.surface, borderWidth: 1, borderColor: C.border,
+    borderRadius: s(10), paddingHorizontal: ms(10), paddingVertical: vs(9),
+  },
+  callingCode: { fontSize: fs(13), fontWeight: '600', color: C.textPrimary },
+  phoneInput: {
+    flex: 1, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border,
+    borderRadius: s(10), paddingHorizontal: ms(12), paddingVertical: vs(11),
+    fontSize: fs(13), color: C.textPrimary,
+  },
+  errorText: { fontSize: fs(9), fontWeight: '600', color: C.nahChosen, marginTop: vs(5) },
+  dobRow: { flexDirection: 'row', gap: ms(8) },
+  pickerBox: {
+    flex: 1, borderWidth: 1, borderColor: C.border, borderRadius: s(10),
+    backgroundColor: C.surface, overflow: 'hidden',
+  },
+  picker: { color: C.textPrimary },
+  genderRow: { flexDirection: 'row', gap: ms(8) },
+  genderPill: {
+    flex: 1, paddingVertical: vs(10), paddingHorizontal: ms(12),
+    borderRadius: s(20), alignItems: 'center',
+  },
+  genderPillActive:   { backgroundColor: C.accent },
+  genderPillInactive: { backgroundColor: C.surfaceAlt, borderWidth: 0.5, borderColor: C.border },
+  genderText:         { fontSize: fs(11), fontWeight: '700' },
+  genderTextActive:   { color: '#FFFFFF' },
+  genderTextInactive: { color: C.textSecondary },
+  continueBtn: {
+    backgroundColor: C.accent, paddingVertical: vs(14), borderRadius: s(30),
+    alignItems: 'center', marginTop: vs(28),
+  },
+  continueDisabled: { opacity: 0.5 },
+  continueText: { fontSize: fs(13), fontWeight: '800', color: '#FFFFFF' },
+});

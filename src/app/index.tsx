@@ -20,6 +20,13 @@ import FloatScreen     from '../screens/FloatScreen';
 import PinScreen      from '../screens/PinScreen';         // Pin tab
 import ProfileScreen   from '../screens/ProfileScreen';    // own + other citizen
 
+import SplashScreen         from '../screens/onboarding/SplashScreen';
+import WalkthroughScreen    from '../screens/onboarding/WalkthroughScreen';
+import UsernameDisplayNameScreen from '../screens/onboarding/UsernameDisplayNameScreen';
+import PhoneDOBGenderScreen from '../screens/onboarding/PhoneDOBGenderScreen';
+import WavePickerScreen     from '../screens/onboarding/WavePickerScreen';
+import YoureInScreen        from '../screens/onboarding/YoureInScreen';
+
 // Tab keys used by TabBar: 'trending' | 'float' | 'sentarium' | 'pin' | 'profile'
 // Hidden keys (not in TabBar): 'auth' | 'reset-password'
 
@@ -34,6 +41,11 @@ export default function Index() {
   const [userProfileId, setUserProfileId] = useState<string | null>(null);
   const [feedScrollToId, setFeedScrollToId] = useState<string | null>(null);
   const [isGuest, setIsGuest] = useState(false);
+  const [onboardingStep, setOnboardingStep] = useState<
+    'splash' | 'walkthrough' | 'auth' |
+    'username' | 'phone-dob-gender' | 'wave-picker' | 'youre-in' | 'complete'
+  >('splash');
+  const [onboardingChecked, setOnboardingChecked] = useState(false);
 
   // Refs so onAuthStateChange callback never captures stale state
   const activeTabRef = useRef('sentarium');
@@ -44,10 +56,35 @@ export default function Index() {
     setActiveTab(tab);
   };
 
+  const checkOnboarding = async (userId: string) => {
+    try {
+      const { data } = await supabase
+        .from('users')
+        .select('onboarding_completed')
+        .eq('id', userId)
+        .single();
+      if (data?.onboarding_completed) {
+        setOnboardingStep('complete');
+      } else {
+        setOnboardingStep('username');
+      }
+    } catch {
+      setOnboardingStep('username');
+    } finally {
+      setOnboardingChecked(true);
+    }
+  };
+
   // ── Auth bootstrap ────────────────────────────
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
+      if (session?.user?.id) {
+        checkOnboarding(session.user.id);
+      } else {
+        setOnboardingStep('splash');
+        setOnboardingChecked(true);
+      }
       setLoading(false);
     });
 
@@ -56,6 +93,9 @@ export default function Index() {
         if (event === 'SIGNED_IN') {
           setSession(session);
           setIsGuest(false);
+          if (session?.user?.id) {
+            checkOnboarding(session.user.id);
+          }
           if (activeTabRef.current === 'auth') {
             goToTab(prevTabRef.current || 'sentarium');
           }
@@ -269,6 +309,83 @@ export default function Index() {
 
   const feedActive = !userProfileId && activeTab === 'sentarium';
   const overlay    = renderOverlay();
+
+  // Show onboarding screens when not yet complete
+  const isOnboarding = !isGuest && (
+    !session ||
+    (session && onboardingChecked && onboardingStep !== 'complete')
+  );
+
+  if (isOnboarding) {
+    switch (onboardingStep) {
+      case 'splash':
+        return (
+          <View style={[styles.container, { backgroundColor: bg }]}>
+            <SplashScreen onDone={() => setOnboardingStep('walkthrough')} />
+          </View>
+        );
+      case 'walkthrough':
+        return (
+          <View style={[styles.container, { backgroundColor: bg }]}>
+            <WalkthroughScreen onDone={() => setOnboardingStep('auth')} />
+          </View>
+        );
+      case 'auth':
+        return (
+          <View style={[styles.container, { backgroundColor: bg }]}>
+            <AuthScreen
+              onAuth={(s) => {
+                setSession(s);
+                setIsGuest(false);
+                if (s?.user?.id) checkOnboarding(s.user.id);
+              }}
+              onGuest={() => {
+                setIsGuest(true);
+                setOnboardingStep('complete');
+              }}
+            />
+          </View>
+        );
+      case 'username':
+        return (
+          <View style={[styles.container, { backgroundColor: bg }]}>
+            <UsernameDisplayNameScreen
+              userId={session?.user?.id ?? ''}
+              onDone={() => setOnboardingStep('phone-dob-gender')}
+            />
+          </View>
+        );
+      case 'phone-dob-gender':
+        return (
+          <View style={[styles.container, { backgroundColor: bg }]}>
+            <PhoneDOBGenderScreen
+              userId={session?.user?.id ?? ''}
+              onDone={() => setOnboardingStep('wave-picker')}
+            />
+          </View>
+        );
+      case 'wave-picker':
+        return (
+          <View style={[styles.container, { backgroundColor: bg }]}>
+            <WavePickerScreen
+              userId={session?.user?.id ?? ''}
+              onDone={() => setOnboardingStep('youre-in')}
+            />
+          </View>
+        );
+      case 'youre-in':
+        return (
+          <View style={[styles.container, { backgroundColor: bg }]}>
+            <YoureInScreen
+              userId={session?.user?.id ?? ''}
+              onDone={() => setOnboardingStep('complete')}
+            />
+          </View>
+        );
+      default:
+        return null;
+    }
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: bg }]}>

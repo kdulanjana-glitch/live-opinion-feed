@@ -31,7 +31,6 @@ export default function AuthScreen({ onAuth, onGuest }) {
   const [email,           setEmail]           = useState('');
   const [password,        setPassword]        = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [phone, setPhone] = useState('');
   const [loading,         setLoading]         = useState(false);
   const [verifyNotice,    setVerifyNotice]    = useState(false);
 
@@ -39,7 +38,6 @@ export default function AuthScreen({ onAuth, onGuest }) {
     setEmail('');
     setPassword('');
     setConfirmPassword('');
-    setPhone('');
   };
 
   const switchTab = (t) => {
@@ -53,10 +51,6 @@ export default function AuthScreen({ onAuth, onGuest }) {
       Alert.alert('Missing fields', 'Please enter your email and password.');
       return;
     }
-    if (!phone.trim()) {
-      Alert.alert('Phone required', 'Please enter your phone number.');
-      return;
-    }
     if (password !== confirmPassword) {
       Alert.alert("Passwords don't match", 'Make sure both passwords are the same.');
       return;
@@ -68,35 +62,11 @@ export default function AuthScreen({ onAuth, onGuest }) {
 
     setLoading(true);
     try {
-      // Step 1 — create auth user
-      const { data, error } = await supabase.auth.signUp({
+      const { error } = await supabase.auth.signUp({
         email: email.trim().toLowerCase(),
         password,
       });
       if (error) throw error;
-
-      // Step 2 — save phone to public.users
-      // Trigger already created the row — we just update it
-      if (data?.user?.id) {
-        const { error: phoneError } = await supabase
-          .from('users')
-          .update({ phone: phone.trim() })
-          .eq('id', data.user.id);
-
-        if (phoneError) {
-          // Unique constraint violation — phone already in use
-          if (phoneError.code === '23505') {
-            Alert.alert(
-              'Phone already registered',
-              'This phone number is already linked to another account.'
-            );
-            // Clean up the created auth user so they can try again
-            await supabase.auth.signOut();
-            return;
-          }
-          throw phoneError;
-        }
-      }
 
       setVerifyNotice(true);
       switchTab('login');
@@ -236,18 +206,6 @@ export default function AuthScreen({ onAuth, onGuest }) {
               onChangeText={setConfirmPassword}
               secureTextEntry
               autoCapitalize="none"
-            />
-          )}
-          {tab === 'signup' && (
-            <TextInput
-              style={[styles.input, { backgroundColor: C.surface, borderColor: C.border, color: C.textPrimary }]}
-              placeholder="Phone number (e.g. +971501234567)"
-              placeholderTextColor={C.textMuted}
-              value={phone}
-              onChangeText={setPhone}
-              keyboardType="phone-pad"
-              autoCapitalize="none"
-              autoCorrect={false}
             />
           )}
 
