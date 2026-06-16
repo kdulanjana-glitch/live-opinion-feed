@@ -110,19 +110,12 @@ export default function AuthScreen({ onAuth, onGuest }) {
       });
       if (error) throw error;
       if (data?.url) {
-        // Open an in-app auth session and capture the redirect URL directly — no
-        // dependence on the OS deep link or the Supabase Site URL fallback.
-        const res = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
-        if (res.type === 'success' && res.url) {
-          const { queryParams } = Linking.parse(res.url);
-          const code = queryParams?.code;
-          if (code) {
-            // PKCE: exchange the returned code for a session. onAuthStateChange
-            // (SIGNED_IN) in index.tsx then picks it up.
-            const { error: exErr } = await supabase.auth.exchangeCodeForSession(String(code));
-            if (exErr) throw exErr;
-          }
-        }
+        // Open the auth session. The actual code exchange is handled
+        // globally in _layout.tsx's Linking listener — we just need to
+        // open the browser and let it redirect back into the app.
+        await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+        // onAuthStateChange (SIGNED_IN) in index.tsx fires once
+        // _layout.tsx finishes exchanging the code for a session.
       }
     } catch (err) {
       Alert.alert('Google sign in failed', err.message ?? 'Please try again.');

@@ -102,6 +102,8 @@ export default function Index() {
         }
         if (event === 'SIGNED_OUT') {
           setSession(null);
+          setIsGuest(false);
+          setOnboardingStep('auth');
           goToTab('sentarium');
           setUserProfileId(null);
         }
