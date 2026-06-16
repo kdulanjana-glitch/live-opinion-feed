@@ -5,6 +5,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import ErrorBoundary from '../components/ErrorBoundary';
 import { supabase } from '../lib/supabase';
 
+const processedCodes = new Set<string>();
+
 export default function Layout() {
   useEffect(() => {
     // Handle deep-link auth callbacks (password reset, magic link, etc.)
@@ -15,9 +17,10 @@ export default function Layout() {
         const { queryParams } = Linking.parse(url);
         const code = queryParams?.code as string | undefined;
         if (code) {
+          if (processedCodes.has(code)) return; // already handled — skip
+          processedCodes.add(code);
           const { error } = await supabase.auth.exchangeCodeForSession(code);
           if (error) console.warn('Deep link code exchange failed:', error.message);
-          // onAuthStateChange in index.tsx fires automatically after this
         }
       } catch (e) {
         console.warn('Deep link parse error:', e);
