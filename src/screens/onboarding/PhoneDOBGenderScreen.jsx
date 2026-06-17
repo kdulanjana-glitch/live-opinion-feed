@@ -55,7 +55,7 @@ export default function PhoneDOBGenderScreen({ onDone, userId }) {
   const canContinue =
     phoneDigits.length > 0 && !!day && !!month && !!year && !!gender && !saving;
 
-  const handleContinue = async () => {
+  const handleContinue = () => {
     if (!canContinue) return;
 
     // Age check
@@ -64,6 +64,18 @@ export default function PhoneDOBGenderScreen({ onDone, userId }) {
     if (age < 16)  { Alert.alert('Too young', 'You must be at least 16 years old.'); return; }
     if (age > 100) { Alert.alert('Invalid date', 'Please enter a valid date of birth.'); return; }
 
+    // Date of birth is permanent — confirm before saving.
+    Alert.alert(
+      'Confirm your date of birth',
+      "Your date of birth can't be changed later. Is it correct?",
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Confirm', onPress: saveDetails },
+      ]
+    );
+  };
+
+  const saveDetails = async () => {
     const fullPhone = '+' + callingCode + phoneDigits;
     setSaving(true);
     setPhoneTaken(false);
@@ -164,6 +176,7 @@ export default function PhoneDOBGenderScreen({ onDone, userId }) {
             </Picker>
           </View>
         </View>
+        <Text style={st.permanentNote}>⚠️ Your date of birth is permanent — it can't be changed later.</Text>
 
         {/* Gender */}
         <Text style={[st.label, st.labelSpaced]}>Gender</Text>
@@ -210,6 +223,7 @@ const makeStyles = (C) => StyleSheet.create({
   label:       { fontSize: fs(10), fontWeight: '700', color: C.textSecondary, marginTop: vs(20), marginBottom: vs(6) },
   labelSpaced: { marginTop: vs(24) },
   helper:   { fontSize: fs(9), color: C.textMuted, marginTop: vs(-2), marginBottom: vs(6) },
+  permanentNote: { fontSize: fs(9), fontWeight: '600', color: C.nahChosen, marginTop: vs(6) },
   phoneRow: { flexDirection: 'row', gap: ms(8), alignItems: 'center' },
   countryBox: {
     flexDirection: 'row', alignItems: 'center', gap: ms(4),

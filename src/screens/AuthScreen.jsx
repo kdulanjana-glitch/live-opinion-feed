@@ -18,9 +18,14 @@ import {
 } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
+import CountryPicker from 'react-native-country-picker-modal';
 import { supabase } from '../lib/supabase';
 import { getPeoliaColors } from '../constants/peoliaTheme';
 import { fs, ms, vs, s } from '../utils/peoliaScale';
+
+// MUST match the phone-signup Edge Function transform EXACTLY: digits only + domain.
+const phoneToSyntheticEmail = (e164Phone) =>
+  `${e164Phone.replace(/[^0-9]/g, '')}@phone.peolia.invalid`;
 
 export default function AuthScreen({ onAuth, onGuest }) {
   const scheme = useColorScheme();
@@ -28,9 +33,14 @@ export default function AuthScreen({ onAuth, onGuest }) {
   const styles = makeStyles(C);
 
   const [tab,             setTab]             = useState('login');
+  const [method,          setMethod]          = useState('email');  // 'email' | 'phone' — shared by both tabs
   const [email,           setEmail]           = useState('');
   const [password,        setPassword]        = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [countryCode,     setCountryCode]     = useState('AE');
+  const [callingCode,     setCallingCode]     = useState('971');
+  const [pickerVisible,   setPickerVisible]   = useState(false);
+  const [phone,           setPhone]           = useState('');
   const [loading,         setLoading]         = useState(false);
   const [verifyNotice,    setVerifyNotice]    = useState(false);
 
@@ -38,6 +48,7 @@ export default function AuthScreen({ onAuth, onGuest }) {
     setEmail('');
     setPassword('');
     setConfirmPassword('');
+    setPhone('');
   };
 
   const switchTab = (t) => {
@@ -47,8 +58,8 @@ export default function AuthScreen({ onAuth, onGuest }) {
 
   // ── Sign Up ────────────────────────────────
   const handleSignUp = async () => {
-    if (!email.trim() || !password) {
-      Alert.alert('Missing fields', 'Please enter your email and password.');
+    if (!password) {
+      Alert.alert('Missing fields', 'Please enter a password.');
       return;
     }
     if (password !== confirmPassword) {
@@ -62,6 +73,32 @@ export default function AuthScreen({ onAuth, onGuest }) {
 
     setLoading(true);
     try {
+      if (method === 'phone') {
+        const phoneDigits = phone.replace(/\D/g, '');
+        if (phoneDigits.length < 6) { Alert.alert('Missing phone', 'Please enter your phone number.'); return; }
+        const fullPhone = '+' + callingCode + phoneDigits;
+
+        // Create the account via the phone-signup Edge Function (admin createUser
+        // with a synthetic email). Returns a readable error message on failure.
+        const { data, error } = await supabase.functions.invoke('phone-signup', {
+          body: { phone: fullPhone, password },
+        });
+        if (error || data?.error) {
+          Alert.alert('Sign up failed', data?.error ?? error?.message ?? 'Please try again.');
+          return;
+        }
+
+        // No email verification for phone — sign in immediately.
+        const syntheticEmail = phoneToSyntheticEmail(fullPhone);
+        const { data: signInData, error: signInError } =
+          await supabase.auth.signInWithPassword({ email: syntheticEmail, password });
+        if (signInError) throw signInError;
+        onAuth?.(signInData.session);   // same contract as the email log-in path
+        return;
+      }
+
+      // Email path
+      if (!email.trim()) { Alert.alert('Missing fields', 'Please enter your email.'); return; }
       const { error } = await supabase.auth.signUp({
         email: email.trim().toLowerCase(),
         password,
@@ -79,20 +116,28 @@ export default function AuthScreen({ onAuth, onGuest }) {
 
   // ── Log In ─────────────────────────────────
   const handleLogIn = async () => {
-    if (!email.trim() || !password) {
-      Alert.alert('Missing fields', 'Please enter your email and password.');
+    if (!password) {
+      Alert.alert('Missing fields', 'Please enter your password.');
       return;
+    }
+
+    let signInEmail;
+    if (method === 'phone') {
+      const phoneDigits = phone.replace(/\D/g, '');
+      if (phoneDigits.length < 6) { Alert.alert('Missing phone', 'Please enter your phone number.'); return; }
+      signInEmail = phoneToSyntheticEmail('+' + callingCode + phoneDigits);
+    } else {
+      if (!email.trim()) { Alert.alert('Missing fields', 'Please enter your email and password.'); return; }
+      signInEmail = email.trim().toLowerCase();
     }
 
     setLoading(true);
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: email.trim().toLowerCase(),
-        password,
-      });
+      const { data, error } = await supabase.auth.signInWithPassword({ email: signInEmail, password });
       if (error) throw error;
       onAuth?.(data.session);
     } catch (err) {
+      // Generic message — don't reveal whether the phone/email exists.
       Alert.alert('Log in failed', err.message ?? 'Please check your credentials.');
     } finally {
       setLoading(false);
@@ -160,6 +205,25 @@ export default function AuthScreen({ onAuth, onGuest }) {
           })}
         </View>
 
+        {/* ── Method toggle (Email / Phone) — shared by both tabs ── */}
+        <View style={styles.methodToggle}>
+          {['email', 'phone'].map((m) => {
+            const active = method === m;
+            return (
+              <TouchableOpacity
+                key={m}
+                style={[styles.methodBtn, active && { backgroundColor: C.surfaceAlt, borderColor: C.border }]}
+                onPress={() => setMethod(m)}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.methodText, { color: active ? C.textPrimary : C.textMuted }]}>
+                  {m === 'email' ? 'Email' : 'Phone'}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
         {/* ── Verification notice (after sign up) ── */}
         {verifyNotice && tab === 'login' && (
           <View style={[styles.notice, { backgroundColor: C.accentLight, borderColor: C.accentMid }]}>
@@ -171,16 +235,52 @@ export default function AuthScreen({ onAuth, onGuest }) {
 
         {/* ── Form ── */}
         <View style={styles.form}>
-          <TextInput
-            style={[styles.input, { backgroundColor: C.surface, borderColor: C.border, color: C.textPrimary }]}
-            placeholder="Email"
-            placeholderTextColor={C.textMuted}
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
+          {method === 'email' ? (
+            <TextInput
+              style={[styles.input, { backgroundColor: C.surface, borderColor: C.border, color: C.textPrimary }]}
+              placeholder="Email"
+              placeholderTextColor={C.textMuted}
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+          ) : (
+            <View style={styles.phoneRow}>
+              <TouchableOpacity
+                style={[styles.countryBox, { backgroundColor: C.surface, borderColor: C.border }]}
+                onPress={() => setPickerVisible(true)}
+                activeOpacity={0.7}
+              >
+                <CountryPicker
+                  countryCode={countryCode}
+                  withFlag
+                  withFilter
+                  withAlphaFilter
+                  withCallingCode
+                  visible={pickerVisible}
+                  onClose={() => setPickerVisible(false)}
+                  onSelect={(country) => {
+                    setCountryCode(country.cca2);
+                    setCallingCode(country.callingCode?.[0] ?? '');
+                    setPickerVisible(false);
+                  }}
+                />
+                <Text style={[styles.callingCode, { color: C.textPrimary }]}>+{callingCode}</Text>
+              </TouchableOpacity>
+              <TextInput
+                style={[styles.input, styles.phoneInput, { backgroundColor: C.surface, borderColor: C.border, color: C.textPrimary }]}
+                placeholder="501234567"
+                placeholderTextColor={C.textMuted}
+                value={phone}
+                onChangeText={setPhone}
+                keyboardType="phone-pad"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+            </View>
+          )}
           <TextInput
             style={[styles.input, { backgroundColor: C.surface, borderColor: C.border, color: C.textPrimary }]}
             placeholder="Password"
@@ -318,6 +418,43 @@ const makeStyles = (C) => StyleSheet.create({
     paddingHorizontal: ms(14),
     paddingVertical: vs(12),
     fontSize: fs(13),
+  },
+  methodToggle: {
+    flexDirection: 'row',
+    alignSelf: 'center',
+    gap: ms(6),
+    marginBottom: vs(14),
+  },
+  methodBtn: {
+    paddingVertical: vs(6),
+    paddingHorizontal: ms(18),
+    borderRadius: s(20),
+    borderWidth: 0.5,
+    borderColor: 'transparent',
+  },
+  methodText: {
+    fontSize: fs(11),
+    fontWeight: '700',
+  },
+  phoneRow: {
+    flexDirection: 'row',
+    gap: ms(8),
+  },
+  countryBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: ms(4),
+    borderWidth: 1,
+    borderRadius: s(12),
+    paddingHorizontal: ms(12),
+  },
+  callingCode: {
+    fontSize: fs(13),
+    fontWeight: '600',
+  },
+  phoneInput: {
+    flex: 1,
   },
   primaryBtn: {
     borderRadius: s(30),

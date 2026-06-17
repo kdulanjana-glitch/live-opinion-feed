@@ -111,6 +111,7 @@ export default function UsernameDisplayNameScreen({ onDone, userId }) {
       {!!statusMeta && (
         <Text style={[st.status, { color: statusMeta.color }]}>{statusMeta.text}</Text>
       )}
+      <Text style={st.cooldownNote}>You can change this later, but only once every 14 days.</Text>
 
       {/* Display name */}
       <Text style={[st.label, st.labelSpaced]}>Display Name</Text>
@@ -161,6 +162,7 @@ const makeStyles = (C) => StyleSheet.create({
     borderRadius: s(10), paddingHorizontal: ms(12),
   },
   status:   { fontSize: fs(9), fontWeight: '600', marginTop: vs(5) },
+  cooldownNote: { fontSize: fs(9), color: C.textMuted, marginTop: vs(5) },
   charCount: { fontSize: fs(8), color: C.textMuted, textAlign: 'right', marginTop: vs(4) },
   continueBtn: {
     backgroundColor: C.accent, paddingVertical: vs(14), borderRadius: s(30),

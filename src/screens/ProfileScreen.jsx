@@ -15,7 +15,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import EditProfileSheet from '../components/EditProfileSheet';
 import {
-  View, Text, TextInput, ScrollView, TouchableOpacity,
+  View, Text, ScrollView, TouchableOpacity,
   StyleSheet, useColorScheme,
   ActivityIndicator, Dimensions, StatusBar, Platform,
   RefreshControl, Image, Modal, Alert,
@@ -64,8 +64,6 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser 
 
   const [profile,    setProfile]    = useState(null);
   const [sentis,     setSentis]     = useState([]);
-  const [phone,        setPhone]        = useState('');
-  const [savingPhone,  setSavingPhone]  = useState(false);
   const [loading,    setLoading]    = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [following,  setFollowing]  = useState(false);
@@ -99,7 +97,7 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser 
       // Run all queries in parallel
       const [userRes, sentisRes, dnaRes, floatedRes, userStatsRes, followRes, followersRes, followingRes] = await Promise.all([
         // Basic user info
-        supabase.from('users').select('id, username, display_name, bio, avatar_url, phone').eq('id', targetId).single(),
+        supabase.from('users').select('id, username, display_name, bio, avatar_url').eq('id', targetId).single(),
 
         // Sentis count — derived directly from sentis table (always accurate)
         supabase
@@ -166,8 +164,6 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser 
         },
         dna: dnaRes.data ?? [],
       });
-
-      if (userRes.data?.phone) setPhone(userRes.data.phone ?? '');
 
       setSentis((floatedRes.data ?? []).map((s) => ({
         id:       s.id,
@@ -287,39 +283,6 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser 
     }
   }, [myId, userId, following]);
 
-  const handleSavePhone = async () => {
-    if (!phone.trim()) {
-      Alert.alert('Phone required', 'Please enter a phone number.');
-      return;
-    }
-    setSavingPhone(true);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const { error } = await supabase
-        .from('users')
-        .update({ phone: phone.trim() })
-        .eq('id', user.id);
-
-      if (error) {
-        if (error.code === '23505') {
-          Alert.alert(
-            'Phone already in use',
-            'This phone number is linked to another account.'
-          );
-          return;
-        }
-        throw error;
-      }
-      Alert.alert('Saved', 'Your phone number has been updated.');
-    } catch (err) {
-      Alert.alert('Error', err.message ?? 'Could not save phone number.');
-    } finally {
-      setSavingPhone(false);
-    }
-  };
-
   if (loading) {
     return (
       <View style={st.screen}>
@@ -411,46 +374,14 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser 
           <Text style={st.bioText}>{profile.bio}</Text>
         )}
 
-        {isOwnProfile && (
-          <View style={st.phoneSection}>
-            <Text style={st.phoneSectionTitle}>Phone Number</Text>
-            <Text style={st.phoneSectionSub}>
-              Used to keep your account secure. Never shown publicly.
-            </Text>
-            <View style={st.phoneRow}>
-              <TextInput
-                style={[st.phoneInput, { backgroundColor: C.surface, borderColor: C.border, color: C.textPrimary }]}
-                placeholder="+971501234567"
-                placeholderTextColor={C.textMuted}
-                value={phone}
-                onChangeText={setPhone}
-                keyboardType="phone-pad"
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-              <TouchableOpacity
-                style={[st.phoneSaveBtn, { backgroundColor: C.accent }, savingPhone && { opacity: 0.6 }]}
-                onPress={handleSavePhone}
-                disabled={savingPhone}
-                activeOpacity={0.8}
-              >
-                {savingPhone ? (
-                  <ActivityIndicator color="#FFFFFF" size="small" />
-                ) : (
-                  <Text style={st.phoneSaveBtnText}>Save</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
-
-        {/* Stats row — tappable tabs (Sentis / Reacts / Followers / Following) */}
+        {/* Stats row — tappable tabs (Sentis / Reacts / Followers / Following / About) */}
         <View style={st.statsRow}>
           {[
             { key: 'sentis',    label: 'Sentis',    value: formatCount(stats.sentis_count)    },
             { key: 'reacts',    label: 'Reacts',    value: formatCount(stats.reacts_count)    },
             { key: 'followers', label: 'Followers', value: formatCount(stats.followers_count) },
             { key: 'following', label: 'Following', value: formatCount(stats.following_count) },
+            { key: 'about',     label: 'About',     value: '🧬' },
           ].map(({ key, label, value }, i, arr) => {
             const active = tab === key;
             return (
@@ -465,26 +396,6 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser 
             );
           })}
         </View>
-
-        {/* Citizen DNA — shown when user_wave_stats data is available */}
-        {profile?.dna?.length > 0 && (
-          <View style={st.dnaSection}>
-            <View style={st.dnaSectionHeader}>
-              <Text style={st.dnaSectionTitle}>Citizen DNA</Text>
-              <View style={st.dnaPrivacyRow}>
-                <Text style={st.dnaPrivacyIcon}>{isOwnProfile ? '🔒' : '🌍'}</Text>
-                <Text style={st.dnaPrivacyText}>{isOwnProfile ? 'Only you' : 'Public'}</Text>
-              </View>
-            </View>
-            <View style={[st.dnaChart, { backgroundColor: C.surface, borderColor: C.border }]}>
-              <CitizenDNAChart
-                data={profile.dna}
-                color={isOwnProfile ? C.accent : '#059669'}
-                gridColor={C.border}
-              />
-            </View>
-          </View>
-        )}
 
         {/* Tab content */}
         <View style={st.gridSection}>
@@ -543,6 +454,30 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser 
                   <PersonTile key={p.id} person={p} width={TILE_W} onPress={onOpenUser ? () => onOpenUser(p.id) : undefined} />
                 ))}
               </View>
+            )
+          )}
+
+          {tab === 'about' && (
+            profile?.dna?.length > 0 ? (
+              <>
+                <View style={st.dnaSectionHeader}>
+                  <Text style={st.dnaSectionTitle}>Citizen DNA</Text>
+                  <View style={st.dnaPrivacyRow}>
+                    <Text style={st.dnaPrivacyIcon}>{isOwnProfile ? '🔒' : '🌍'}</Text>
+                    <Text style={st.dnaPrivacyText}>{isOwnProfile ? 'Only you' : 'Public'}</Text>
+                  </View>
+                </View>
+                <View style={[st.dnaChart, { backgroundColor: C.surface, borderColor: C.border }]}>
+                  <CitizenDNAChart
+                    data={profile.dna}
+                    color={isOwnProfile ? C.accent : '#059669'}
+                    gridColor={C.border}
+                  />
+                </View>
+              </>
+            ) : (
+              <EmptyState icon="🧬" headline="No Citizen DNA yet"
+                subtext="React to sentis to build your DNA profile" style={st.gridEmptyState} />
             )
           )}
         </View>
@@ -695,47 +630,6 @@ const makeStyles = (C) => StyleSheet.create({
   bioText: {
     fontSize: fs(14), fontWeight: '400', color: C.textSecondary,
     lineHeight: fs(20), paddingHorizontal: ms(16), paddingTop: vs(8),
-  },
-  phoneSection: {
-    paddingHorizontal: ms(14),
-    paddingTop: vs(10),
-    paddingBottom: vs(4),
-  },
-  phoneSectionTitle: {
-    fontSize: fs(10),
-    fontWeight: '700',
-    color: C.textPrimary,
-    marginBottom: vs(2),
-  },
-  phoneSectionSub: {
-    fontSize: fs(8.5),
-    color: C.textMuted,
-    marginBottom: vs(6),
-  },
-  phoneRow: {
-    flexDirection: 'row',
-    gap: ms(8),
-    alignItems: 'center',
-  },
-  phoneInput: {
-    flex: 1,
-    borderWidth: 1,
-    borderRadius: s(10),
-    paddingHorizontal: ms(12),
-    paddingVertical: vs(9),
-    fontSize: fs(12),
-  },
-  phoneSaveBtn: {
-    paddingHorizontal: ms(14),
-    paddingVertical: vs(9),
-    borderRadius: s(10),
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  phoneSaveBtnText: {
-    fontSize: fs(11),
-    fontWeight: '700',
-    color: '#FFFFFF',
   },
   statsRow:    { flexDirection: 'row', paddingHorizontal: ms(16), paddingTop: vs(12) },
   statItem:    { flex: 1, alignItems: 'center', gap: vs(2) },
