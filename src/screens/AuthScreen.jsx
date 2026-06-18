@@ -134,14 +134,20 @@ export default function AuthScreen({ onAuth, onGuest }) {
 
       // Email path
       if (!email.trim()) { Alert.alert('Missing fields', 'Please enter your email.'); return; }
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email: email.trim().toLowerCase(),
         password,
       });
       if (error) throw error;
 
-      setVerifyNotice(true);
-      switchTab('login');
+      if (data.session) {
+        // Email confirmation is OFF → account is active immediately, sign straight in.
+        onAuth?.(data.session);
+      } else {
+        // Confirmation is ON → a verification email was sent; verify then log in.
+        setVerifyNotice(true);
+        switchTab('login');
+      }
     } catch (err) {
       Alert.alert('Sign up failed', err.message ?? 'Please try again.');
     } finally {
