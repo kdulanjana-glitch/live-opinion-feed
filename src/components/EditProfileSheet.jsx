@@ -15,6 +15,8 @@ import {
   useColorScheme, ActivityIndicator, Alert, Image,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { Picker } from '@react-native-picker/picker';
+import CountryPicker from 'react-native-country-picker-modal';
 import { decode } from 'base64-arraybuffer';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../lib/supabase';
@@ -74,9 +76,20 @@ export default function EditProfileSheet({ visible, onClose, initial, onSaved })
 
   // Inline "change phone number" sub-form (phone accounts only).
   const [showPhoneChange, setShowPhoneChange] = useState(false);
-  const [newPhone,        setNewPhone]        = useState('');
+  const [newPhone,        setNewPhone]        = useState('');   // national digits
   const [phoneChangePw,   setPhoneChangePw]   = useState('');
   const [changingPhone,   setChangingPhone]   = useState(false);
+
+  // Country code + national number (shared; only one phone input shows at a time).
+  const [countryCode,   setCountryCode]   = useState('AE');
+  const [callingCode,   setCallingCode]   = useState('971');
+  const [pickerVisible, setPickerVisible] = useState(false);
+  const [phoneNational, setPhoneNational] = useState('');   // email accounts' new number
+
+  // Inline "change email" sub-form (email accounts only).
+  const [showEmailChange, setShowEmailChange] = useState(false);
+  const [newEmail,        setNewEmail]        = useState('');
+  const [changingEmail,   setChangingEmail]   = useState(false);
 
   const pwStrength = passwordStrength(newPassword);
 
@@ -95,6 +108,9 @@ export default function EditProfileSheet({ visible, onClose, initial, onSaved })
     setShowPhoneChange(false);
     setNewPhone('');
     setPhoneChangePw('');
+    setPhoneNational('');
+    setShowEmailChange(false);
+    setNewEmail('');
 
     (async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -120,9 +136,9 @@ export default function EditProfileSheet({ visible, onClose, initial, onSaved })
   // Phone account: swap the login phone via the edge function (re-auths with pw).
   const handlePhoneChange = async () => {
     if (changingPhone) return;
-    const clean = newPhone.replace(/[\s-]/g, '');
+    const clean = '+' + callingCode + newPhone.replace(/\D/g, '');
     if (!/^\+[1-9]\d{6,14}$/.test(clean)) {
-      setError('Enter the new phone with country code, e.g. +94771234567');
+      setError('Enter a valid new phone number.');
       return;
     }
     if (!phoneChangePw) { setError('Enter your current password to change your number.'); return; }
@@ -149,6 +165,57 @@ export default function EditProfileSheet({ visible, onClose, initial, onSaved })
       setChangingPhone(false);
     }
   };
+
+  // Email account: change the login email via Supabase auth.
+  const handleEmailChange = async () => {
+    if (changingEmail) return;
+    const next = newEmail.trim().toLowerCase();
+    if (!/^\S+@\S+\.\S+$/.test(next)) { setError('Enter a valid email address.'); return; }
+    if (next === email.toLowerCase()) { setError('That is already your email.'); return; }
+    setChangingEmail(true);
+    setError(null);
+    try {
+      const { error: upErr } = await supabase.auth.updateUser({ email: next });
+      if (upErr) { setError(upErr.message || 'Could not change email.'); return; }
+      await supabase.auth.refreshSession();
+      setEmail(next);
+      setShowEmailChange(false);
+      setNewEmail('');
+      Alert.alert('Email updated', 'Your email has been changed.');
+    } catch (e) {
+      setError('Could not change email. Please try again.');
+    } finally {
+      setChangingEmail(false);
+    }
+  };
+
+  // Country-code + national-number input, matching the onboarding screen.
+  const renderPhoneInput = (digits, onChangeDigits) => (
+    <View style={st.phoneRow}>
+      <TouchableOpacity style={st.countryBox} onPress={() => setPickerVisible(true)} activeOpacity={0.7}>
+        <CountryPicker
+          countryCode={countryCode}
+          withFlag withFilter withAlphaFilter withCallingCode
+          visible={pickerVisible}
+          onClose={() => setPickerVisible(false)}
+          onSelect={(country) => {
+            setCountryCode(country.cca2);
+            setCallingCode(country.callingCode?.[0] ?? '');
+            setPickerVisible(false);
+          }}
+        />
+        <Text style={st.callingCode}>+{callingCode}</Text>
+      </TouchableOpacity>
+      <TextInput
+        style={st.phoneInput}
+        value={digits}
+        onChangeText={(t) => onChangeDigits(t.replace(/\D/g, ''))}
+        placeholder="501234567"
+        placeholderTextColor={C.textMuted}
+        keyboardType="phone-pad"
+      />
+    </View>
+  );
 
   const previewUri = newAvatar?.uri ?? avatarUrl;
   const letter     = (username || '?')[0].toUpperCase();
@@ -199,11 +266,16 @@ export default function EditProfileSheet({ visible, onClose, initial, onSaved })
       return;
     }
 
-    // Phone must be E.164 (international, with country code) — e.g. +94771234567
-    const phoneClean = phone.replace(/[\s-]/g, '');
-    if (phoneClean && !/^\+[1-9]\d{6,14}$/.test(phoneClean)) {
-      setError('Enter a valid phone with country code, e.g. +94771234567');
-      return;
+    // Email accounts may set a new phone via the country code + national number.
+    // (Phone accounts change their login number through handlePhoneChange only.)
+    let phoneToSave;
+    if (!isPhoneAccount) {
+      const nat = phoneNational.replace(/\D/g, '');
+      if (nat) {
+        const composed = '+' + callingCode + nat;
+        if (!/^\+[1-9]\d{6,14}$/.test(composed)) { setError('Enter a valid phone number.'); return; }
+        phoneToSave = composed;
+      }
     }
 
     const wantsPwChange = !!(currentPw || newPassword || confirmPw);
@@ -249,19 +321,20 @@ export default function EditProfileSheet({ visible, onClose, initial, onSaved })
         return;
       }
 
-      // Private fields + per-field visibility. Phone for phone-accounts is the
-      // login identity and is changed only via handlePhoneChange — we still send
-      // its current value here so the row's phone is preserved.
-      const { error: pErr } = await supabase.from('user_private').upsert({
+      // Private fields + per-field visibility. Phone is omitted unless an email
+      // account entered a new one — omitted columns aren't overwritten on upsert,
+      // so a phone account's login number (and an unchanged number) is preserved.
+      const privateRow = {
         user_id:  user.id,
-        phone:    phoneClean || null,
         birthday: bday || null,
         gender:   gender || null,
         phone_public:  phonePublic,
         dob_public:    dobPublic,
         gender_public: genderPublic,
         updated_at: new Date().toISOString(),
-      }, { onConflict: 'user_id' });
+      };
+      if (phoneToSave) privateRow.phone = phoneToSave;
+      const { error: pErr } = await supabase.from('user_private').upsert(privateRow, { onConflict: 'user_id' });
       if (pErr) {
         console.error('EditProfileSheet user_private error', pErr);
         setError('Could not save contact details. Please try again.');
@@ -327,13 +400,42 @@ export default function EditProfileSheet({ visible, onClose, initial, onSaved })
                 <Text style={st.disabledText}>@{username || '—'}</Text>
               </View>
 
-              {/* Email (read-only) — phone accounts have a synthetic email, so hide it */}
+              {/* Email — editable for email accounts (phone accounts use a synthetic one) */}
               {!isPhoneAccount && (
                 <>
                   <Text style={st.label}>Email</Text>
                   <View style={[st.input, st.inputDisabled]}>
                     <Text style={st.disabledText}>{email || '—'}</Text>
                   </View>
+                  {!showEmailChange ? (
+                    <TouchableOpacity onPress={() => { setError(null); setShowEmailChange(true); }} activeOpacity={0.7}>
+                      <Text style={st.linkAction}>Change email</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <View style={st.subForm}>
+                      <TextInput
+                        style={st.input} value={newEmail} onChangeText={setNewEmail}
+                        placeholder="New email" placeholderTextColor={C.textMuted}
+                        keyboardType="email-address" autoCapitalize="none" autoCorrect={false}
+                      />
+                      <View style={st.subFormRow}>
+                        <TouchableOpacity
+                          onPress={() => { setShowEmailChange(false); setNewEmail(''); setError(null); }}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={st.subFormCancel}>Cancel</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[st.subFormBtn, changingEmail && st.saveBtnDisabled]}
+                          onPress={handleEmailChange} disabled={changingEmail} activeOpacity={0.8}
+                        >
+                          {changingEmail
+                            ? <ActivityIndicator color="#FFFFFF" size="small" />
+                            : <Text style={st.subFormBtnText}>Update email</Text>}
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  )}
                 </>
               )}
 
@@ -372,10 +474,9 @@ export default function EditProfileSheet({ visible, onClose, initial, onSaved })
                   ) : (
                     <View style={st.subForm}>
                       <Text style={st.helper}>This is also your login. Confirm with your password.</Text>
-                      <TextInput
-                        style={[st.input, { marginTop: vs(8) }]} value={newPhone} onChangeText={setNewPhone}
-                        placeholder="New phone, e.g. +94771234567" placeholderTextColor={C.textMuted} keyboardType="phone-pad"
-                      />
+                      <View style={{ marginTop: vs(8) }}>
+                        {renderPhoneInput(newPhone, setNewPhone)}
+                      </View>
                       <TextInput
                         style={[st.input, { marginTop: vs(8) }]} value={phoneChangePw} onChangeText={setPhoneChangePw}
                         placeholder="Current password" placeholderTextColor={C.textMuted}
@@ -402,11 +503,9 @@ export default function EditProfileSheet({ visible, onClose, initial, onSaved })
                 </>
               ) : (
                 <>
-                  <TextInput
-                    style={st.input} value={phone} onChangeText={setPhone}
-                    placeholder="+94 77 123 4567" placeholderTextColor={C.textMuted} keyboardType="phone-pad"
-                  />
-                  <Text style={st.helper}>Include your country code (e.g. +94).</Text>
+                  {!!phone && <Text style={st.helper}>Current: {phone}</Text>}
+                  {renderPhoneInput(phoneNational, setPhoneNational)}
+                  <Text style={st.helper}>{phone ? 'Enter a new number to replace it.' : 'Optional.'}</Text>
                 </>
               )}
               {renderVisibility(phonePublic, setPhonePublic)}
@@ -431,20 +530,18 @@ export default function EditProfileSheet({ visible, onClose, initial, onSaved })
 
               {/* Gender */}
               <Text style={st.label}>Gender</Text>
-              <View style={st.genderRow}>
-                {GENDERS.map((g) => {
-                  const active = gender === g.value;
-                  return (
-                    <TouchableOpacity
-                      key={g.value}
-                      style={[st.genderPill, active ? st.genderPillActive : { borderColor: C.border }]}
-                      onPress={() => setGender(active ? null : g.value)}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={[st.genderText, active && st.genderTextActive]}>{g.label}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
+              <View style={st.pickerBox}>
+                <Picker
+                  selectedValue={gender ?? ''}
+                  onValueChange={(v) => setGender(v || null)}
+                  style={st.picker}
+                  dropdownIconColor={C.textMuted}
+                >
+                  <Picker.Item label="Select…" value="" color={C.textMuted} />
+                  {GENDERS.map((g) => (
+                    <Picker.Item key={g.value} label={g.label} value={g.value} color={C.textPrimary} />
+                  ))}
+                </Picker>
               </View>
               {renderVisibility(genderPublic, setGenderPublic)}
 
@@ -549,6 +646,25 @@ const makeStyles = (C) => StyleSheet.create({
   inputDisabled: { backgroundColor: C.border, justifyContent: 'center' },
   disabledText:  { fontSize: fs(14), color: C.textMuted },
   inputBio: { minHeight: vs(70) },
+  // Phone: country box + national number, matching onboarding
+  phoneRow: { flexDirection: 'row', gap: ms(8), alignItems: 'center' },
+  countryBox: {
+    flexDirection: 'row', alignItems: 'center', gap: ms(4),
+    backgroundColor: C.surfaceAlt, borderWidth: 1, borderColor: C.border,
+    borderRadius: ms(12), paddingHorizontal: ms(10), paddingVertical: vs(9),
+  },
+  callingCode: { fontSize: fs(14), fontWeight: '600', color: C.textPrimary },
+  phoneInput: {
+    flex: 1, backgroundColor: C.surfaceAlt, borderWidth: 1, borderColor: C.border,
+    borderRadius: ms(12), paddingHorizontal: ms(12), paddingVertical: vs(9),
+    fontSize: fs(14), color: C.textPrimary,
+  },
+  // Gender combo box
+  pickerBox: {
+    backgroundColor: C.surfaceAlt, borderWidth: 1, borderColor: C.border,
+    borderRadius: ms(12), overflow: 'hidden',
+  },
+  picker: { color: C.textPrimary },
   genderRow:  { flexDirection: 'row', flexWrap: 'wrap', gap: ms(8) },
   genderPill: { paddingVertical: vs(7), paddingHorizontal: ms(14), borderRadius: ms(20), borderWidth: 1 },
   genderPillActive: { backgroundColor: C.accent, borderColor: C.accent },

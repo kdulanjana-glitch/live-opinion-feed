@@ -64,7 +64,7 @@ export default function SentiTile({ senti, width, onPress, onUnpin }) {
             </TouchableOpacity>
           )}
         </View>
-        <Text style={st.question} numberOfLines={5}>{senti?.question}</Text>
+        <Text style={st.question} numberOfLines={6}>{senti?.question}</Text>
       </View>
     </TouchableOpacity>
   );
@@ -74,7 +74,7 @@ const makeStyles = (C) => StyleSheet.create({
   tile: { borderRadius: ms(14), overflow: 'hidden' },
   overlayStrong: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.42)' },
   overlaySoft:   { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.16)' },
-  content: { flex: 1, padding: ms(12), justifyContent: 'space-between' },
+  content: { flex: 1, padding: ms(12) },
   topRow:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   wavePill: {
     backgroundColor: 'rgba(255,255,255,0.20)',
@@ -87,5 +87,5 @@ const makeStyles = (C) => StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.40)', alignItems: 'center', justifyContent: 'center',
   },
   unpinIcon: { fontSize: fs(15) },
-  question:  { fontSize: fs(17), fontWeight: '800', color: '#FFFFFF', lineHeight: fs(22) },
+  question:  { fontSize: fs(17), fontWeight: '800', color: '#FFFFFF', lineHeight: fs(22), marginTop: vs(8) },
 });
