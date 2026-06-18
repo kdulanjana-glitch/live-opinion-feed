@@ -665,11 +665,6 @@ const makeStyles = (C) => StyleSheet.create({
     borderRadius: ms(12), overflow: 'hidden',
   },
   picker: { color: C.textPrimary },
-  genderRow:  { flexDirection: 'row', flexWrap: 'wrap', gap: ms(8) },
-  genderPill: { paddingVertical: vs(7), paddingHorizontal: ms(14), borderRadius: ms(20), borderWidth: 1 },
-  genderPillActive: { backgroundColor: C.accent, borderColor: C.accent },
-  genderText:       { fontSize: fs(13), fontWeight: '600', color: C.textSecondary },
-  genderTextActive: { color: '#FFFFFF' },
 
   // Per-field visibility switch
   visToggle: {
