@@ -64,9 +64,9 @@ export default function PhoneDOBGenderScreen({ onDone, userId }) {
   }, []);
 
   const phoneDigits = phone.replace(/\D/g, '');
-  // Phone accounts already gave their number at signup — don't ask again.
-  const canContinue =
-    (isPhoneAccount || phoneDigits.length > 0) && !!day && !!month && !!year && !!gender && !saving;
+  // Phone is optional: phone accounts already gave it at signup; email accounts
+  // may add one but don't have to. Only DOB + gender are required.
+  const canContinue = !!day && !!month && !!year && !!gender && !saving;
 
   const handleContinue = () => {
     if (!canContinue) return;
@@ -109,11 +109,11 @@ export default function PhoneDOBGenderScreen({ onDone, userId }) {
         gender,
       };
       // Phone accounts already have their number stored from signup — leave it
-      // untouched (omitted columns aren't overwritten on upsert). Only email
-      // accounts set their phone here, and only they get the recovery email.
+      // untouched (omitted columns aren't overwritten on upsert). Email accounts
+      // may optionally set a phone here, and only they get the recovery email.
       if (isPhoneAccount) {
         if (recovery) row.recovery_email = recovery;
-      } else {
+      } else if (phoneDigits.length > 0) {
         row.phone = fullPhone;
       }
       const { error } = await supabase
@@ -145,7 +145,7 @@ export default function PhoneDOBGenderScreen({ onDone, userId }) {
         {/* Phone — only for email accounts; phone accounts gave it at signup */}
         {!isPhoneAccount && (
           <>
-            <Text style={st.label}>Phone Number</Text>
+            <Text style={st.label}>Phone Number (optional)</Text>
             <View style={st.phoneRow}>
               <TouchableOpacity style={st.countryBox} onPress={() => setPickerVisible(true)} activeOpacity={0.7}>
                 <CountryPicker
