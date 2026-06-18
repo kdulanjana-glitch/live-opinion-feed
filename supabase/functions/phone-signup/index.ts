@@ -18,27 +18,35 @@ function getClientIp(req: Request): string {
   return ips[ips.length - 1];
 }
 
+// Always reply 200 with { success, error? }. functions.invoke() doesn't reliably
+// surface a non-2xx body across versions, so the client checks `success` instead.
+function jsonResponse(body: Record<string, unknown>) {
+  return new Response(JSON.stringify(body), {
+    status: 200,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
 
   try {
-    const { phone, password } = await req.json();
+    const { phone, password, email } = await req.json();
 
     if (!phone || !password || password.length < 8) {
-      return new Response(
-        JSON.stringify({ error: 'Phone and a password of at least 8 characters are required.' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return jsonResponse({ success: false, error: 'Phone and a password of at least 8 characters are required.' });
     }
 
     const digits = digitsOnly(phone);
     if (digits.length < 8) {
-      return new Response(
-        JSON.stringify({ error: 'That does not look like a valid phone number.' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return jsonResponse({ success: false, error: 'That does not look like a valid phone number.' });
+    }
+
+    // Optional recovery email — validate only if provided.
+    if (email && !/^\S+@\S+\.\S+$/.test(email)) {
+      return jsonResponse({ success: false, error: 'That email address does not look valid.' });
     }
 
     const supabaseAdmin = createClient(
@@ -57,10 +65,7 @@ Deno.serve(async (req) => {
       .gte('attempted_at', oneHourAgo);
 
     if ((count ?? 0) >= 3) {
-      return new Response(
-        JSON.stringify({ error: 'Too many attempts from this connection. Try again later.' }),
-        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return jsonResponse({ success: false, error: 'Too many attempts from this connection. Try again later.' });
     }
 
     await supabaseAdmin.from('phone_signup_attempts').insert({ ip });
@@ -75,28 +80,20 @@ Deno.serve(async (req) => {
     });
 
     if (error) {
-      const message = error.message?.includes('already registered')
+      const message = error.message?.toLowerCase().includes('already registered')
         ? 'That phone number is already registered.'
         : error.message;
-      return new Response(
-        JSON.stringify({ error: message }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return jsonResponse({ success: false, error: message });
     }
 
-    // Phone lives in the private table (own-row RLS); admin client bypasses RLS.
-    await supabaseAdmin
-      .from('user_private')
-      .upsert({ user_id: data.user.id, phone: `+${digits}` }, { onConflict: 'user_id' });
+    // Private profile fields live in user_private (own-row RLS); admin client
+    // bypasses RLS. recovery_email is optional PII — kept private, never on users.
+    const privateRow: Record<string, unknown> = { user_id: data.user.id, phone: `+${digits}` };
+    if (email) privateRow.recovery_email = email.trim().toLowerCase();
+    await supabaseAdmin.from('user_private').upsert(privateRow, { onConflict: 'user_id' });
 
-    return new Response(
-      JSON.stringify({ success: true }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return jsonResponse({ success: true });
   } catch (err) {
-    return new Response(
-      JSON.stringify({ error: 'Unexpected error creating account.' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return jsonResponse({ success: false, error: 'Unexpected error creating account.' });
   }
 });

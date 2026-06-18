@@ -18,7 +18,6 @@ import * as ImagePicker from 'expo-image-picker';
 import { decode } from 'base64-arraybuffer';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../lib/supabase';
-import { functionErrorMessage } from '../utils/functionError';
 import { getPeoliaColors } from '../constants/peoliaTheme';
 import { fs, ms, vs, s, SCREEN_HEIGHT } from '../utils/peoliaScale';
 import { passwordStrength } from '../utils/passwordStrength';
@@ -133,8 +132,8 @@ export default function EditProfileSheet({ visible, onClose, initial, onSaved })
       const { data, error: fnErr } = await supabase.functions.invoke('phone-change', {
         body: { newPhone: clean, currentPassword: phoneChangePw },
       });
-      if (fnErr || data?.error) {
-        setError(await functionErrorMessage(fnErr, data, 'Could not change phone number.'));
+      if (fnErr || !data?.success) {
+        setError(data?.error ?? fnErr?.message ?? 'Could not change phone number.');
         return;
       }
       // The edge function swapped the auth email — refresh so the session matches.

@@ -9,6 +9,14 @@ function digitsOnly(value: string): string {
   return value.replace(/[^0-9]/g, '');
 }
 
+// Always reply 200 with { success, error? } — the client checks `success`.
+function jsonResponse(body: Record<string, unknown>) {
+  return new Response(JSON.stringify(body), {
+    status: 200,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -17,10 +25,7 @@ Deno.serve(async (req) => {
   try {
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: 'Missing authorization.' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return jsonResponse({ success: false, error: 'Missing authorization.' });
     }
     const jwt = authHeader.replace('Bearer ', '');
 
@@ -28,9 +33,8 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     );
-    // Separate, anon-keyed client used only to verify the current password.
-    // Kept apart from supabaseAdmin so that signing in on it doesn't swap
-    // out the admin client's auth context before the admin call later.
+    // Separate, anon-keyed client used only to verify the current password, so
+    // signing in on it doesn't swap out the admin client's auth context.
     const supabaseAnon = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_ANON_KEY')!
@@ -38,26 +42,17 @@ Deno.serve(async (req) => {
 
     const { data: callerData, error: callerError } = await supabaseAdmin.auth.getUser(jwt);
     if (callerError || !callerData?.user) {
-      return new Response(
-        JSON.stringify({ error: 'Invalid or expired session.' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return jsonResponse({ success: false, error: 'Invalid or expired session.' });
     }
     const caller = callerData.user;
 
     if (!caller.email?.endsWith('@phone.peolia.invalid')) {
-      return new Response(
-        JSON.stringify({ error: 'This account does not sign in with a phone number.' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return jsonResponse({ success: false, error: 'This account does not sign in with a phone number.' });
     }
 
     const { newPhone, currentPassword } = await req.json();
     if (!newPhone || !currentPassword) {
-      return new Response(
-        JSON.stringify({ error: 'New phone number and current password are required.' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return jsonResponse({ success: false, error: 'New phone number and current password are required.' });
     }
 
     const { error: passwordError } = await supabaseAnon.auth.signInWithPassword({
@@ -65,26 +60,17 @@ Deno.serve(async (req) => {
       password: currentPassword,
     });
     if (passwordError) {
-      return new Response(
-        JSON.stringify({ error: 'Current password is incorrect.' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return jsonResponse({ success: false, error: 'Current password is incorrect.' });
     }
 
     const newDigits = digitsOnly(newPhone);
     if (newDigits.length < 8) {
-      return new Response(
-        JSON.stringify({ error: 'That does not look like a valid phone number.' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return jsonResponse({ success: false, error: 'That does not look like a valid phone number.' });
     }
     const newSyntheticEmail = `${newDigits}@phone.peolia.invalid`;
 
     if (newSyntheticEmail === caller.email) {
-      return new Response(
-        JSON.stringify({ error: 'That is already your current phone number.' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return jsonResponse({ success: false, error: 'That is already your current phone number.' });
     }
 
     const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(caller.id, {
@@ -93,13 +79,10 @@ Deno.serve(async (req) => {
     });
 
     if (updateError) {
-      const message = updateError.message?.includes('already')
+      const message = updateError.message?.toLowerCase().includes('already')
         ? 'That phone number is already in use.'
         : updateError.message;
-      return new Response(
-        JSON.stringify({ error: message }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return jsonResponse({ success: false, error: message });
     }
 
     // Phone lives in the private table (own-row RLS); admin client bypasses RLS.
@@ -107,14 +90,8 @@ Deno.serve(async (req) => {
       .from('user_private')
       .upsert({ user_id: caller.id, phone: `+${newDigits}` }, { onConflict: 'user_id' });
 
-    return new Response(
-      JSON.stringify({ success: true }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return jsonResponse({ success: true });
   } catch (err) {
-    return new Response(
-      JSON.stringify({ error: 'Unexpected error updating phone number.' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return jsonResponse({ success: false, error: 'Unexpected error updating phone number.' });
   }
 });

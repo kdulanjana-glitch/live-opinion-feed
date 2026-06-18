@@ -20,7 +20,6 @@ import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
 import CountryPicker from 'react-native-country-picker-modal';
 import { supabase } from '../lib/supabase';
-import { functionErrorMessage } from '../utils/functionError';
 import { getPeoliaColors } from '../constants/peoliaTheme';
 import { fs, ms, vs, s } from '../utils/peoliaScale';
 
@@ -80,12 +79,14 @@ export default function AuthScreen({ onAuth, onGuest }) {
         const fullPhone = '+' + callingCode + phoneDigits;
 
         // Create the account via the phone-signup Edge Function (admin createUser
-        // with a synthetic email). Returns a readable error message on failure.
-        const { data, error } = await supabase.functions.invoke('phone-signup', {
-          body: { phone: fullPhone, password },
-        });
-        if (error || data?.error) {
-          Alert.alert('Sign up failed', await functionErrorMessage(error, data));
+        // with a synthetic email). The function always returns 200 with
+        // { success, error? }, so check success rather than the HTTP status.
+        const body = { phone: fullPhone, password };
+        const recovery = email.trim();
+        if (recovery) body.email = recovery;   // optional recovery contact
+        const { data, error } = await supabase.functions.invoke('phone-signup', { body });
+        if (error || !data?.success) {
+          Alert.alert('Sign up failed', data?.error ?? error?.message ?? 'Please try again.');
           return;
         }
 
@@ -281,6 +282,20 @@ export default function AuthScreen({ onAuth, onGuest }) {
                 autoCorrect={false}
               />
             </View>
+          )}
+          {/* Optional recovery email — phone signup only (phone accounts have a
+              synthetic login email, so a real one is useful for recovery) */}
+          {tab === 'signup' && method === 'phone' && (
+            <TextInput
+              style={[styles.input, { backgroundColor: C.surface, borderColor: C.border, color: C.textPrimary }]}
+              placeholder="Email (optional, for recovery)"
+              placeholderTextColor={C.textMuted}
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
           )}
           <TextInput
             style={[styles.input, { backgroundColor: C.surface, borderColor: C.border, color: C.textPrimary }]}
