@@ -102,10 +102,10 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Phone lives in the private table (own-row RLS); admin client bypasses RLS.
     await supabaseAdmin
-      .from('users')
-      .update({ phone: `+${newDigits}` })
-      .eq('id', caller.id);
+      .from('user_private')
+      .upsert({ user_id: caller.id, phone: `+${newDigits}` }, { onConflict: 'user_id' });
 
     return new Response(
       JSON.stringify({ success: true }),

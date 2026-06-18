@@ -20,10 +20,26 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../lib/supabase';
 import { getPeoliaColors } from '../constants/peoliaTheme';
 import { fs, ms, vs, s, SCREEN_HEIGHT } from '../utils/peoliaScale';
+import { passwordStrength } from '../utils/passwordStrength';
 
 const DISPLAY_MAX = 30;
 const BIO_MAX     = 150;
-const GENDERS     = ['Male', 'Female', 'Other', 'Prefer not to say'];
+const PHONE_DOMAIN = '@phone.peolia.invalid';
+
+// Strength score (0–4) → theme colour for the meter.
+const pwColor = (C, score) => {
+  if (score <= 1) return C.nahChosen;
+  if (score === 2) return C.hmmChosen;
+  return C.yesChosen;
+};
+
+// Canonical gender tokens (stored) + display labels.
+const GENDERS = [
+  { value: 'male',              label: 'Male' },
+  { value: 'female',            label: 'Female' },
+  { value: 'other',             label: 'Other' },
+  { value: 'prefer_not_to_say', label: 'Prefer not to say' },
+];
 
 export default function EditProfileSheet({ visible, onClose, initial, onSaved }) {
   const scheme = useColorScheme();
@@ -46,6 +62,24 @@ export default function EditProfileSheet({ visible, onClose, initial, onSaved })
   const [saving,      setSaving]      = useState(false);
   const [error,       setError]       = useState(null);
 
+  // Per-field visibility (the owner decides who can see each one). Default private.
+  const [phonePublic,  setPhonePublic]  = useState(false);
+  const [dobPublic,    setDobPublic]    = useState(false);
+  const [genderPublic, setGenderPublic] = useState(false);
+
+  // Phone is the login identity for phone accounts → only changeable via the
+  // phone-change edge function (with current password), never a plain write.
+  const [isPhoneAccount, setIsPhoneAccount] = useState(false);
+  const [dobLocked,      setDobLocked]      = useState(false);  // DOB is permanent once set
+
+  // Inline "change phone number" sub-form (phone accounts only).
+  const [showPhoneChange, setShowPhoneChange] = useState(false);
+  const [newPhone,        setNewPhone]        = useState('');
+  const [phoneChangePw,   setPhoneChangePw]   = useState('');
+  const [changingPhone,   setChangingPhone]   = useState(false);
+
+  const pwStrength = passwordStrength(newPassword);
+
   // Re-seed every time the sheet opens; pull email (auth) + private fields
   useEffect(() => {
     if (!visible) return;
@@ -58,24 +92,79 @@ export default function EditProfileSheet({ visible, onClose, initial, onSaved })
     setNewPassword('');
     setConfirmPw('');
     setError(null);
+    setShowPhoneChange(false);
+    setNewPhone('');
+    setPhoneChangePw('');
 
     (async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      setEmail(user?.email ?? '');
+      const mail = user?.email ?? '';
+      setEmail(mail);
+      setIsPhoneAccount(mail.endsWith(PHONE_DOMAIN));
       if (!user) return;
       const { data } = await supabase
         .from('user_private')
-        .select('phone, birthday, gender')
+        .select('phone, birthday, gender, phone_public, dob_public, gender_public')
         .eq('user_id', user.id)
         .maybeSingle();
       setPhone(data?.phone ?? '');
       setBirthday(data?.birthday ?? '');
       setGender(data?.gender ?? null);
+      setPhonePublic(!!data?.phone_public);
+      setDobPublic(!!data?.dob_public);
+      setGenderPublic(!!data?.gender_public);
+      setDobLocked(!!data?.birthday);  // permanent once set
     })();
   }, [visible, initial]);
 
+  // Phone account: swap the login phone via the edge function (re-auths with pw).
+  const handlePhoneChange = async () => {
+    if (changingPhone) return;
+    const clean = newPhone.replace(/[\s-]/g, '');
+    if (!/^\+[1-9]\d{6,14}$/.test(clean)) {
+      setError('Enter the new phone with country code, e.g. +94771234567');
+      return;
+    }
+    if (!phoneChangePw) { setError('Enter your current password to change your number.'); return; }
+    setChangingPhone(true);
+    setError(null);
+    try {
+      const { data, error: fnErr } = await supabase.functions.invoke('phone-change', {
+        body: { newPhone: clean, currentPassword: phoneChangePw },
+      });
+      if (fnErr || data?.error) {
+        setError(data?.error ?? 'Could not change phone number.');
+        return;
+      }
+      // The edge function swapped the auth email — refresh so the session matches.
+      await supabase.auth.refreshSession();
+      setPhone(clean);
+      setShowPhoneChange(false);
+      setNewPhone('');
+      setPhoneChangePw('');
+      Alert.alert('Phone updated', 'Your phone number has been changed.');
+    } catch (e) {
+      setError('Could not change phone number. Please try again.');
+    } finally {
+      setChangingPhone(false);
+    }
+  };
+
   const previewUri = newAvatar?.uri ?? avatarUrl;
   const letter     = (username || '?')[0].toUpperCase();
+
+  // Per-field public/private switch. Default state is private (lock).
+  const renderVisibility = (isPublic, setPublic) => (
+    <TouchableOpacity
+      style={[st.visToggle, isPublic ? st.visTogglePublic : st.visTogglePrivate]}
+      onPress={() => setPublic(!isPublic)}
+      activeOpacity={0.7}
+    >
+      <Text style={[st.visText, isPublic ? st.visTextPublic : st.visTextPrivate]}>
+        {isPublic ? '👁  Visible to others' : '🔒  Only you'}
+      </Text>
+    </TouchableOpacity>
+  );
 
   const pickAvatar = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -160,12 +249,17 @@ export default function EditProfileSheet({ visible, onClose, initial, onSaved })
         return;
       }
 
-      // Private fields
+      // Private fields + per-field visibility. Phone for phone-accounts is the
+      // login identity and is changed only via handlePhoneChange — we still send
+      // its current value here so the row's phone is preserved.
       const { error: pErr } = await supabase.from('user_private').upsert({
         user_id:  user.id,
         phone:    phoneClean || null,
         birthday: bday || null,
         gender:   gender || null,
+        phone_public:  phonePublic,
+        dob_public:    dobPublic,
+        gender_public: genderPublic,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'user_id' });
       if (pErr) {
@@ -233,11 +327,15 @@ export default function EditProfileSheet({ visible, onClose, initial, onSaved })
                 <Text style={st.disabledText}>@{username || '—'}</Text>
               </View>
 
-              {/* Email (read-only) */}
-              <Text style={st.label}>Email</Text>
-              <View style={[st.input, st.inputDisabled]}>
-                <Text style={st.disabledText}>{email || '—'}</Text>
-              </View>
+              {/* Email (read-only) — phone accounts have a synthetic email, so hide it */}
+              {!isPhoneAccount && (
+                <>
+                  <Text style={st.label}>Email</Text>
+                  <View style={[st.input, st.inputDisabled]}>
+                    <Text style={st.disabledText}>{email || '—'}</Text>
+                  </View>
+                </>
+              )}
 
               {/* Display name */}
               <Text style={st.label}>Display name</Text>
@@ -258,41 +356,97 @@ export default function EditProfileSheet({ visible, onClose, initial, onSaved })
               />
 
               <Text style={st.sectionHead}>Private details</Text>
-              <Text style={st.sectionNote}>Only you can see these.</Text>
+              <Text style={st.sectionNote}>Private by default. Use the switch under each to let others see it.</Text>
 
               {/* Phone */}
               <Text style={st.label}>Phone</Text>
-              <TextInput
-                style={st.input} value={phone} onChangeText={setPhone}
-                placeholder="+94 77 123 4567" placeholderTextColor={C.textMuted} keyboardType="phone-pad"
-              />
-              <Text style={st.helper}>Include your country code (e.g. +94).</Text>
+              {isPhoneAccount ? (
+                <>
+                  <View style={[st.input, st.inputDisabled]}>
+                    <Text style={st.disabledText}>{phone || '—'}</Text>
+                  </View>
+                  {!showPhoneChange ? (
+                    <TouchableOpacity onPress={() => { setError(null); setShowPhoneChange(true); }} activeOpacity={0.7}>
+                      <Text style={st.linkAction}>Change phone number</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <View style={st.subForm}>
+                      <Text style={st.helper}>This is also your login. Confirm with your password.</Text>
+                      <TextInput
+                        style={[st.input, { marginTop: vs(8) }]} value={newPhone} onChangeText={setNewPhone}
+                        placeholder="New phone, e.g. +94771234567" placeholderTextColor={C.textMuted} keyboardType="phone-pad"
+                      />
+                      <TextInput
+                        style={[st.input, { marginTop: vs(8) }]} value={phoneChangePw} onChangeText={setPhoneChangePw}
+                        placeholder="Current password" placeholderTextColor={C.textMuted}
+                        secureTextEntry autoCapitalize="none"
+                      />
+                      <View style={st.subFormRow}>
+                        <TouchableOpacity
+                          onPress={() => { setShowPhoneChange(false); setNewPhone(''); setPhoneChangePw(''); setError(null); }}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={st.subFormCancel}>Cancel</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[st.subFormBtn, changingPhone && st.saveBtnDisabled]}
+                          onPress={handlePhoneChange} disabled={changingPhone} activeOpacity={0.8}
+                        >
+                          {changingPhone
+                            ? <ActivityIndicator color="#FFFFFF" size="small" />
+                            : <Text style={st.subFormBtnText}>Update number</Text>}
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  )}
+                </>
+              ) : (
+                <>
+                  <TextInput
+                    style={st.input} value={phone} onChangeText={setPhone}
+                    placeholder="+94 77 123 4567" placeholderTextColor={C.textMuted} keyboardType="phone-pad"
+                  />
+                  <Text style={st.helper}>Include your country code (e.g. +94).</Text>
+                </>
+              )}
+              {renderVisibility(phonePublic, setPhonePublic)}
 
-              {/* Birthday */}
-              <Text style={st.label}>Birthday</Text>
-              <TextInput
-                style={st.input} value={birthday} onChangeText={setBirthday}
-                placeholder="YYYY-MM-DD" placeholderTextColor={C.textMuted}
-                autoCapitalize="none" autoCorrect={false}
-              />
+              {/* Birthday — permanent once set */}
+              <Text style={st.label}>Date of birth</Text>
+              {dobLocked ? (
+                <>
+                  <View style={[st.input, st.inputDisabled]}>
+                    <Text style={st.disabledText}>{birthday || '—'}</Text>
+                  </View>
+                  <Text style={st.helper}>Set during signup — can't be changed.</Text>
+                </>
+              ) : (
+                <TextInput
+                  style={st.input} value={birthday} onChangeText={setBirthday}
+                  placeholder="YYYY-MM-DD" placeholderTextColor={C.textMuted}
+                  autoCapitalize="none" autoCorrect={false}
+                />
+              )}
+              {renderVisibility(dobPublic, setDobPublic)}
 
               {/* Gender */}
               <Text style={st.label}>Gender</Text>
               <View style={st.genderRow}>
                 {GENDERS.map((g) => {
-                  const active = gender === g;
+                  const active = gender === g.value;
                   return (
                     <TouchableOpacity
-                      key={g}
+                      key={g.value}
                       style={[st.genderPill, active ? st.genderPillActive : { borderColor: C.border }]}
-                      onPress={() => setGender(active ? null : g)}
+                      onPress={() => setGender(active ? null : g.value)}
                       activeOpacity={0.7}
                     >
-                      <Text style={[st.genderText, active && st.genderTextActive]}>{g}</Text>
+                      <Text style={[st.genderText, active && st.genderTextActive]}>{g.label}</Text>
                     </TouchableOpacity>
                   );
                 })}
               </View>
+              {renderVisibility(genderPublic, setGenderPublic)}
 
               {/* Security */}
               <Text style={st.sectionHead}>Security</Text>
@@ -307,6 +461,22 @@ export default function EditProfileSheet({ visible, onClose, initial, onSaved })
                 placeholder="New password" placeholderTextColor={C.textMuted}
                 secureTextEntry autoCapitalize="none"
               />
+              {pwStrength.score >= 0 && (
+                <View style={st.meterRow}>
+                  <View style={st.meterTrack}>
+                    {[0, 1, 2, 3].map((i) => (
+                      <View
+                        key={i}
+                        style={[
+                          st.meterSeg,
+                          i <= pwStrength.score && { backgroundColor: pwColor(C, pwStrength.score) },
+                        ]}
+                      />
+                    ))}
+                  </View>
+                  <Text style={[st.meterLabel, { color: pwColor(C, pwStrength.score) }]}>{pwStrength.label}</Text>
+                </View>
+              )}
               <TextInput
                 style={[st.input, { marginTop: vs(8) }]} value={confirmPw} onChangeText={setConfirmPw}
                 placeholder="Confirm new password" placeholderTextColor={C.textMuted}
@@ -384,6 +554,31 @@ const makeStyles = (C) => StyleSheet.create({
   genderPillActive: { backgroundColor: C.accent, borderColor: C.accent },
   genderText:       { fontSize: fs(13), fontWeight: '600', color: C.textSecondary },
   genderTextActive: { color: '#FFFFFF' },
+
+  // Per-field visibility switch
+  visToggle: {
+    alignSelf: 'flex-start', marginTop: vs(6),
+    paddingVertical: vs(5), paddingHorizontal: ms(10), borderRadius: ms(20), borderWidth: 1,
+  },
+  visTogglePublic:  { backgroundColor: C.accent, borderColor: C.accent },
+  visTogglePrivate: { backgroundColor: 'transparent', borderColor: C.border },
+  visText:        { fontSize: fs(11), fontWeight: '700' },
+  visTextPublic:  { color: '#FFFFFF' },
+  visTextPrivate: { color: C.textMuted },
+
+  // Change-phone link + sub-form
+  linkAction: { fontSize: fs(13), fontWeight: '700', color: C.accent, marginTop: vs(6) },
+  subForm:    { marginTop: vs(6) },
+  subFormRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: ms(14), marginTop: vs(10) },
+  subFormCancel:  { fontSize: fs(13), fontWeight: '600', color: C.textMuted },
+  subFormBtn:     { paddingVertical: vs(8), paddingHorizontal: ms(16), borderRadius: ms(12), backgroundColor: C.accent },
+  subFormBtnText: { fontSize: fs(13), fontWeight: '700', color: '#FFFFFF' },
+
+  // Password strength meter
+  meterRow:   { flexDirection: 'row', alignItems: 'center', gap: ms(8), marginTop: vs(8) },
+  meterTrack: { flex: 1, flexDirection: 'row', gap: ms(4) },
+  meterSeg:   { flex: 1, height: vs(5), borderRadius: ms(3), backgroundColor: C.border },
+  meterLabel: { fontSize: fs(11), fontWeight: '700', minWidth: ms(56), textAlign: 'right' },
   error: { fontSize: fs(13), fontWeight: '600', color: C.nahText, marginTop: vs(10), textAlign: 'center' },
   saveBtn: { marginTop: vs(16), paddingVertical: vs(12), borderRadius: ms(14), backgroundColor: C.accent, alignItems: 'center' },
   saveBtnDisabled: { opacity: 0.6 },

@@ -80,23 +80,20 @@ export default function PhoneDOBGenderScreen({ onDone, userId }) {
     setSaving(true);
     setPhoneTaken(false);
     try {
-      // Phone uniqueness check
-      const { data: existing, error: checkErr } = await supabase
-        .from('users')
-        .select('id')
-        .eq('phone', fullPhone)
-        .neq('id', userId);
-      if (checkErr) throw checkErr;
-      if ((existing?.length ?? 0) > 0) { setPhoneTaken(true); return; }
+      // Use the live auth id so the row satisfies user_private's own-row RLS.
+      const { data: { user } } = await supabase.auth.getUser();
+      const uid = user?.id ?? userId;
 
+      // Private by default → user_private. Phone uniqueness is enforced by the
+      // partial unique index (user_private_phone_unique); a clash surfaces as 23505.
       const { error } = await supabase
-        .from('users')
-        .update({
-          phone:         fullPhone,
-          date_of_birth: `${year}-${month}-${day}`,
+        .from('user_private')
+        .upsert({
+          user_id:  uid,
+          phone:    fullPhone,
+          birthday: `${year}-${month}-${day}`,
           gender,
-        })
-        .eq('id', userId);
+        }, { onConflict: 'user_id' });
       if (error) {
         if (error.code === '23505') { setPhoneTaken(true); return; }
         throw error;
@@ -118,7 +115,7 @@ export default function PhoneDOBGenderScreen({ onDone, userId }) {
       >
         <Text style={st.step}>Step 2 of 4</Text>
         <Text style={st.title}>A bit about you</Text>
-        <Text style={st.subtitle}>Private info — never shown to other citizens.</Text>
+        <Text style={st.subtitle}>Private by default — you choose what to share later.</Text>
 
         {/* Phone */}
         <Text style={st.label}>Phone Number</Text>

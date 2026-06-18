@@ -29,6 +29,22 @@ import { GridSkeleton } from '../components/Skeletons';
 import { getPeoliaColors } from '../constants/peoliaTheme';
 import { fs, ms, vs, s, SCREEN_WIDTH } from '../utils/peoliaScale';
 
+const GENDER_LABELS = {
+  male: 'Male', female: 'Female', other: 'Other', prefer_not_to_say: 'Prefer not to say',
+};
+
+// Birthday (YYYY-MM-DD) → integer age, or null if unparseable.
+function ageFromBirthday(birthday) {
+  if (!birthday) return null;
+  const dob = new Date(birthday);
+  if (isNaN(dob.getTime())) return null;
+  const now = new Date();
+  let age = now.getFullYear() - dob.getFullYear();
+  const m = now.getMonth() - dob.getMonth();
+  if (m < 0 || (m === 0 && now.getDate() < dob.getDate())) age -= 1;
+  return age;
+}
+
 const GRID_GAP  = ms(8);
 const GRID_COLS = 3;
 // ms(16)*2 matches gridSection paddingHorizontal on both sides
@@ -94,8 +110,16 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser 
             .eq('follower_id', me).eq('following_id', userId).maybeSingle()
         : Promise.resolve({ data: null });
 
+      // Private details — own profile reads its own row directly; other profiles
+      // go through get_public_profile(), which only returns fields marked public.
+      const detailsQuery = isOwnProfile
+        ? supabase.from('user_private')
+            .select('phone, birthday, gender, phone_public, dob_public, gender_public')
+            .eq('user_id', targetId).maybeSingle()
+        : supabase.rpc('get_public_profile', { target: targetId });
+
       // Run all queries in parallel
-      const [userRes, sentisRes, dnaRes, floatedRes, userStatsRes, followRes, followersRes, followingRes] = await Promise.all([
+      const [userRes, sentisRes, dnaRes, floatedRes, userStatsRes, followRes, followersRes, followingRes, detailsRes] = await Promise.all([
         // Basic user info
         supabase.from('users').select('id, username, display_name, bio, avatar_url').eq('id', targetId).single(),
 
@@ -135,9 +159,28 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser 
         // user_stats counts aren't maintained, so don't rely on them)
         supabase.from('follows').select('follower_id', { count: 'exact', head: true }).eq('following_id', targetId),
         supabase.from('follows').select('following_id', { count: 'exact', head: true }).eq('follower_id', targetId),
+
+        detailsQuery,
       ]);
 
       setFollowing(!!followRes.data);
+
+      // Normalize profile details. Own profile shows everything (with each field's
+      // visibility flag); other profiles already arrive pre-gated from the RPC.
+      let details = null;
+      if (isOwnProfile) {
+        const d = detailsRes.data;
+        if (d) details = {
+          own: true,
+          phone: d.phone, birthday: d.birthday, gender: d.gender,
+          phonePublic: d.phone_public, dobPublic: d.dob_public, genderPublic: d.gender_public,
+        };
+      } else {
+        const d = Array.isArray(detailsRes.data) ? detailsRes.data[0] : detailsRes.data;
+        if (d && (d.phone || d.birthday || d.gender)) {
+          details = { own: false, phone: d.phone, birthday: d.birthday, gender: d.gender };
+        }
+      }
 
       const ustats = userStatsRes.data ?? {};
 
@@ -163,6 +206,7 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser 
           following_count: followingRes.count ?? 0,  // live from follows
         },
         dna: dnaRes.data ?? [],
+        details,
       });
 
       setSentis((floatedRes.data ?? []).map((s) => ({
@@ -292,6 +336,19 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser 
   }
 
   const stats = profile?.stats ?? {};
+
+  // About-tab detail rows (phone / age / gender). For other users these arrive
+  // pre-gated; for the owner each carries its visibility flag for the marker.
+  const detailRows = (() => {
+    const d = profile?.details;
+    if (!d) return [];
+    const rows = [];
+    const age = ageFromBirthday(d.birthday);
+    if (d.phone)     rows.push({ key: 'phone',  label: 'Phone',  value: d.phone, pub: d.phonePublic });
+    if (age != null) rows.push({ key: 'age',    label: 'Age',    value: String(age), pub: d.dobPublic });
+    if (d.gender)    rows.push({ key: 'gender', label: 'Gender', value: GENDER_LABELS[d.gender] ?? d.gender, pub: d.genderPublic });
+    return rows;
+  })();
 
   return (
     <View style={st.screen}>
@@ -458,7 +515,23 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser 
           )}
 
           {tab === 'about' && (
-            profile?.dna?.length > 0 ? (
+            <>
+            {detailRows.length > 0 && (
+              <View style={[st.detailsCard, { backgroundColor: C.surface, borderColor: C.border }]}>
+                {detailRows.map((r) => (
+                  <View key={r.key} style={st.detailRow}>
+                    <Text style={st.detailLabel}>{r.label}</Text>
+                    <View style={st.detailValueWrap}>
+                      <Text style={st.detailValue}>{r.value}</Text>
+                      {isOwnProfile && (
+                        <Text style={st.detailVis}>{r.pub ? '👁 Public' : '🔒 Only you'}</Text>
+                      )}
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+            {profile?.dna?.length > 0 ? (
               <>
                 <View style={st.dnaSectionHeader}>
                   <Text style={st.dnaSectionTitle}>Citizen DNA</Text>
@@ -478,7 +551,8 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser 
             ) : (
               <EmptyState icon="🧬" headline="No Citizen DNA yet"
                 subtext="React to sentis to build your DNA profile" style={st.gridEmptyState} />
-            )
+            )}
+            </>
           )}
         </View>
 
@@ -648,6 +722,18 @@ const makeStyles = (C) => StyleSheet.create({
   dnaPrivacyIcon:   { fontSize: fs(13) },                                         // was fs(12) ×1.10
   dnaPrivacyText:   { fontSize: fs(12), fontWeight: '600', color: C.textMuted },  // was fs(11) ×1.10
   dnaChart:         { borderRadius: ms(14), padding: ms(8), borderWidth: 0.5 },
+  detailsCard: {
+    marginHorizontal: ms(16), marginTop: vs(12), marginBottom: vs(4),
+    borderRadius: ms(14), borderWidth: 0.5, paddingHorizontal: ms(14), paddingVertical: vs(4),
+  },
+  detailRow: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingVertical: vs(10), borderBottomWidth: 0.5, borderBottomColor: C.border,
+  },
+  detailLabel:     { fontSize: fs(13), fontWeight: '600', color: C.textMuted },
+  detailValueWrap: { flexDirection: 'row', alignItems: 'center', gap: ms(8) },
+  detailValue:     { fontSize: fs(14), fontWeight: '600', color: C.textPrimary },
+  detailVis:       { fontSize: fs(11), fontWeight: '600', color: C.textMuted },
   gridSection: { paddingHorizontal: ms(16), paddingTop: vs(10), paddingBottom: vs(24) },
   gridHeader:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: vs(8) },
   gridTitle:   { fontSize: fs(14), fontWeight: '700', color: C.textPrimary },   // was fs(13) ×1.10
