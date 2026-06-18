@@ -42,6 +42,25 @@ export default function UsernameDisplayNameScreen({ onDone, userId }) {
     return () => { active = false; };
   }, [userId]);
 
+  // Resuming an unfinished onboarding? Prefill the username/display name already
+  // on the row so the user can continue with them instead of being forced to
+  // "change" a username they already have (which the cooldown would then block).
+  useEffect(() => {
+    if (!uid) return;
+    let active = true;
+    supabase
+      .from('users')
+      .select('username, display_name')
+      .eq('id', uid)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!active || !data) return;
+        if (data.username)     setUsername((cur) => cur || data.username);
+        if (data.display_name) setDisplayName((cur) => cur || data.display_name);
+      });
+    return () => { active = false; };
+  }, [uid]);
+
   // ── Real-time duplicate check (debounced 600ms) ──
   useEffect(() => {
     const u = username.trim();
