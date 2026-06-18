@@ -1,9 +1,14 @@
 import * as Linking from 'expo-linking';
 import { Stack } from 'expo-router';
 import { useEffect } from 'react';
+import { LogBox } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import ErrorBoundary from '../components/ErrorBoundary';
 import { supabase } from '../lib/supabase';
+
+// Silence a deprecation warning fired from inside react-native-country-picker-modal
+// (v2.0.0 imports the old SafeAreaView). Not our code; harmless. Dev-only noise.
+LogBox.ignoreLogs(['SafeAreaView has been deprecated']);
 
 const processedCodes = new Set<string>();
 
