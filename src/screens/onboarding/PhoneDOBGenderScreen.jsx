@@ -7,7 +7,7 @@
 // Props: onDone: () => void, userId: string
 // ─────────────────────────────────────────────
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
   ScrollView, StyleSheet, useColorScheme,
@@ -48,8 +48,20 @@ export default function PhoneDOBGenderScreen({ onDone, userId }) {
   const [month,         setMonth]         = useState('');
   const [year,          setYear]          = useState('');
   const [gender,        setGender]        = useState('');
+  const [recoveryEmail, setRecoveryEmail] = useState('');
+  const [isPhoneAccount, setIsPhoneAccount] = useState(false);
   const [phoneTaken,    setPhoneTaken]    = useState(false);
   const [saving,        setSaving]        = useState(false);
+
+  // Phone accounts log in with a synthetic email, so offer a real recovery
+  // email here. Email accounts already have a real login email — skip it.
+  useEffect(() => {
+    let active = true;
+    supabase.auth.getUser().then(({ data }) => {
+      if (active) setIsPhoneAccount(!!data?.user?.email?.endsWith('@phone.peolia.invalid'));
+    });
+    return () => { active = false; };
+  }, []);
 
   const phoneDigits = phone.replace(/\D/g, '');
   const canContinue =
@@ -77,6 +89,10 @@ export default function PhoneDOBGenderScreen({ onDone, userId }) {
 
   const saveDetails = async () => {
     const fullPhone = '+' + callingCode + phoneDigits;
+    const recovery = recoveryEmail.trim().toLowerCase();
+    if (isPhoneAccount && recovery && !/^\S+@\S+\.\S+$/.test(recovery)) {
+      Alert.alert('Invalid email', 'That recovery email does not look valid.'); return;
+    }
     setSaving(true);
     setPhoneTaken(false);
     try {
@@ -86,14 +102,16 @@ export default function PhoneDOBGenderScreen({ onDone, userId }) {
 
       // Private by default → user_private. Phone uniqueness is enforced by the
       // partial unique index (user_private_phone_unique); a clash surfaces as 23505.
+      const row = {
+        user_id:  uid,
+        phone:    fullPhone,
+        birthday: `${year}-${month}-${day}`,
+        gender,
+      };
+      if (isPhoneAccount && recovery) row.recovery_email = recovery;
       const { error } = await supabase
         .from('user_private')
-        .upsert({
-          user_id:  uid,
-          phone:    fullPhone,
-          birthday: `${year}-${month}-${day}`,
-          gender,
-        }, { onConflict: 'user_id' });
+        .upsert(row, { onConflict: 'user_id' });
       if (error) {
         if (error.code === '23505') { setPhoneTaken(true); return; }
         throw error;
@@ -148,6 +166,24 @@ export default function PhoneDOBGenderScreen({ onDone, userId }) {
         </View>
         {phoneTaken && (
           <Text style={st.errorText}>This number is already registered to another account.</Text>
+        )}
+
+        {/* Recovery email — phone accounts only (their login email is synthetic) */}
+        {isPhoneAccount && (
+          <>
+            <Text style={[st.label, st.labelSpaced]}>Recovery Email (optional)</Text>
+            <Text style={st.helper}>Lets you sign in and recover your account by email.</Text>
+            <TextInput
+              style={st.recoveryInput}
+              value={recoveryEmail}
+              onChangeText={setRecoveryEmail}
+              placeholder="you@example.com"
+              placeholderTextColor={C.textMuted}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+          </>
         )}
 
         {/* Date of birth */}
@@ -230,6 +266,11 @@ const makeStyles = (C) => StyleSheet.create({
   callingCode: { fontSize: fs(13), fontWeight: '600', color: C.textPrimary },
   phoneInput: {
     flex: 1, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border,
+    borderRadius: s(10), paddingHorizontal: ms(12), paddingVertical: vs(11),
+    fontSize: fs(13), color: C.textPrimary,
+  },
+  recoveryInput: {
+    backgroundColor: C.surface, borderWidth: 1, borderColor: C.border,
     borderRadius: s(10), paddingHorizontal: ms(12), paddingVertical: vs(11),
     fontSize: fs(13), color: C.textPrimary,
   },
