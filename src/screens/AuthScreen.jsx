@@ -20,6 +20,7 @@ import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
 import CountryPicker from 'react-native-country-picker-modal';
 import { supabase } from '../lib/supabase';
+import { functionErrorMessage } from '../utils/functionError';
 import { getPeoliaColors } from '../constants/peoliaTheme';
 import { fs, ms, vs, s } from '../utils/peoliaScale';
 
@@ -84,7 +85,7 @@ export default function AuthScreen({ onAuth, onGuest }) {
           body: { phone: fullPhone, password },
         });
         if (error || data?.error) {
-          Alert.alert('Sign up failed', data?.error ?? error?.message ?? 'Please try again.');
+          Alert.alert('Sign up failed', await functionErrorMessage(error, data));
           return;
         }
 
