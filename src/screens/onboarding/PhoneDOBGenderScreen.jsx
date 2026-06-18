@@ -64,8 +64,9 @@ export default function PhoneDOBGenderScreen({ onDone, userId }) {
   }, []);
 
   const phoneDigits = phone.replace(/\D/g, '');
+  // Phone accounts already gave their number at signup — don't ask again.
   const canContinue =
-    phoneDigits.length > 0 && !!day && !!month && !!year && !!gender && !saving;
+    (isPhoneAccount || phoneDigits.length > 0) && !!day && !!month && !!year && !!gender && !saving;
 
   const handleContinue = () => {
     if (!canContinue) return;
@@ -104,11 +105,17 @@ export default function PhoneDOBGenderScreen({ onDone, userId }) {
       // partial unique index (user_private_phone_unique); a clash surfaces as 23505.
       const row = {
         user_id:  uid,
-        phone:    fullPhone,
         birthday: `${year}-${month}-${day}`,
         gender,
       };
-      if (isPhoneAccount && recovery) row.recovery_email = recovery;
+      // Phone accounts already have their number stored from signup — leave it
+      // untouched (omitted columns aren't overwritten on upsert). Only email
+      // accounts set their phone here, and only they get the recovery email.
+      if (isPhoneAccount) {
+        if (recovery) row.recovery_email = recovery;
+      } else {
+        row.phone = fullPhone;
+      }
       const { error } = await supabase
         .from('user_private')
         .upsert(row, { onConflict: 'user_id' });
@@ -135,37 +142,41 @@ export default function PhoneDOBGenderScreen({ onDone, userId }) {
         <Text style={st.title}>A bit about you</Text>
         <Text style={st.subtitle}>Private by default — you choose what to share later.</Text>
 
-        {/* Phone */}
-        <Text style={st.label}>Phone Number</Text>
-        <View style={st.phoneRow}>
-          <TouchableOpacity style={st.countryBox} onPress={() => setPickerVisible(true)} activeOpacity={0.7}>
-            <CountryPicker
-              countryCode={countryCode}
-              withFlag
-              withFilter
-              withAlphaFilter
-              withCallingCode
-              visible={pickerVisible}
-              onClose={() => setPickerVisible(false)}
-              onSelect={(country) => {
-                setCountryCode(country.cca2);
-                setCallingCode(country.callingCode?.[0] ?? '');
-                setPickerVisible(false);
-              }}
-            />
-            <Text style={st.callingCode}>+{callingCode}</Text>
-          </TouchableOpacity>
-          <TextInput
-            style={st.phoneInput}
-            value={phone}
-            onChangeText={(t) => { setPhone(t); setPhoneTaken(false); }}
-            placeholder="501234567"
-            placeholderTextColor={C.textMuted}
-            keyboardType="phone-pad"
-          />
-        </View>
-        {phoneTaken && (
-          <Text style={st.errorText}>This number is already registered to another account.</Text>
+        {/* Phone — only for email accounts; phone accounts gave it at signup */}
+        {!isPhoneAccount && (
+          <>
+            <Text style={st.label}>Phone Number</Text>
+            <View style={st.phoneRow}>
+              <TouchableOpacity style={st.countryBox} onPress={() => setPickerVisible(true)} activeOpacity={0.7}>
+                <CountryPicker
+                  countryCode={countryCode}
+                  withFlag
+                  withFilter
+                  withAlphaFilter
+                  withCallingCode
+                  visible={pickerVisible}
+                  onClose={() => setPickerVisible(false)}
+                  onSelect={(country) => {
+                    setCountryCode(country.cca2);
+                    setCallingCode(country.callingCode?.[0] ?? '');
+                    setPickerVisible(false);
+                  }}
+                />
+                <Text style={st.callingCode}>+{callingCode}</Text>
+              </TouchableOpacity>
+              <TextInput
+                style={st.phoneInput}
+                value={phone}
+                onChangeText={(t) => { setPhone(t); setPhoneTaken(false); }}
+                placeholder="501234567"
+                placeholderTextColor={C.textMuted}
+                keyboardType="phone-pad"
+              />
+            </View>
+            {phoneTaken && (
+              <Text style={st.errorText}>This number is already registered to another account.</Text>
+            )}
+          </>
         )}
 
         {/* Recovery email — phone accounts only (their login email is synthetic) */}
