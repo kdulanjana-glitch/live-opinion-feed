@@ -29,6 +29,18 @@ export default function UsernameDisplayNameScreen({ onDone, userId }) {
   const [displayName, setDisplayName] = useState('');
   const [status,      setStatus]      = useState('');   // ''|checking|available|taken|short|invalid
   const [saving,      setSaving]      = useState(false);
+  const [uid,         setUid]         = useState(userId || null);
+
+  // Resolve the auth user id ourselves — the prop can arrive empty if this
+  // screen renders before the session lands, and an empty id breaks every query.
+  useEffect(() => {
+    if (userId) { setUid(userId); return; }
+    let active = true;
+    supabase.auth.getUser().then(({ data }) => {
+      if (active) setUid(data?.user?.id ?? null);
+    });
+    return () => { active = false; };
+  }, [userId]);
 
   // ── Real-time duplicate check (debounced 600ms) ──
   useEffect(() => {
@@ -36,20 +48,23 @@ export default function UsernameDisplayNameScreen({ onDone, userId }) {
     if (!u)              { setStatus('');        return; }
     if (u.length < 3)    { setStatus('short');   return; }
     if (!USERNAME_RE.test(u)) { setStatus('invalid'); return; }
+    if (!uid)            { setStatus('');        return; }   // no id yet — don't fire a broken query
 
     setStatus('checking');
+    let active = true;
     const t = setTimeout(async () => {
       const { data, error } = await supabase
         .from('users')
         .select('id')
         .eq('username', u)
-        .neq('id', userId);
+        .neq('id', uid);
+      if (!active) return;   // resolved after unmount/next keystroke — drop it
       if (error) { setStatus(''); return; }
       setStatus((data?.length ?? 0) > 0 ? 'taken' : 'available');
     }, 600);
 
-    return () => clearTimeout(t);
-  }, [username, userId]);
+    return () => { active = false; clearTimeout(t); };
+  }, [username, uid]);
 
   const statusMeta = {
     checking:  { text: 'Checking...',                          color: C.textMuted },
@@ -63,12 +78,13 @@ export default function UsernameDisplayNameScreen({ onDone, userId }) {
 
   const handleContinue = async () => {
     if (!canContinue) return;
+    if (!uid) { Alert.alert('Just a moment', 'Still signing you in — try again in a second.'); return; }
     setSaving(true);
     try {
       const { error } = await supabase
         .from('users')
         .update({ username: username.trim(), display_name: displayName.trim() })
-        .eq('id', userId);
+        .eq('id', uid);
       if (error) {
         if (error.code === '23505') { Alert.alert('Username taken', 'That username was just taken — try another.'); return; }
         throw error;
