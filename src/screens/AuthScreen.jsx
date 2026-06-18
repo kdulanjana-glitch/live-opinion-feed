@@ -10,7 +10,7 @@
 // Guest → calls onGuest() to enter app with limited access.
 // ─────────────────────────────────────────────
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
   ScrollView, StyleSheet, useColorScheme,
@@ -43,18 +43,51 @@ export default function AuthScreen({ onAuth, onGuest }) {
   const [phone,           setPhone]           = useState('');
   const [loading,         setLoading]         = useState(false);
   const [verifyNotice,    setVerifyNotice]    = useState(false);
+  const [availStatus,     setAvailStatus]     = useState('');  // ''|checking|available|taken|invalid|short
 
   const resetFields = () => {
     setEmail('');
     setPassword('');
     setConfirmPassword('');
     setPhone('');
+    setAvailStatus('');
   };
 
   const switchTab = (t) => {
     resetFields();
     setTab(t);
   };
+
+  // ── Live availability of the primary identifier (Sign Up only, debounced) ──
+  // Calls a SECURITY DEFINER RPC; on any error we clear the status so a missing
+  // RPC degrades to "no check" rather than blocking signup.
+  useEffect(() => {
+    if (tab !== 'signup') { setAvailStatus(''); return; }
+
+    let rpc, args;
+    if (method === 'email') {
+      const e = email.trim().toLowerCase();
+      if (!e)                          { setAvailStatus('');        return; }
+      if (!/^\S+@\S+\.\S+$/.test(e))   { setAvailStatus('invalid'); return; }
+      rpc = 'check_email_available'; args = { p_email: e };
+    } else {
+      const digits = phone.replace(/\D/g, '');
+      if (!digits)                     { setAvailStatus('');      return; }
+      if (digits.length < 6)           { setAvailStatus('short'); return; }
+      rpc = 'check_phone_available'; args = { p_phone: '+' + callingCode + digits };
+    }
+
+    setAvailStatus('checking');
+    let active = true;
+    const t = setTimeout(async () => {
+      const { data, error } = await supabase.rpc(rpc, args);
+      if (!active) return;
+      if (error) { setAvailStatus(''); return; }   // RPC missing/failed → don't block
+      setAvailStatus(data ? 'available' : 'taken');
+    }, 600);
+
+    return () => { active = false; clearTimeout(t); };
+  }, [tab, method, email, phone, callingCode]);
 
   // ── Sign Up ────────────────────────────────
   const handleSignUp = async () => {
@@ -81,10 +114,10 @@ export default function AuthScreen({ onAuth, onGuest }) {
         // Create the account via the phone-signup Edge Function (admin createUser
         // with a synthetic email). The function always returns 200 with
         // { success, error? }, so check success rather than the HTTP status.
-        const body = { phone: fullPhone, password };
-        const recovery = email.trim();
-        if (recovery) body.email = recovery;   // optional recovery contact
-        const { data, error } = await supabase.functions.invoke('phone-signup', { body });
+        // (Recovery email is collected later, on the DOB & gender screen.)
+        const { data, error } = await supabase.functions.invoke('phone-signup', {
+          body: { phone: fullPhone, password },
+        });
         if (error || !data?.success) {
           Alert.alert('Sign up failed', data?.error ?? error?.message ?? 'Please try again.');
           return;
@@ -124,10 +157,12 @@ export default function AuthScreen({ onAuth, onGuest }) {
     }
 
     let signInEmail;
+    let fullPhone;
     if (method === 'phone') {
       const phoneDigits = phone.replace(/\D/g, '');
       if (phoneDigits.length < 6) { Alert.alert('Missing phone', 'Please enter your phone number.'); return; }
-      signInEmail = phoneToSyntheticEmail('+' + callingCode + phoneDigits);
+      fullPhone = '+' + callingCode + phoneDigits;
+      signInEmail = phoneToSyntheticEmail(fullPhone);
     } else {
       if (!email.trim()) { Alert.alert('Missing fields', 'Please enter your email and password.'); return; }
       signInEmail = email.trim().toLowerCase();
@@ -135,12 +170,34 @@ export default function AuthScreen({ onAuth, onGuest }) {
 
     setLoading(true);
     try {
+      // Primary attempt: the identifier maps directly to a login (email, or the
+      // synthetic email for a phone account).
       const { data, error } = await supabase.auth.signInWithPassword({ email: signInEmail, password });
-      if (error) throw error;
-      onAuth?.(data.session);
+      if (!error) { onAuth?.(data.session); return; }
+
+      // Fallback: the identifier may be a SECONDARY contact (e.g. a phone account's
+      // recovery email, or an email account's phone). login-secondary resolves it.
+      const { data: secData } = await supabase.functions.invoke('login-secondary', {
+        body: {
+          identifier: method === 'phone' ? fullPhone : email.trim().toLowerCase(),
+          password,
+          type: method,
+        },
+      });
+      if (secData?.success && secData.session) {
+        // Hydrate this client's session before continuing.
+        await supabase.auth.setSession({
+          access_token:  secData.session.access_token,
+          refresh_token: secData.session.refresh_token,
+        });
+        onAuth?.(secData.session);
+        return;
+      }
+
+      // Both attempts failed — generic message, same wording either way.
+      Alert.alert('Log in failed', 'Please check your credentials.');
     } catch (err) {
-      // Generic message — don't reveal whether the phone/email exists.
-      Alert.alert('Log in failed', err.message ?? 'Please check your credentials.');
+      Alert.alert('Log in failed', 'Please check your credentials.');
     } finally {
       setLoading(false);
     }
@@ -170,6 +227,17 @@ export default function AuthScreen({ onAuth, onGuest }) {
       setLoading(false);
     }
   };
+
+  const availMeta = tab === 'signup' ? {
+    checking:  { text: 'Checking…',                          color: C.textMuted },
+    available: { text: '✓ Available',                        color: C.yesChosen },
+    taken:     { text: '✗ Already registered',               color: C.nahChosen },
+    invalid:   { text: 'Enter a valid email',                color: C.nahChosen },
+    short:     { text: 'Enter a valid phone number',         color: C.nahChosen },
+  }[availStatus] : null;
+
+  // Block Sign Up while the identifier is still being checked or is taken.
+  const signupBlocked = tab === 'signup' && (availStatus === 'checking' || availStatus === 'taken');
 
   return (
     <KeyboardAvoidingView style={[styles.screen, { backgroundColor: C.bg }]} behavior="height">
@@ -283,19 +351,9 @@ export default function AuthScreen({ onAuth, onGuest }) {
               />
             </View>
           )}
-          {/* Optional recovery email — phone signup only (phone accounts have a
-              synthetic login email, so a real one is useful for recovery) */}
-          {tab === 'signup' && method === 'phone' && (
-            <TextInput
-              style={[styles.input, { backgroundColor: C.surface, borderColor: C.border, color: C.textPrimary }]}
-              placeholder="Email (optional, for recovery)"
-              placeholderTextColor={C.textMuted}
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
+          {/* Live availability of the primary identifier (Sign Up only) */}
+          {tab === 'signup' && !!availMeta && (
+            <Text style={[styles.availText, { color: availMeta.color }]}>{availMeta.text}</Text>
           )}
           <TextInput
             style={[styles.input, { backgroundColor: C.surface, borderColor: C.border, color: C.textPrimary }]}
@@ -320,9 +378,9 @@ export default function AuthScreen({ onAuth, onGuest }) {
 
           {/* ── Primary CTA ── */}
           <TouchableOpacity
-            style={[styles.primaryBtn, { backgroundColor: C.accent }, loading && styles.disabled]}
+            style={[styles.primaryBtn, { backgroundColor: C.accent }, (loading || signupBlocked) && styles.disabled]}
             onPress={tab === 'login' ? handleLogIn : handleSignUp}
-            disabled={loading}
+            disabled={loading || signupBlocked}
             activeOpacity={0.8}
           >
             {loading ? (
@@ -434,6 +492,13 @@ const makeStyles = (C) => StyleSheet.create({
     paddingHorizontal: ms(14),
     paddingVertical: vs(12),
     fontSize: fs(13),
+  },
+  availText: {
+    fontSize: fs(11),
+    fontWeight: '600',
+    marginTop: vs(-4),
+    marginBottom: vs(2),
+    marginLeft: ms(2),
   },
   methodToggle: {
     flexDirection: 'row',
