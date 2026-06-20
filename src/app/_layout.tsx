@@ -4,6 +4,9 @@ import { useEffect } from 'react';
 import { LogBox } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import ErrorBoundary from '../components/ErrorBoundary';
+import AppLockGate from '../components/AppLockGate';
+import { ThemeProvider } from '../context/ThemeContext';
+import { NotificationProvider } from '../context/NotificationContext';
 import { supabase } from '../lib/supabase';
 
 // Silence a deprecation warning fired from inside react-native-country-picker-modal
@@ -42,9 +45,15 @@ export default function Layout() {
 
   return (
     <SafeAreaProvider>
-      <ErrorBoundary>
-        <Stack screenOptions={{ headerShown: false }} />
-      </ErrorBoundary>
+      <ThemeProvider>
+        <NotificationProvider>
+          <ErrorBoundary>
+            <AppLockGate>
+              <Stack screenOptions={{ headerShown: false }} />
+            </AppLockGate>
+          </ErrorBoundary>
+        </NotificationProvider>
+      </ThemeProvider>
     </SafeAreaProvider>
   );
 }

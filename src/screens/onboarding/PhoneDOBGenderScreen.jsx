@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────
-// Peolia — Onboarding / PhoneDOBGenderScreen (Step 2 of 4)
+// Peolia — Onboarding / PhoneDOBGenderScreen (Step 2 of 3)
 // src/screens/onboarding/PhoneDOBGenderScreen.jsx
 //
 // Country-code + phone, date of birth (day/month/year), gender. Private info.
@@ -9,10 +9,17 @@
 
 import React, { useState, useEffect } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity,
-  ScrollView, StyleSheet, useColorScheme,
-  Alert, ActivityIndicator, KeyboardAvoidingView,
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  ScrollView,
+  StyleSheet,
+  Alert,
+  ActivityIndicator,
+  KeyboardAvoidingView,
 } from 'react-native';
+import { usePeoliaScheme } from '../../context/ThemeContext';
 import { Picker } from '@react-native-picker/picker';
 import CountryPicker from 'react-native-country-picker-modal';
 import { supabase } from '../../lib/supabase';
@@ -36,7 +43,7 @@ const GENDERS = [
 ];
 
 export default function PhoneDOBGenderScreen({ onDone, userId }) {
-  const scheme = useColorScheme();
+  const scheme = usePeoliaScheme();
   const C = getPeoliaColors(scheme);
   const st = makeStyles(C);
 
@@ -138,7 +145,7 @@ export default function PhoneDOBGenderScreen({ onDone, userId }) {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={st.step}>Step 2 of 4</Text>
+        <Text style={st.step}>Step 2 of 3</Text>
         <Text style={st.title}>A bit about you</Text>
         <Text style={st.subtitle}>Private by default — you choose what to share later.</Text>
 

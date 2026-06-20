@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────
-// Peolia — Onboarding / UsernameDisplayNameScreen (Step 1 of 4)
+// Peolia — Onboarding / UsernameDisplayNameScreen (Step 1 of 3)
 // src/screens/onboarding/UsernameDisplayNameScreen.jsx
 //
 // Pick username (real-time duplicate check, debounced 600ms) + display name.
@@ -9,10 +9,16 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity,
-  ScrollView, StyleSheet, useColorScheme,
-  Alert, ActivityIndicator,
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  ScrollView,
+  StyleSheet,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
+import { usePeoliaScheme } from '../../context/ThemeContext';
 import { supabase } from '../../lib/supabase';
 import { getPeoliaColors } from '../../constants/peoliaTheme';
 import { fs, ms, vs, s } from '../../utils/peoliaScale';
@@ -21,7 +27,7 @@ const DISPLAY_MAX = 40;
 const USERNAME_RE = /^[a-zA-Z0-9_]{3,20}$/;
 
 export default function UsernameDisplayNameScreen({ onDone, userId }) {
-  const scheme = useColorScheme();
+  const scheme = usePeoliaScheme();
   const C = getPeoliaColors(scheme);
   const st = makeStyles(C);
 
@@ -123,7 +129,7 @@ export default function UsernameDisplayNameScreen({ onDone, userId }) {
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
     >
-      <Text style={st.step}>Step 1 of 4</Text>
+      <Text style={st.step}>Step 1 of 3</Text>
       <Text style={st.title}>Choose your identity</Text>
       <Text style={st.subtitle}>This is how citizens know you in Peolia.</Text>
 

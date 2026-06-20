@@ -8,15 +8,26 @@
 // Optional in-app password change via supabase.auth.updateUser.
 // ─────────────────────────────────────────────
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView,
-  Modal, KeyboardAvoidingView, Platform,
-  useColorScheme, ActivityIndicator, Alert, Image,
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  ScrollView,
+  Modal,
+  StatusBar,
+  Platform,
+  ActivityIndicator,
+  Alert,
+  Image,
 } from 'react-native';
+import { usePeoliaScheme } from '../context/ThemeContext';
 import * as ImagePicker from 'expo-image-picker';
 import { Picker } from '@react-native-picker/picker';
 import CountryPicker from 'react-native-country-picker-modal';
+import Icon from './Icon';
 import { decode } from 'base64-arraybuffer';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../lib/supabase';
@@ -43,8 +54,8 @@ const GENDERS = [
   { value: 'prefer_not_to_say', label: 'Prefer not to say' },
 ];
 
-export default function EditProfileSheet({ visible, onClose, initial, onSaved }) {
-  const scheme = useColorScheme();
+export default function EditProfileSheet({ visible, onClose, initial, onSaved, embedded = false, bare = false, onBack }) {
+  const scheme = usePeoliaScheme();
   const C  = getPeoliaColors(scheme);
   const st = makeStyles(C);
   const insets = useSafeAreaInsets();
@@ -53,6 +64,7 @@ export default function EditProfileSheet({ visible, onClose, initial, onSaved })
   const [email,       setEmail]       = useState('');   // read-only (auth)
   const [displayName, setDisplayName] = useState('');
   const [bio,         setBio]         = useState('');
+  const [dnaPublic,   setDnaPublic]   = useState(false); // Citizen DNA visibility
   const [phone,       setPhone]       = useState('');
   const [birthday,    setBirthday]    = useState('');
   const [gender,      setGender]      = useState(null);
@@ -86,19 +98,37 @@ export default function EditProfileSheet({ visible, onClose, initial, onSaved })
   const [pickerVisible, setPickerVisible] = useState(false);
   const [phoneNational, setPhoneNational] = useState('');   // email accounts' new number
 
-  // Inline "change email" sub-form (email accounts only).
+  // Inline "change email" sub-form. Email accounts edit their auth login email;
+  // phone accounts edit a recovery email (stored in user_private.recovery_email)
+  // which lets them sign in / recover by email.
   const [showEmailChange, setShowEmailChange] = useState(false);
   const [newEmail,        setNewEmail]        = useState('');
   const [changingEmail,   setChangingEmail]   = useState(false);
+  const [recoveryEmail,   setRecoveryEmail]   = useState('');  // phone accounts only
 
   const pwStrength = passwordStrength(newPassword);
 
+  // Auto-scroll to the focused input so the keyboard doesn't cover it. Each input
+  // section records its y-offset (relative to the scroll content) via onLayout;
+  // on focus we scroll to that offset. No KAV → onLayout is stable (no feedback loop).
+  const scrollRef = useRef(null);
+  const yOf       = useRef({});
+  const track     = (key) => ({ onLayout: (e) => { yOf.current[key] = e.nativeEvent.layout.y; } });
+  const scrollToInput = (key) => () => {
+    // Small delay so the keyboard has begun opening before we scroll.
+    setTimeout(() => {
+      const y = yOf.current[key];
+      if (y != null) scrollRef.current?.scrollTo({ y: Math.max(0, y - vs(40)), animated: true });
+    }, 50);
+  };
+
   // Re-seed every time the sheet opens; pull email (auth) + private fields
   useEffect(() => {
-    if (!visible) return;
+    if (!visible && !embedded && !bare) return;
     setUsername(initial?.username ?? '');
     setDisplayName(initial?.displayName ?? '');
     setBio(initial?.bio ?? '');
+    setDnaPublic(!!initial?.dnaPublic);
     setAvatarUrl(initial?.avatarUrl ?? null);
     setNewAvatar(null);
     setCurrentPw('');
@@ -120,12 +150,13 @@ export default function EditProfileSheet({ visible, onClose, initial, onSaved })
       if (!user) return;
       const { data } = await supabase
         .from('user_private')
-        .select('phone, birthday, gender, phone_public, dob_public, gender_public')
+        .select('phone, birthday, gender, recovery_email, phone_public, dob_public, gender_public')
         .eq('user_id', user.id)
         .maybeSingle();
       setPhone(data?.phone ?? '');
       setBirthday(data?.birthday ?? '');
       setGender(data?.gender ?? null);
+      setRecoveryEmail(data?.recovery_email ?? '');
       setPhonePublic(!!data?.phone_public);
       setDobPublic(!!data?.dob_public);
       setGenderPublic(!!data?.gender_public);
@@ -167,21 +198,33 @@ export default function EditProfileSheet({ visible, onClose, initial, onSaved })
   };
 
   // Email account: change the login email via Supabase auth.
+  // Phone account: set a recovery email (user_private.recovery_email) for email login/recovery.
   const handleEmailChange = async () => {
     if (changingEmail) return;
     const next = newEmail.trim().toLowerCase();
     if (!/^\S+@\S+\.\S+$/.test(next)) { setError('Enter a valid email address.'); return; }
-    if (next === email.toLowerCase()) { setError('That is already your email.'); return; }
+    const current = (isPhoneAccount ? recoveryEmail : email).toLowerCase();
+    if (next === current) { setError('That is already your email.'); return; }
     setChangingEmail(true);
     setError(null);
     try {
-      const { error: upErr } = await supabase.auth.updateUser({ email: next });
-      if (upErr) { setError(upErr.message || 'Could not change email.'); return; }
-      await supabase.auth.refreshSession();
-      setEmail(next);
+      if (isPhoneAccount) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) { setError('You need to be signed in.'); return; }
+        const { error: upErr } = await supabase
+          .from('user_private')
+          .upsert({ user_id: user.id, recovery_email: next }, { onConflict: 'user_id' });
+        if (upErr) { setError(upErr.message || 'Could not save email.'); return; }
+        setRecoveryEmail(next);
+      } else {
+        const { error: upErr } = await supabase.auth.updateUser({ email: next });
+        if (upErr) { setError(upErr.message || 'Could not change email.'); return; }
+        await supabase.auth.refreshSession();
+        setEmail(next);
+      }
       setShowEmailChange(false);
       setNewEmail('');
-      Alert.alert('Email updated', 'Your email has been changed.');
+      Alert.alert('Email updated', 'Your email has been saved.');
     } catch (e) {
       setError('Could not change email. Please try again.');
     } finally {
@@ -190,7 +233,7 @@ export default function EditProfileSheet({ visible, onClose, initial, onSaved })
   };
 
   // Country-code + national-number input, matching the onboarding screen.
-  const renderPhoneInput = (digits, onChangeDigits) => (
+  const renderPhoneInput = (digits, onChangeDigits, onFocusFn) => (
     <View style={st.phoneRow}>
       <TouchableOpacity style={st.countryBox} onPress={() => setPickerVisible(true)} activeOpacity={0.7}>
         <CountryPicker
@@ -213,6 +256,7 @@ export default function EditProfileSheet({ visible, onClose, initial, onSaved })
         placeholder="501234567"
         placeholderTextColor={C.textMuted}
         keyboardType="phone-pad"
+        onFocus={onFocusFn}
       />
     </View>
   );
@@ -312,6 +356,7 @@ export default function EditProfileSheet({ visible, onClose, initial, onSaved })
       const updates = {
         display_name: displayName.trim() || null,
         bio:          bio.trim() || null,
+        dna_public:   dnaPublic,
         ...(uploadedAvatarUrl ? { avatar_url: uploadedAvatarUrl } : {}),
       };
       const { error: dbError } = await supabase.from('users').update(updates).eq('id', user.id);
@@ -358,23 +403,8 @@ export default function EditProfileSheet({ visible, onClose, initial, onSaved })
     }
   };
 
-  return (
-    <Modal visible={visible} transparent animationType="slide" statusBarTranslucent onRequestClose={onClose}>
-      <View style={st.backdrop}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={{ width: '100%' }}
-        >
-          <View style={[st.sheet, { paddingBottom: vs(16) + insets.bottom }]}>
-            <View style={st.handle} />
-            <View style={st.header}>
-              <Text style={st.title}>Edit profile</Text>
-              <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Text style={st.closeBtn}>✕</Text>
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={st.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+  const formScroll = (
+            <ScrollView ref={scrollRef} style={(embedded || bare) ? st.scrollPage : st.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: vs(320) }}>
               {/* Avatar */}
               <View style={st.avatarRow}>
                 <TouchableOpacity style={st.avatarWrap} onPress={pickAvatar} activeOpacity={0.8}>
@@ -400,67 +430,79 @@ export default function EditProfileSheet({ visible, onClose, initial, onSaved })
                 <Text style={st.disabledText}>@{username || '—'}</Text>
               </View>
 
-              {/* Email — editable for email accounts (phone accounts use a synthetic one) */}
-              {!isPhoneAccount && (
-                <>
-                  <Text style={st.label}>Email</Text>
-                  <View style={[st.input, st.inputDisabled]}>
-                    <Text style={st.disabledText}>{email || '—'}</Text>
-                  </View>
-                  {!showEmailChange ? (
-                    <TouchableOpacity onPress={() => { setError(null); setShowEmailChange(true); }} activeOpacity={0.7}>
-                      <Text style={st.linkAction}>Change email</Text>
-                    </TouchableOpacity>
-                  ) : (
-                    <View style={st.subForm}>
-                      <TextInput
-                        style={st.input} value={newEmail} onChangeText={setNewEmail}
-                        placeholder="New email" placeholderTextColor={C.textMuted}
-                        keyboardType="email-address" autoCapitalize="none" autoCorrect={false}
-                      />
-                      <View style={st.subFormRow}>
-                        <TouchableOpacity
-                          onPress={() => { setShowEmailChange(false); setNewEmail(''); setError(null); }}
-                          activeOpacity={0.7}
-                        >
-                          <Text style={st.subFormCancel}>Cancel</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[st.subFormBtn, changingEmail && st.saveBtnDisabled]}
-                          onPress={handleEmailChange} disabled={changingEmail} activeOpacity={0.8}
-                        >
-                          {changingEmail
-                            ? <ActivityIndicator color="#FFFFFF" size="small" />
-                            : <Text style={st.subFormBtnText}>Update email</Text>}
-                        </TouchableOpacity>
-                      </View>
+              {/* Email — email accounts edit their login email; phone accounts add a
+                  recovery email (for email sign-in / account recovery). */}
+              <View>
+                <Text style={st.label}>Email</Text>
+                <View style={[st.input, st.inputDisabled]}>
+                  <Text style={st.disabledText}>{(isPhoneAccount ? recoveryEmail : email) || '—'}</Text>
+                </View>
+                {isPhoneAccount && (
+                  <Text style={st.helper}>Lets you sign in and recover your account by email.</Text>
+                )}
+                {!showEmailChange ? (
+                  <TouchableOpacity onPress={() => { setError(null); setShowEmailChange(true); }} activeOpacity={0.7}>
+                    <Text style={st.linkAction}>
+                      {isPhoneAccount && !recoveryEmail ? 'Add email' : 'Change email'}
+                    </Text>
+                  </TouchableOpacity>
+                ) : (
+                  <View style={st.subForm} {...track('email')}>
+                    <TextInput
+                      style={st.input} value={newEmail} onChangeText={setNewEmail}
+                      placeholder="New email" placeholderTextColor={C.textMuted}
+                      keyboardType="email-address" autoCapitalize="none" autoCorrect={false}
+                      onFocus={scrollToInput('email')}
+                    />
+                    <View style={st.subFormRow}>
+                      <TouchableOpacity
+                        onPress={() => { setShowEmailChange(false); setNewEmail(''); setError(null); }}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={st.subFormCancel}>Cancel</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[st.subFormBtn, changingEmail && st.saveBtnDisabled]}
+                        onPress={handleEmailChange} disabled={changingEmail} activeOpacity={0.8}
+                      >
+                        {changingEmail
+                          ? <ActivityIndicator color="#FFFFFF" size="small" />
+                          : <Text style={st.subFormBtnText}>Save email</Text>}
+                      </TouchableOpacity>
                     </View>
-                  )}
-                </>
-              )}
+                  </View>
+                )}
+              </View>
 
               {/* Display name */}
-              <Text style={st.label}>Display name</Text>
-              <TextInput
-                style={st.input} value={displayName} onChangeText={setDisplayName}
-                placeholder="How your name appears" placeholderTextColor={C.textMuted} maxLength={DISPLAY_MAX}
-              />
+              <View {...track('displayName')}>
+                <Text style={st.label}>Display name</Text>
+                <TextInput
+                  style={st.input} value={displayName} onChangeText={setDisplayName}
+                  placeholder="How your name appears" placeholderTextColor={C.textMuted} maxLength={DISPLAY_MAX}
+                  onFocus={scrollToInput('displayName')}
+                />
+              </View>
 
               {/* Bio */}
-              <View style={st.labelRow}>
-                <Text style={st.label}>Bio</Text>
-                <Text style={st.charCount}>{bio.length} / {BIO_MAX}</Text>
+              <View {...track('bio')}>
+                <View style={st.labelRow}>
+                  <Text style={st.label}>Bio</Text>
+                  <Text style={st.charCount}>{bio.length} / {BIO_MAX}</Text>
+                </View>
+                <TextInput
+                  style={[st.input, st.inputBio]} value={bio} onChangeText={setBio}
+                  placeholder="Tell citizens about yourself..." placeholderTextColor={C.textMuted}
+                  multiline maxLength={BIO_MAX} textAlignVertical="top"
+                  onFocus={scrollToInput('bio')}
+                />
               </View>
-              <TextInput
-                style={[st.input, st.inputBio]} value={bio} onChangeText={setBio}
-                placeholder="Tell citizens about yourself..." placeholderTextColor={C.textMuted}
-                multiline maxLength={BIO_MAX} textAlignVertical="top"
-              />
 
               <Text style={st.sectionHead}>Private details</Text>
               <Text style={st.sectionNote}>Private by default. Use the switch under each to let others see it.</Text>
 
               {/* Phone */}
+              <View {...track('phone')}>
               <Text style={st.label}>Phone</Text>
               {isPhoneAccount ? (
                 <>
@@ -475,12 +517,13 @@ export default function EditProfileSheet({ visible, onClose, initial, onSaved })
                     <View style={st.subForm}>
                       <Text style={st.helper}>This is also your login. Confirm with your password.</Text>
                       <View style={{ marginTop: vs(8) }}>
-                        {renderPhoneInput(newPhone, setNewPhone)}
+                        {renderPhoneInput(newPhone, setNewPhone, scrollToInput('phone'))}
                       </View>
                       <TextInput
                         style={[st.input, { marginTop: vs(8) }]} value={phoneChangePw} onChangeText={setPhoneChangePw}
                         placeholder="Current password" placeholderTextColor={C.textMuted}
                         secureTextEntry autoCapitalize="none"
+                        onFocus={scrollToInput('phone')}
                       />
                       <View style={st.subFormRow}>
                         <TouchableOpacity
@@ -504,40 +547,64 @@ export default function EditProfileSheet({ visible, onClose, initial, onSaved })
               ) : (
                 <>
                   {!!phone && <Text style={st.helper}>Current: {phone}</Text>}
-                  {renderPhoneInput(phoneNational, setPhoneNational)}
+                  {renderPhoneInput(phoneNational, setPhoneNational, scrollToInput('phone'))}
                   <Text style={st.helper}>{phone ? 'Enter a new number to replace it.' : 'Optional.'}</Text>
                 </>
               )}
+              </View>
               {renderVisibility(phonePublic, setPhonePublic)}
 
               {/* Birthday — permanent once set */}
-              <Text style={st.label}>Date of birth</Text>
-              {dobLocked ? (
-                <>
-                  <View style={[st.input, st.inputDisabled]}>
-                    <Text style={st.disabledText}>{birthday || '—'}</Text>
-                  </View>
-                  <Text style={st.helper}>Set during signup — can't be changed.</Text>
-                </>
-              ) : (
-                <TextInput
-                  style={st.input} value={birthday} onChangeText={setBirthday}
-                  placeholder="YYYY-MM-DD" placeholderTextColor={C.textMuted}
-                  autoCapitalize="none" autoCorrect={false}
-                />
-              )}
+              <View {...track('birthday')}>
+                <Text style={st.label}>Date of birth</Text>
+                {dobLocked ? (
+                  <>
+                    <View style={[st.input, st.inputDisabled]}>
+                      <Text style={st.disabledText}>{birthday || '—'}</Text>
+                    </View>
+                    <Text style={st.helper}>Set during signup — can't be changed.</Text>
+                  </>
+                ) : (
+                  <TextInput
+                    style={st.input} value={birthday} onChangeText={setBirthday}
+                    placeholder="YYYY-MM-DD" placeholderTextColor={C.textMuted}
+                    autoCapitalize="none" autoCorrect={false}
+                    onFocus={scrollToInput('birthday')}
+                  />
+                )}
+              </View>
               {renderVisibility(dobPublic, setDobPublic)}
+
+              {/* Citizen DNA visibility — who can see the wave-DNA radar on the profile */}
+              <Text style={st.label}>Citizen DNA visibility</Text>
+              <View style={st.segment}>
+                {[
+                  { val: false, label: 'Only me' },
+                  { val: true,  label: 'Everyone' },
+                ].map((opt) => {
+                  const active = dnaPublic === opt.val;
+                  return (
+                    <TouchableOpacity
+                      key={opt.label}
+                      style={[st.segmentBtn, active && st.segmentBtnActive]}
+                      onPress={() => setDnaPublic(opt.val)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={[st.segmentText, active && st.segmentTextActive]}>{opt.label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
 
               {/* Gender */}
               <Text style={st.label}>Gender</Text>
               <View style={st.pickerBox}>
                 <Picker
-                  selectedValue={gender ?? ''}
-                  onValueChange={(v) => setGender(v || null)}
+                  selectedValue={gender ?? GENDERS[0].value}
+                  onValueChange={(v) => setGender(v)}
                   style={st.picker}
                   dropdownIconColor={C.textMuted}
                 >
-                  <Picker.Item label="Select…" value="" color={C.textMuted} />
                   {GENDERS.map((g) => (
                     <Picker.Item key={g.value} label={g.label} value={g.value} color={C.textPrimary} />
                   ))}
@@ -546,40 +613,45 @@ export default function EditProfileSheet({ visible, onClose, initial, onSaved })
               {renderVisibility(genderPublic, setGenderPublic)}
 
               {/* Security */}
-              <Text style={st.sectionHead}>Security</Text>
-              <Text style={st.label}>Change password</Text>
-              <TextInput
-                style={st.input} value={currentPw} onChangeText={setCurrentPw}
-                placeholder="Current password" placeholderTextColor={C.textMuted}
-                secureTextEntry autoCapitalize="none"
-              />
-              <TextInput
-                style={[st.input, { marginTop: vs(8) }]} value={newPassword} onChangeText={setNewPassword}
-                placeholder="New password" placeholderTextColor={C.textMuted}
-                secureTextEntry autoCapitalize="none"
-              />
-              {pwStrength.score >= 0 && (
-                <View style={st.meterRow}>
-                  <View style={st.meterTrack}>
-                    {[0, 1, 2, 3].map((i) => (
-                      <View
-                        key={i}
-                        style={[
-                          st.meterSeg,
-                          i <= pwStrength.score && { backgroundColor: pwColor(C, pwStrength.score) },
-                        ]}
-                      />
-                    ))}
+              <View {...track('security')}>
+                <Text style={st.sectionHead}>Security</Text>
+                <Text style={st.label}>Change password</Text>
+                <TextInput
+                  style={st.input} value={currentPw} onChangeText={setCurrentPw}
+                  placeholder="Current password" placeholderTextColor={C.textMuted}
+                  secureTextEntry autoCapitalize="none"
+                  onFocus={scrollToInput('security')}
+                />
+                <TextInput
+                  style={[st.input, { marginTop: vs(8) }]} value={newPassword} onChangeText={setNewPassword}
+                  placeholder="New password" placeholderTextColor={C.textMuted}
+                  secureTextEntry autoCapitalize="none"
+                  onFocus={scrollToInput('security')}
+                />
+                {pwStrength.score >= 0 && (
+                  <View style={st.meterRow}>
+                    <View style={st.meterTrack}>
+                      {[0, 1, 2, 3].map((i) => (
+                        <View
+                          key={i}
+                          style={[
+                            st.meterSeg,
+                            i <= pwStrength.score && { backgroundColor: pwColor(C, pwStrength.score) },
+                          ]}
+                        />
+                      ))}
+                    </View>
+                    <Text style={[st.meterLabel, { color: pwColor(C, pwStrength.score) }]}>{pwStrength.label}</Text>
                   </View>
-                  <Text style={[st.meterLabel, { color: pwColor(C, pwStrength.score) }]}>{pwStrength.label}</Text>
-                </View>
-              )}
-              <TextInput
-                style={[st.input, { marginTop: vs(8) }]} value={confirmPw} onChangeText={setConfirmPw}
-                placeholder="Confirm new password" placeholderTextColor={C.textMuted}
-                secureTextEntry autoCapitalize="none"
-              />
-              <Text style={st.helper}>Your current password is required. Leave blank to keep it.</Text>
+                )}
+                <TextInput
+                  style={[st.input, { marginTop: vs(8) }]} value={confirmPw} onChangeText={setConfirmPw}
+                  placeholder="Confirm new password" placeholderTextColor={C.textMuted}
+                  secureTextEntry autoCapitalize="none"
+                  onFocus={scrollToInput('security')}
+                />
+                <Text style={st.helper}>Your current password is required. Leave blank to keep it.</Text>
+              </View>
 
               {error && <Text style={st.error}>{error}</Text>}
 
@@ -590,8 +662,44 @@ export default function EditProfileSheet({ visible, onClose, initial, onSaved })
                 {saving ? <ActivityIndicator color="#FFFFFF" size="small" /> : <Text style={st.saveText}>Save</Text>}
               </TouchableOpacity>
             </ScrollView>
-          </View>
-        </KeyboardAvoidingView>
+  );
+
+  // Bare mode (hosted inside a tab, e.g. SettingsScreen's Profile tab): just the
+  // form, no header and no modal — the host provides the chrome.
+  if (bare) {
+    return <View style={st.bareWrap}>{formScroll}</View>;
+  }
+
+  // Full-page mode (Settings screen): plain screen with a back header.
+  if (embedded) {
+    return (
+      <View style={st.page}>
+        <StatusBar barStyle={scheme === 'dark' ? 'light-content' : 'dark-content'} backgroundColor={C.bg} />
+        <View style={st.pageHeader}>
+          <TouchableOpacity onPress={onBack} style={st.pageBackBtn} activeOpacity={0.7} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <Icon name="ti-chevron-left" size={fs(22)} color={C.textPrimary} />
+            <Text style={st.pageTitle}>Settings</Text>
+          </TouchableOpacity>
+        </View>
+        {formScroll}
+      </View>
+    );
+  }
+
+  // Bottom-sheet mode.
+  return (
+    <Modal visible={visible} transparent animationType="slide" statusBarTranslucent onRequestClose={onClose}>
+      <View style={st.backdrop}>
+        <View style={[st.sheet, { paddingBottom: vs(16) + insets.bottom }]}>
+            <View style={st.handle} />
+            <View style={st.header}>
+              <Text style={st.title}>Edit profile</Text>
+              <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Text style={st.closeBtn}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            {formScroll}
+        </View>
       </View>
     </Modal>
   );
@@ -606,6 +714,27 @@ const makeStyles = (C) => StyleSheet.create({
     paddingHorizontal: ms(18), paddingTop: vs(10),
   },
   scroll: { maxHeight: Math.round(SCREEN_HEIGHT * 0.66) },
+  // Full-page (Settings) mode
+  scrollPage: { flex: 1, paddingHorizontal: ms(18) },
+  // Bare mode (hosted in a tab) — no horizontal padding (host provides it)
+  bareWrap: { flex: 1 },
+  // Citizen DNA segmented control
+  segment: { flexDirection: 'row', gap: ms(8), marginTop: vs(2) },
+  segmentBtn: {
+    flex: 1, paddingVertical: vs(9), borderRadius: ms(12),
+    borderWidth: 0.5, borderColor: C.border, backgroundColor: C.surfaceAlt,
+    alignItems: 'center',
+  },
+  segmentBtnActive: { backgroundColor: C.accent, borderColor: C.accent },
+  segmentText: { fontSize: fs(13), fontWeight: '700', color: C.textMuted },
+  segmentTextActive: { color: '#FFFFFF' },
+  page: {
+    flex: 1, backgroundColor: C.bg,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : 0,
+  },
+  pageHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: ms(14), paddingTop: vs(10), paddingBottom: vs(8) },
+  pageBackBtn: { flexDirection: 'row', alignItems: 'center', gap: ms(4) },
+  pageTitle: { fontSize: fs(18), fontWeight: '800', color: C.textPrimary },
   handle: {
     width: ms(36), height: vs(4), borderRadius: ms(2),
     backgroundColor: C.border, alignSelf: 'center', marginBottom: vs(12),

@@ -9,12 +9,19 @@
 // ─────────────────────────────────────────────
 
 import React from 'react';
-import { View, Text, TouchableOpacity, Image, StyleSheet, useColorScheme } from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  Image,
+  StyleSheet,
+} from 'react-native';
+import { usePeoliaScheme } from '../context/ThemeContext';
 import { getPeoliaColors } from '../constants/peoliaTheme';
 import { fs, vs } from '../utils/peoliaScale';
 
 export default function PersonTile({ person, width, onPress }) {
-  const C = getPeoliaColors(useColorScheme());
+  const C = getPeoliaColors(usePeoliaScheme());
   const st = makeStyles(C);
 
   const d      = Math.round(width * 0.62);  // avatar diameter

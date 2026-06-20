@@ -13,9 +13,18 @@
 
 import React, { useState } from 'react';
 import {
-  View, Text, TextInput, ScrollView, TouchableOpacity,
-  StyleSheet, useColorScheme, Alert, StatusBar, Platform, Image,
+  View,
+  Text,
+  TextInput,
+  ScrollView,
+  TouchableOpacity,
+  StyleSheet,
+  Alert,
+  StatusBar,
+  Platform,
+  Image,
 } from 'react-native';
+import { usePeoliaScheme } from '../context/ThemeContext';
 import * as ImagePicker from 'expo-image-picker';
 import { decode } from 'base64-arraybuffer';
 import { supabase } from '../lib/supabase';
@@ -44,7 +53,7 @@ const WAVE_EMOJIS = {
 };
 
 export default function FloatScreen({ onBack, onFloated }) {
-  const scheme = useColorScheme();
+  const scheme = usePeoliaScheme();
   const C = getPeoliaColors(scheme);
   const s = makeStyles(C);
 

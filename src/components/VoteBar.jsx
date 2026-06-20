@@ -8,7 +8,13 @@
 // ─────────────────────────────────────────────
 
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, useColorScheme } from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+} from 'react-native';
+import { usePeoliaScheme } from '../context/ThemeContext';
 import * as Haptics from 'expo-haptics';
 import { getPeoliaColors } from '../constants/peoliaTheme';
 import { fs, ms, vs } from '../utils/peoliaScale';
@@ -20,7 +26,7 @@ const VOTES = [
 ];
 
 export default function VoteBar({ onVote, voted = null }) {
-  const scheme = useColorScheme();
+  const scheme = usePeoliaScheme();
   const C = getPeoliaColors(scheme);
   const st = makeStyles(C);
 

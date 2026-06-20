@@ -12,10 +12,17 @@
 
 import React, { useState, useEffect } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity,
-  ScrollView, StyleSheet, useColorScheme,
-  Alert, ActivityIndicator, KeyboardAvoidingView,
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  ScrollView,
+  StyleSheet,
+  Alert,
+  ActivityIndicator,
+  KeyboardAvoidingView,
 } from 'react-native';
+import { usePeoliaScheme } from '../context/ThemeContext';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
 import CountryPicker from 'react-native-country-picker-modal';
@@ -28,7 +35,7 @@ const phoneToSyntheticEmail = (e164Phone) =>
   `${e164Phone.replace(/[^0-9]/g, '')}@phone.peolia.invalid`;
 
 export default function AuthScreen({ onAuth, onGuest }) {
-  const scheme = useColorScheme();
+  const scheme = usePeoliaScheme();
   const C = getPeoliaColors(scheme);
   const styles = makeStyles(C);
 

@@ -8,7 +8,14 @@
 // ─────────────────────────────────────────────
 
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Modal, useColorScheme } from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Modal,
+} from 'react-native';
+import { usePeoliaScheme } from '../context/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getPeoliaColors } from '../constants/peoliaTheme';
 import { fs, ms, vs } from '../utils/peoliaScale';
@@ -24,7 +31,7 @@ const REASONS = [
 ];
 
 export default function ReportSheet({ visible, onClose, onSubmit, submitting }) {
-  const scheme = useColorScheme();
+  const scheme = usePeoliaScheme();
   const C = getPeoliaColors(scheme);
   const st = makeStyles(C);
   const insets = useSafeAreaInsets();

@@ -14,9 +14,16 @@
 
 import React, { useState, useEffect } from 'react';
 import {
-  View, Text, TouchableOpacity, ScrollView, ActivityIndicator,
-  StyleSheet, Modal, useColorScheme, Image,
+  View,
+  Text,
+  TouchableOpacity,
+  ScrollView,
+  ActivityIndicator,
+  StyleSheet,
+  Modal,
+  Image,
 } from 'react-native';
+import { usePeoliaScheme } from '../context/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../lib/supabase';
 import { getPeoliaColors } from '../constants/peoliaTheme';
@@ -30,7 +37,7 @@ const TILE_W    = Math.floor((SCREEN_WIDTH - H_PAD * 2 - GRID_GAP * (GRID_COLS -
 const TILE_H    = Math.round(TILE_W * 1.4);   // portrait-ish — matches 9:16 full-bleed cards
 
 export default function WaveImageSheet({ visible, onClose, onSelectPreset, onPickGallery }) {
-  const scheme = useColorScheme();
+  const scheme = usePeoliaScheme();
   const C = getPeoliaColors(scheme);
   const st = makeStyles(C);
   const insets = useSafeAreaInsets();

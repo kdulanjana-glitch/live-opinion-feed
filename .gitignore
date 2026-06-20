@@ -46,3 +46,6 @@ example
 # local staging copy of preset images — these live in the Supabase
 # senti-images/presets/ bucket; the app reads them from there at runtime
 /presets
+
+# supabase CLI temp
+supabase/.temp/

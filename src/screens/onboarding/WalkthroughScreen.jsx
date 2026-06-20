@@ -9,7 +9,13 @@
 // ─────────────────────────────────────────────
 
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, useColorScheme } from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+} from 'react-native';
+import { usePeoliaScheme } from '../../context/ThemeContext';
 import { getPeoliaColors } from '../../constants/peoliaTheme';
 import { fs, ms, vs, s } from '../../utils/peoliaScale';
 
@@ -32,7 +38,7 @@ const SLIDES = [
 ];
 
 export default function WalkthroughScreen({ onDone }) {
-  const scheme = useColorScheme();
+  const scheme = usePeoliaScheme();
   const C = getPeoliaColors(scheme);
   const styles = makeStyles(C);
 

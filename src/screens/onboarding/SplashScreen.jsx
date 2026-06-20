@@ -9,14 +9,21 @@
 // ─────────────────────────────────────────────
 
 import React, { useEffect, useRef } from 'react';
-import { View, Text, Animated, StyleSheet, useColorScheme, Dimensions } from 'react-native';
+import {
+  View,
+  Text,
+  Animated,
+  StyleSheet,
+  Dimensions,
+} from 'react-native';
+import { usePeoliaScheme } from '../../context/ThemeContext';
 import { getPeoliaColors } from '../../constants/peoliaTheme';
 import { fs, ms, vs, s } from '../../utils/peoliaScale';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export default function SplashScreen({ onDone }) {
-  const scheme = useColorScheme();
+  const scheme = usePeoliaScheme();
   const C = getPeoliaColors(scheme);
   const styles = makeStyles(C);
 

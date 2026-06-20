@@ -4,7 +4,12 @@
 // ─────────────────────────────────────────────
 
 import React from 'react';
-import { View, Text, StyleSheet, useColorScheme } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+} from 'react-native';
+import { usePeoliaScheme } from '../context/ThemeContext';
 import { getPeoliaColors } from '../constants/peoliaTheme';
 import { fs, ms, vs } from '../utils/peoliaScale';
 
@@ -16,7 +21,7 @@ const WAVE_EMOJIS = {
 };
 
 export default function WavePill({ wave = 'Tech', transparent = false, style }) {
-  const scheme = useColorScheme();
+  const scheme = usePeoliaScheme();
   const C = getPeoliaColors(scheme);
   const emoji = WAVE_EMOJIS[wave] || '🌊';
 

@@ -12,14 +12,31 @@
 //   sentis          — id, question, wave, status, user_id
 // ─────────────────────────────────────────────
 
-import React, { useState, useEffect, useCallback } from 'react';
-import EditProfileSheet from '../components/EditProfileSheet';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import Icon from '../components/Icon';
+import AboutScreen from './AboutScreen';
+import SettingsScreen from './SettingsScreen';
+import FAQScreen from './FAQScreen';
+import NotificationsHubScreen from './NotificationsHubScreen';
+import NotificationListScreen from './NotificationListScreen';
 import {
-  View, Text, ScrollView, TouchableOpacity,
-  StyleSheet, useColorScheme,
-  ActivityIndicator, Dimensions, StatusBar, Platform,
-  RefreshControl, Image, Modal, Alert,
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  TouchableWithoutFeedback,
+  StyleSheet,
+  ActivityIndicator,
+  Dimensions,
+  StatusBar,
+  Platform,
+  RefreshControl,
+  Image,
+  Modal,
+  Alert,
 } from 'react-native';
+import { usePeoliaScheme } from '../context/ThemeContext';
+import { useNotifications } from '../context/NotificationContext';
 import Svg, { Polygon, Circle, Line, Text as SvgText } from 'react-native-svg';
 import { supabase } from '../lib/supabase';
 import SentiTile from '../components/SentiTile';
@@ -72,8 +89,8 @@ const formatCount = (n) => {
   return String(n);
 };
 
-export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser }) {
-  const scheme       = useColorScheme();
+export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser, onOpenSettings }) {
+  const scheme       = usePeoliaScheme();
   const C            = getPeoliaColors(scheme);
   const st           = makeStyles(C);
   const isOwnProfile = !userId;
@@ -84,8 +101,13 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser 
   const [refreshing, setRefreshing] = useState(false);
   const [following,  setFollowing]  = useState(false);
   const [myId,       setMyId]       = useState(null);
-  const [editVisible, setEditVisible] = useState(false);
   const [viewerOpen,  setViewerOpen]  = useState(false);   // full-screen avatar viewer
+
+  // Profile header menu + sub-screens
+  const [subScreen,   setSubScreen]   = useState(null);    // null | 'about' | 'notif-hub' | 'notif-list' | 'settings'
+  const [menuVisible, setMenuVisible] = useState(false);
+  const [dnaVisible,  setDnaVisible]  = useState(true);
+  const { unreadCount } = useNotifications();
 
   // Tabbed content under the stats: 'sentis' | 'reacts' | 'followers' | 'following'
   const [tab,        setTab]        = useState('sentis');
@@ -121,7 +143,7 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser 
       // Run all queries in parallel
       const [userRes, sentisRes, dnaRes, floatedRes, userStatsRes, followRes, followersRes, followingRes, detailsRes] = await Promise.all([
         // Basic user info
-        supabase.from('users').select('id, username, display_name, bio, avatar_url').eq('id', targetId).single(),
+        supabase.from('users').select('id, username, display_name, bio, avatar_url, created_at, dna_public').eq('id', targetId).single(),
 
         // Sentis count — derived directly from sentis table (always accurate)
         supabase
@@ -199,6 +221,12 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser 
         displayName: userRes.data?.display_name ?? '',
         bio:         userRes.data?.bio ?? '',
         avatarUrl:   userRes.data?.avatar_url ?? null,
+        created_at:  userRes.data?.created_at ?? null,
+        dna_public:  !!userRes.data?.dna_public,
+        // Lifted from user_private (own profile) for the About screen
+        phone:         details?.phone ?? null,
+        date_of_birth: details?.birthday ?? null,
+        gender:        details?.gender ?? null,
         stats: {
           sentis_count:    sentisRes.count    ?? 0,  // always live from sentis table
           reacts_count:    reactsCount,
@@ -222,6 +250,9 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser 
       setLoading(false);
     }
   }, [userId]);
+
+  // Unread notification count comes from NotificationContext (single source of
+  // truth — no local fetch/subscription here).
 
   useEffect(() => { fetchProfile(); }, [fetchProfile]);
 
@@ -292,13 +323,6 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser 
     setRefreshing(false);
   };
 
-  const handleLogout = () => {
-    Alert.alert('Log out', 'Are you sure you want to log out?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Log out', style: 'destructive', onPress: () => supabase.auth.signOut() },
-    ]);
-  };
-
   // ── Follow / unfollow — optimistic with rollback ─
   const bumpFollowers = (delta) => setProfile((prev) => prev ? {
     ...prev,
@@ -335,20 +359,35 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser 
     );
   }
 
-  const stats = profile?.stats ?? {};
+  // ── Sub-screen routing (own profile) ──
+  if (subScreen === 'about')
+    return <AboutScreen profile={profile} onBack={() => setSubScreen(null)} />;
 
-  // About-tab detail rows (phone / age / gender). For other users these arrive
-  // pre-gated; for the owner each carries its visibility flag for the marker.
-  const detailRows = (() => {
-    const d = profile?.details;
-    if (!d) return [];
-    const rows = [];
-    const age = ageFromBirthday(d.birthday);
-    if (d.phone)     rows.push({ key: 'phone',  label: 'Phone',  value: d.phone, pub: d.phonePublic });
-    if (age != null) rows.push({ key: 'age',    label: 'Age',    value: String(age), pub: d.dobPublic });
-    if (d.gender)    rows.push({ key: 'gender', label: 'Gender', value: GENDER_LABELS[d.gender] ?? d.gender, pub: d.genderPublic });
-    return rows;
-  })();
+  if (subScreen === 'settings')
+    return (
+      <SettingsScreen
+        profile={profile}
+        onBack={() => setSubScreen(null)}
+        onSaved={(u) => setProfile((prev) => prev ? {
+          ...prev,
+          username:    u.username,
+          displayName: u.display_name ?? '',
+          bio:         u.bio ?? '',
+          avatarUrl:   u.avatar_url !== undefined ? u.avatar_url : prev.avatarUrl,
+        } : prev)}
+      />
+    );
+
+  if (subScreen === 'faq')
+    return <FAQScreen onBack={() => setSubScreen(null)} />;
+
+  if (subScreen === 'notif-hub')
+    return <NotificationsHubScreen onBack={() => setSubScreen(null)} onOpenList={() => setSubScreen('notif-list')} />;
+
+  if (subScreen === 'notif-list')
+    return <NotificationListScreen onBack={() => setSubScreen('notif-hub')} />;
+
+  const stats = profile?.stats ?? {};
 
   return (
     <View style={st.screen}>
@@ -361,11 +400,31 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser 
       <View style={st.header}>
         {!isOwnProfile ? (
           <TouchableOpacity onPress={onBack} style={st.backBtn} activeOpacity={0.7}>
-            <Text style={st.backIcon}>←</Text>
+            <Icon name="ti-chevron-left" size={fs(20)} color={C.textPrimary} />
             <Text style={st.headerTitle}>Citizen</Text>
           </TouchableOpacity>
         ) : (
           <Text style={st.headerTitle}>Profile</Text>
+        )}
+        {isOwnProfile && (
+          <View style={st.headerActions}>
+            <TouchableOpacity style={st.notifBtn} onPress={() => setSubScreen('notif-hub')} activeOpacity={0.8}>
+              <Icon name="ti-message-circle" size={fs(15)} color={C.textSecondary} />
+              {unreadCount > 0 && (
+                <View style={st.notifBadge}>
+                  <Text style={st.notifBadgeText}>{unreadCount > 99 ? '99+' : String(unreadCount)}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setMenuVisible(true)}
+              style={st.menuBtn}
+              activeOpacity={0.7}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Icon name="ti-dots-vertical" size={fs(14)} color={C.textSecondary} />
+            </TouchableOpacity>
+          </View>
         )}
       </View>
 
@@ -392,23 +451,24 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser 
               </Text>
             )}
           </TouchableOpacity>
-          <View style={st.nameBlock}>
-            <Text style={st.displayName}>{profile?.displayName || profile?.username || '—'}</Text>
-            <Text style={st.username}>@{profile?.username ?? '—'}</Text>
-          </View>
-          <View style={st.actionButtons}>
-            {(isOwnProfile || userId === myId) ? (
-              <>
-                <TouchableOpacity style={st.editBtn} onPress={() => setEditVisible(true)} activeOpacity={0.85}>
-                  <Text style={st.editIcon}>✏️</Text>
-                  <Text style={st.editText}>Edit</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={st.logoutBtn} onPress={handleLogout} activeOpacity={0.85}>
-                  <Text style={st.logoutText}>Log out</Text>
-                </TouchableOpacity>
-              </>
-            ) : (
-              <>
+
+          {isOwnProfile ? (
+            <View style={st.nameBlock}>
+              <Text style={st.ownName} numberOfLines={1}>
+                {(profile?.displayName && profile.displayName.trim()) ? profile.displayName : `@${profile?.username ?? '—'}`}
+              </Text>
+              {!!(profile?.displayName && profile.displayName.trim()) && (
+                <Text style={st.ownHandle} numberOfLines={1}>@{profile?.username ?? '—'}</Text>
+              )}
+              {!!profile?.bio && <Text style={st.bioInline}>{profile.bio}</Text>}
+            </View>
+          ) : (
+            <>
+              <View style={st.nameBlock}>
+                <Text style={st.displayName}>{profile?.displayName || profile?.username || '—'}</Text>
+                <Text style={st.username}>@{profile?.username ?? '—'}</Text>
+              </View>
+              <View style={st.actionButtons}>
                 <TouchableOpacity
                   style={[st.followBtn, following && st.followingBtn]}
                   onPress={handleFollow}
@@ -421,24 +481,46 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser 
                 <TouchableOpacity style={st.askBtn} activeOpacity={0.7}>
                   <Text style={st.askText}>Ask</Text>
                 </TouchableOpacity>
-              </>
-            )}
-          </View>
+              </View>
+            </>
+          )}
         </View>
 
-        {/* Bio */}
-        {!!profile?.bio && (
+        {/* Bio (other profiles — own profile shows it inline above) */}
+        {!isOwnProfile && !!profile?.bio && (
           <Text style={st.bioText}>{profile.bio}</Text>
         )}
 
-        {/* Stats row — tappable tabs (Sentis / Reacts / Followers / Following / About) */}
+        {/* Citizen DNA — between avatar row and stats */}
+        {(isOwnProfile || profile?.dna_public) && profile?.dna?.length > 0 && (
+          <View style={st.dnaCard}>
+            <View style={st.dnaCardHeader}>
+              <Text style={st.dnaCardTitle}>Citizen DNA</Text>
+              <TouchableOpacity
+                style={[st.dnaToggle, dnaVisible ? st.dnaToggleOn : st.dnaToggleOff]}
+                onPress={() => setDnaVisible((prev) => !prev)}
+                activeOpacity={0.8}
+              >
+                <View style={[st.dnaKnob, dnaVisible ? st.dnaKnobOn : st.dnaKnobOff]} />
+              </TouchableOpacity>
+            </View>
+            {dnaVisible && (
+              <CitizenDNAChart
+                data={profile.dna}
+                color={isOwnProfile ? C.accent : '#059669'}
+                gridColor={C.border}
+              />
+            )}
+          </View>
+        )}
+
+        {/* Stats row — tappable tabs (Sentis / Reacts / Followers / Following) */}
         <View style={st.statsRow}>
           {[
             { key: 'sentis',    label: 'Sentis',    value: formatCount(stats.sentis_count)    },
             { key: 'reacts',    label: 'Reacts',    value: formatCount(stats.reacts_count)    },
             { key: 'followers', label: 'Followers', value: formatCount(stats.followers_count) },
             { key: 'following', label: 'Following', value: formatCount(stats.following_count) },
-            { key: 'about',     label: 'About',     value: '🧬' },
           ].map(({ key, label, value }, i, arr) => {
             const active = tab === key;
             return (
@@ -513,70 +595,9 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser 
               </View>
             )
           )}
-
-          {tab === 'about' && (
-            <>
-            {detailRows.length > 0 && (
-              <View style={[st.detailsCard, { backgroundColor: C.surface, borderColor: C.border }]}>
-                {detailRows.map((r) => (
-                  <View key={r.key} style={st.detailRow}>
-                    <Text style={st.detailLabel}>{r.label}</Text>
-                    <View style={st.detailValueWrap}>
-                      <Text style={st.detailValue}>{r.value}</Text>
-                      {isOwnProfile && (
-                        <Text style={st.detailVis}>{r.pub ? '👁 Public' : '🔒 Only you'}</Text>
-                      )}
-                    </View>
-                  </View>
-                ))}
-              </View>
-            )}
-            {profile?.dna?.length > 0 ? (
-              <>
-                <View style={st.dnaSectionHeader}>
-                  <Text style={st.dnaSectionTitle}>Citizen DNA</Text>
-                  <View style={st.dnaPrivacyRow}>
-                    <Text style={st.dnaPrivacyIcon}>{isOwnProfile ? '🔒' : '🌍'}</Text>
-                    <Text style={st.dnaPrivacyText}>{isOwnProfile ? 'Only you' : 'Public'}</Text>
-                  </View>
-                </View>
-                <View style={[st.dnaChart, { backgroundColor: C.surface, borderColor: C.border }]}>
-                  <CitizenDNAChart
-                    data={profile.dna}
-                    color={isOwnProfile ? C.accent : '#059669'}
-                    gridColor={C.border}
-                  />
-                </View>
-              </>
-            ) : (
-              <EmptyState icon="🧬" headline="No Citizen DNA yet"
-                subtext="React to sentis to build your DNA profile" style={st.gridEmptyState} />
-            )}
-            </>
-          )}
         </View>
 
       </ScrollView>
-
-      {/* Edit profile sheet — own profile only */}
-      <EditProfileSheet
-        visible={editVisible}
-        onClose={() => setEditVisible(false)}
-        initial={{
-          username:    profile?.username ?? '',
-          displayName: profile?.displayName ?? '',
-          bio:         profile?.bio ?? '',
-          avatarUrl:   profile?.avatarUrl ?? null,
-        }}
-        onSaved={(u) => setProfile((prev) => prev ? {
-          ...prev,
-          username:    u.username,
-          displayName: u.display_name ?? '',
-          bio:         u.bio ?? '',
-          // avatar_url is only present in the update when a new photo was uploaded
-          avatarUrl:   u.avatar_url !== undefined ? u.avatar_url : prev.avatarUrl,
-        } : prev)}
-      />
 
       {/* Full-screen avatar viewer — tap the profile picture to open */}
       <Modal
@@ -591,6 +612,51 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser 
             <Image source={{ uri: profile.avatarUrl }} style={st.viewerImg} resizeMode="contain" />
           )}
         </TouchableOpacity>
+      </Modal>
+
+      {/* ⋮ menu (own profile only) */}
+      <Modal visible={menuVisible} transparent animationType="fade" onRequestClose={() => setMenuVisible(false)}>
+        <TouchableWithoutFeedback onPress={() => setMenuVisible(false)}>
+          <View style={{ flex: 1 }}>
+            <TouchableWithoutFeedback>
+              <View style={st.menuCard}>
+                <TouchableOpacity
+                  style={st.menuItem}
+                  onPress={() => { setMenuVisible(false); setSubScreen('about'); }}
+                  activeOpacity={0.7}
+                >
+                  <Icon name="ti-user-circle" size={fs(13)} color={C.textSecondary} />
+                  <Text style={st.menuLabel}>About</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={st.menuItem}
+                  onPress={() => { setMenuVisible(false); onOpenSettings ? onOpenSettings() : setSubScreen('settings'); }}
+                  activeOpacity={0.7}
+                >
+                  <Icon name="ti-settings" size={fs(13)} color={C.textSecondary} />
+                  <Text style={st.menuLabel}>Settings</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={st.menuItem}
+                  onPress={() => { setMenuVisible(false); setSubScreen('faq'); }}
+                  activeOpacity={0.7}
+                >
+                  <Icon name="ti-help-circle" size={fs(13)} color={C.textSecondary} />
+                  <Text style={st.menuLabel}>Support</Text>
+                </TouchableOpacity>
+                <View style={st.menuDivider} />
+                <TouchableOpacity
+                  style={st.menuItem}
+                  onPress={() => { setMenuVisible(false); supabase.auth.signOut(); }}
+                  activeOpacity={0.7}
+                >
+                  <Icon name="ti-logout" size={fs(13)} color="#EF4444" />
+                  <Text style={[st.menuLabel, { color: '#EF4444' }]}>Log out</Text>
+                </TouchableOpacity>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
       </Modal>
     </View>
   );
@@ -662,7 +728,50 @@ const makeStyles = (C) => StyleSheet.create({
   backBtn:     { flexDirection: 'row', alignItems: 'center', gap: ms(6) },
   backIcon:    { fontSize: fs(20), color: C.textPrimary },                 // was fs(18) ×1.10
   headerTitle: { fontSize: fs(18), fontWeight: '800', color: C.textPrimary }, // was fs(16) ×1.10
+  infoBtn:     { padding: ms(4) },
+  infoIcon:    { fontSize: fs(22), color: C.textSecondary },
   settingsIcon: { fontSize: fs(22) },                                       // was fs(20) ×1.10
+  // Header right-side actions (notification icon + ⋮)
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: ms(8) },
+  // ⋮ header button
+  menuBtn: {
+    width: s(28), height: s(28), borderRadius: s(14),
+    backgroundColor: C.surfaceAlt, borderWidth: 0.5, borderColor: C.border,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  // Own-profile avatar-row name/bio (compact)
+  ownName:   { fontSize: fs(12), fontWeight: '800', color: C.textPrimary },
+  ownHandle: { fontSize: fs(8), color: C.textMuted, marginTop: vs(1) },
+  bioInline: { fontSize: fs(7.5), color: C.textSecondary, marginTop: vs(2), lineHeight: fs(11) },
+  // Notification icon button + unread badge
+  notifBtn: {
+    width: s(28), height: s(28), borderRadius: s(14),
+    backgroundColor: C.surfaceAlt, borderWidth: 0.5, borderColor: C.border,
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  },
+  notifBadge: {
+    position: 'absolute', top: -2, right: -2,
+    minWidth: s(13), height: s(13), borderRadius: s(7),
+    backgroundColor: '#EF4444', borderWidth: 1.5, borderColor: C.bg,
+    alignItems: 'center', justifyContent: 'center', paddingHorizontal: ms(2),
+  },
+  notifBadgeText: { fontSize: fs(6), color: '#FFFFFF', fontWeight: '800', textAlign: 'center' },
+  // Standalone Citizen DNA card (between avatar row and stats)
+  dnaCard: {
+    marginHorizontal: ms(12), marginBottom: vs(10),
+    backgroundColor: C.surface, borderWidth: 0.5, borderColor: C.border,
+    borderRadius: ms(11), paddingVertical: vs(8), paddingHorizontal: ms(10),
+  },
+  dnaCardHeader:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: vs(6) },
+  dnaCardTitle:   { fontSize: fs(9), fontWeight: '700', color: C.textPrimary },
+  dnaCardRight:   { flexDirection: 'row', alignItems: 'center', gap: ms(6) },
+  dnaCardPrivacy: { fontSize: fs(6.5), color: C.textMuted },
+  dnaToggle:  { width: ms(26), height: vs(14), borderRadius: vs(7), flexDirection: 'row', alignItems: 'center', paddingHorizontal: ms(2) },
+  dnaToggleOn:  { backgroundColor: C.accent },
+  dnaToggleOff: { backgroundColor: C.border },
+  dnaKnob:    { width: s(10), height: s(10), borderRadius: s(5), backgroundColor: '#FFFFFF' },
+  dnaKnobOn:  { marginLeft: 'auto' },
+  dnaKnobOff: { marginRight: 'auto' },
   avatarRow: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: ms(16), paddingTop: vs(12), gap: ms(12),
@@ -746,4 +855,13 @@ const makeStyles = (C) => StyleSheet.create({
   // Tile: square, text centered and filling the box
   tile:        { borderRadius: ms(10), overflow: 'hidden', justifyContent: 'center', alignItems: 'center', padding: ms(6) },
   tileText:    { fontSize: fs(10), fontWeight: '700', color: 'rgba(255,255,255,0.92)', lineHeight: fs(14), textAlign: 'center' }, // was fs(9) ×1.10
+  // ⋮ dropdown menu
+  menuCard: {
+    position: 'absolute', top: vs(55), right: ms(14), width: ms(150),
+    backgroundColor: C.sheetBg, borderRadius: ms(13), borderWidth: 0.5, borderColor: C.border,
+    paddingVertical: vs(4),
+  },
+  menuItem:    { flexDirection: 'row', alignItems: 'center', gap: ms(7), paddingVertical: vs(9), paddingHorizontal: ms(11) },
+  menuLabel:   { fontSize: fs(10), fontWeight: '600', color: C.textPrimary },
+  menuDivider: { height: 0.5, backgroundColor: C.border, marginVertical: vs(3), marginHorizontal: ms(8) },
 });

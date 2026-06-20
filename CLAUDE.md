@@ -20,7 +20,13 @@ DESIGN SYSTEM:
 - All font sizes must use fs() from src/utils/peoliaScale.js
 - All spacing must use ms(), vs(), s() from src/utils/peoliaScale.js
 - All colors from src/constants/peoliaTheme.js via getPeoliaColors()
-- Never hardcode font sizes, padding, or colors
+- Never hardcode font sizes, padding, or colors (one exception: danger red
+  #DC2626/#F87171 family for Danger Zone / delete / logout)
+- THEMING: never import useColorScheme from react-native. Use
+  `const scheme = usePeoliaScheme()` from src/context/ThemeContext — it honors
+  the citizen's manual Light/Dark/System choice. ThemeContext.jsx is the ONLY
+  file allowed to import the raw react-native useColorScheme.
+- ThemeProvider + AppLockGate wrap the app in src/app/_layout.tsx
 
 DATABASE RULES:
 - All tables in public schema

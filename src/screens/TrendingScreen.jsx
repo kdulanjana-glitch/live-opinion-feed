@@ -8,10 +8,18 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  View, Text, FlatList, TouchableOpacity,
-  ScrollView, StyleSheet, useColorScheme,
-  ActivityIndicator, StatusBar, Platform, RefreshControl,
+  View,
+  Text,
+  FlatList,
+  TouchableOpacity,
+  ScrollView,
+  StyleSheet,
+  ActivityIndicator,
+  StatusBar,
+  Platform,
+  RefreshControl,
 } from 'react-native';
+import { usePeoliaScheme } from '../context/ThemeContext';
 import { supabase } from '../lib/supabase';
 import { getPeoliaColors } from '../constants/peoliaTheme';
 import { fs, ms, vs, SCREEN_WIDTH } from '../utils/peoliaScale';
@@ -54,7 +62,7 @@ const H_PAD  = ms(14);
 const TILE_W = Math.floor((SCREEN_WIDTH - H_PAD * 2 - GAP * (COLS - 1)) / COLS);
 
 export default function TrendingScreen({ onOpenSenti }) {
-  const scheme = useColorScheme();
+  const scheme = usePeoliaScheme();
   const C = getPeoliaColors(scheme);
   const s = makeStyles(C);
 

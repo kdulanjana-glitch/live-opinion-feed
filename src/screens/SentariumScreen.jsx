@@ -14,10 +14,18 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  View, FlatList, StyleSheet,
-  useColorScheme, ActivityIndicator, Text,
-  StatusBar, Platform, TouchableOpacity, Share, Alert,
+  View,
+  FlatList,
+  StyleSheet,
+  ActivityIndicator,
+  Text,
+  StatusBar,
+  Platform,
+  TouchableOpacity,
+  Share,
+  Alert,
 } from 'react-native';
+import { usePeoliaScheme } from '../context/ThemeContext';
 import { supabase } from '../lib/supabase';
 import { getPeoliaColors } from '../constants/peoliaTheme';
 import { SCREEN_HEIGHT, ms, vs, fs } from '../utils/peoliaScale';
@@ -83,8 +91,9 @@ export default function SentariumScreen({
   onNavigateToUser,
   scrollToId,
   onScrolled,
+  focusSenti,   // { id, openVoice, token } | null — notification / cross-screen deep-link
 }) {
-  const scheme = useColorScheme();
+  const scheme = usePeoliaScheme();
   const C      = getPeoliaColors(scheme);
   const st     = makeStyles(C);
 
@@ -364,6 +373,38 @@ export default function SentariumScreen({
     return () => { cancelled = true; };
   }, [scrollToId, fetchSentiState, batchFetchStates]);
 
+  // ── focusSenti — notification / cross-screen deep-link (token-driven) ──
+  // Like scrollToId, but also optionally opens the VoiceSheet. Depends on the
+  // token (not id) so re-tapping the same senti's notification re-triggers even
+  // when id + openVoice are unchanged.
+  useEffect(() => {
+    if (!focusSenti?.id) return;
+    const id = focusSenti.id;
+    let cancelled = false;
+
+    (async () => {
+      const existing = sentisRef.current.find((s) => s.id === id);
+      if (existing) {
+        setSentis((prev) => [existing, ...prev.filter((s) => s.id !== id)]);
+      } else {
+        // Not in the loaded window — fetch just this one (via the feed view so
+        // normalise() gets the shape it expects) and prepend it.
+        const { data } = await supabase.from('sentarium_feed').select('*').eq('id', id).maybeSingle();
+        if (cancelled || !data) return;
+        const item = normalise(data);
+        setSentis((prev) => [item, ...prev.filter((s) => s.id !== item.id)]);
+        batchFetchStates([item.id]);
+      }
+      requestAnimationFrame(() => {
+        if (!cancelled) flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+      });
+      if (focusSenti.openVoice) setVoiceSentiId(id);
+    })();
+
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusSenti?.token, batchFetchStates]);
+
   // ── Card becomes visible ──────────────────────
   const onViewableItemsChanged = useRef(({ viewableItems }) => {
     if (!viewableItems.length) return;
@@ -507,6 +548,33 @@ export default function SentariumScreen({
     setVoiceSentiId(sentiId);
   }, [onRequireAuth]);
 
+  // After a voice posts, refetch ONLY that senti's counts row and patch local
+  // state — accurate counts (and rawCounts kept in sync for vote math), no full
+  // feed refetch, no flicker on other cards.
+  const handleVoicePosted = useCallback(async (sentiId) => {
+    if (!sentiId) return;
+    try {
+      const { data, error } = await supabase
+        .from('senti_counts')
+        .select('likes, voices, pins, yes_count, hmm_count, nah_count')
+        .eq('senti_id', sentiId)
+        .single();
+      if (error || !data) return;
+      setSentis((prev) => prev.map((s) =>
+        s.id !== sentiId ? s : {
+          ...s,
+          likes:  data.likes  ?? s.likes,
+          voices: data.voices ?? s.voices,
+          pins:   data.pins   ?? s.pins,
+          rawCounts: { yes: data.yes_count ?? 0, hmm: data.hmm_count ?? 0, nah: data.nah_count ?? 0 },
+          results: buildResults(data.yes_count, data.hmm_count, data.nah_count),
+        }
+      ));
+    } catch (err) {
+      console.error('handleVoicePosted error', err);
+    }
+  }, []);
+
   // ── Flag (report) — opens ReportSheet ─────────
   const handleFlag = useCallback((sentiId) => {
     if (!sessionRef.current?.user?.id) { onRequireAuth?.(); return; }
@@ -629,6 +697,8 @@ export default function SentariumScreen({
         showsVerticalScrollIndicator={false}
         onViewableItemsChanged={onViewableItemsChanged}
         viewabilityConfig={viewabilityConfig}
+        getItemLayout={(data, index) => ({ length: itemHeight, offset: itemHeight * index, index })}
+        onScrollToIndexFailed={() => {}}
         removeClippedSubviews
         windowSize={5}
         maxToRenderPerBatch={3}
@@ -673,12 +743,7 @@ export default function SentariumScreen({
         onClose={() => setVoiceSentiId(null)}
         sentiId={voiceSentiId}
         session={session}
-        onVoicePosted={() => {
-          // Optimistically bump the voice count for the active senti
-          setSentis((prev) => prev.map((item) =>
-            item.id !== voiceSentiId ? item : { ...item, voices: item.voices + 1 }
-          ));
-        }}
+        onVoicePosted={() => handleVoicePosted(voiceSentiId)}
       />
 
       {/* Report sheet — opens on Flag button tap */}

@@ -1,7 +1,16 @@
 # Peolia — Session Handoff
 
-**Last updated: 2026-06-12.** App is working end-to-end on device (Expo Go, Android, tunnel mode).
-Votes, likes, pins, voices, follow, share, profile edit, and the view-reacts lock all function.
+**Last updated: 2026-06-20.** App is working end-to-end on device (Android; now a dev build
+since `expo-dev-client` was added). Votes, likes, pins, voices, follow, share, profile edit,
+view-reacts lock, theming, settings, and in-app notifications all function.
+
+**App-wide providers (in `src/app/_layout.tsx`):**
+`SafeAreaProvider → ThemeProvider → NotificationProvider → ErrorBoundary → AppLockGate → Stack`.
+
+**THEMING:** never import `useColorScheme` from react-native. Use
+`const scheme = usePeoliaScheme()` from `src/context/ThemeContext`. It honors the citizen's
+manual Light/Dark/System pick (persisted in AsyncStorage `peolia_theme_pref`). ThemeContext.jsx
+is the ONLY file allowed to import the raw react-native hook.
 
 ---
 
@@ -80,9 +89,14 @@ Removed deps: `@expo/ui`, `expo-glass-effect`, `expo-symbols`, `expo-web-browser
 ## Database (Supabase, public schema)
 
 **Tables:** sentis, senti_reactions, senti_counts (trigger-maintained — never write),
-senti_likes, senti_pins, senti_view_locks, voices, follows (follower_id, following_id),
-users (id, username, display_name, bio, avatar_url), user_stats, user_wave_stats,
-senti_reports (id, senti_id, reporter_id, reason, status, created_at — one per user per senti).
+senti_likes, senti_pins, senti_view_locks, voices, voice_likes (voice_id, user_id),
+follows (follower_id, following_id),
+users (id, username, display_name, bio, avatar_url, dna_public, deleted_at),
+user_private (user_id, phone, birthday, gender, recovery_email, *_public flags — own-row RLS),
+user_stats, user_wave_stats,
+senti_reports (id, senti_id, reporter_id, reason, status, created_at — one per user per senti),
+notifications (id, user_id, actor_id, senti_id, type 'react'|'voice'|'reply'|'follow', is_read, created_at),
+notification_prefs (user_id PK, notify_react/voice/reply/follow booleans default true — own-row RLS).
 
 **Views:** `sentarium_feed` (feed queries), `trending_sentis` (velocity_2h desc).
 
@@ -224,6 +238,27 @@ All in `src/app/index.tsx` via `activeTab` state. Tab keys:
 | Feed keep-alive: SentariumScreen is now a persistent layer in index.tsx (always mounted, display:none when inactive) → returning to the tab is instant, no refetch. scrollToId effect now fetches off-page targets itself (was relying on remount→fetchSentis) | index.tsx, SentariumScreen |
 | Profile own-view: modern Edit (filled accent) + Log out (outlined red, signOut with confirm) buttons; removed dead ⚙️ | ProfileScreen |
 | Edit sheet polish (section headers Public/Private/Security + helpers); phone must be E.164 (+country code); password change now requires the current password (verified via signInWithPassword before any writes) | EditProfileSheet |
+
+## Changelog — 2026-06-20 (theming, settings, app-lock, notifications)
+
+| Change | Where |
+|---|---|
+| **ThemeContext** — `usePeoliaScheme()` / `useThemePref()`; manual Light/Dark/System, persisted (`peolia_theme_pref`). Codemod migrated all 32 files off raw `useColorScheme`. | src/context/ThemeContext.jsx + repo-wide |
+| **SettingsScreen** (reached from Profile ⋮) — tabs General / Profile / Security. General: appearance (theme), haptics (`peolia_haptics`), notification prefs. Profile: hosts EditProfileSheet `bare` mode + Citizen DNA visibility (`users.dna_public`). Security: change pw/email-phone (jump to Profile tab), biometric app lock, log out everywhere, danger zone → delete account. | src/screens/SettingsScreen.jsx |
+| **Biometric app lock** — `AppLockGate` in `_layout.tsx`; AppState-driven lock on launch/resume when `peolia_app_lock` true. | src/components/AppLockGate.jsx |
+| **Delete account** — confirm sheet (type DELETE + password → re-auth → edge fn → signOut). Edge fn sets `users.deleted_at` + bans 720h. | SettingsScreen, supabase/functions/delete-account |
+| **Notifications system** — NotificationContext (one realtime sub, single unread-count source, toast queue, nav-handler slot); NotificationToast (top slide-in, 4s, tap→navigate); notificationText util (shared list/toast text). List rows tappable; Hub + Profile badges read the context count (removed their duplicate subs). | NotificationContext, NotificationToast, notificationText, NotificationListScreen, NotificationsHubScreen, ProfileScreen |
+| **focusSenti** deep-link in feed — token-driven prop; notification tap (or cross-screen) scrolls to the senti and opens VoiceSheet for voice/reply. Coexists with the existing `scrollToId` path (Trending/Profile). | SentariumScreen, index.tsx |
+| **VoiceSheet** — optimistic post (no reload), avatar photos, removed the no-op pin icon; keyboard: `KeyboardAvoidingView behavior="padding"` + no statusBarTranslucent (composer stays above keyboard). | VoiceSheet.jsx |
+| `handleVoicePosted` — targeted senti_counts refetch (accurate, no feed flicker, keeps rawCounts in sync). | SentariumScreen |
+| Optional native modules (`expo-local-authentication`, `expo-haptics`) loaded via guarded `require` so the app boots even on a client without them compiled in. | AppLockGate, SettingsScreen |
+
+**⚠️ SQL PENDING — run `supabase/settings-notifications-and-delete.sql`** (creates
+`notification_prefs` + RLS, adds `users.deleted_at`) and **deploy** `delete-account`
+(`npx supabase functions deploy delete-account --project-ref cobmoxjxwapinxcnmwhf`).
+`users.dna_public` already exists. The `notifications` table + insert triggers must exist for
+toasts/badges; Realtime must be enabled on `public.notifications` for live toasts.
+App lock + haptics need a dev build that includes those native modules (degrade gracefully otherwise).
 
 ---
 

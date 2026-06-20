@@ -4,13 +4,20 @@
 // ─────────────────────────────────────────────
 
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Modal, useColorScheme } from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Modal,
+} from 'react-native';
+import { usePeoliaScheme } from '../context/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getPeoliaColors } from '../constants/peoliaTheme';
 import { fs, ms, vs } from '../utils/peoliaScale';
 
 export default function ViewReactsSheet({ visible, onCancel, onConfirm }) {
-  const scheme = useColorScheme();
+  const scheme = usePeoliaScheme();
   const C = getPeoliaColors(scheme);
   const st = makeStyles(C);
   const insets = useSafeAreaInsets();

@@ -10,13 +10,19 @@
 // ─────────────────────────────────────────────
 
 import React from 'react';
-import { View, StyleSheet, useColorScheme, StatusBar, Platform } from 'react-native';
+import {
+  View,
+  StyleSheet,
+  StatusBar,
+  Platform,
+} from 'react-native';
+import { usePeoliaScheme } from '../context/ThemeContext';
 import { getPeoliaColors } from '../constants/peoliaTheme';
 import { ms, vs, s, SCREEN_WIDTH } from '../utils/peoliaScale';
 
 // ── Full-screen feed card placeholder ─────────
 export function FeedSkeleton() {
-  const C = getPeoliaColors(useColorScheme());
+  const C = getPeoliaColors(usePeoliaScheme());
   const st = feedStyles(C);
   return (
     <View style={st.screen}>
@@ -47,7 +53,7 @@ export function FeedSkeleton() {
 
 // ── 3 stacked Trending card placeholders ──────
 export function TrendingSkeleton() {
-  const C = getPeoliaColors(useColorScheme());
+  const C = getPeoliaColors(usePeoliaScheme());
   const st = trendStyles(C);
   return (
     <View style={st.list}>
@@ -66,7 +72,7 @@ export function TrendingSkeleton() {
 
 // ── Grid of tile placeholders (9:16) ──────────
 export function GridSkeleton({ columns = 2, count = 6, paddingHorizontal = ms(16), gap = ms(8) }) {
-  const C = getPeoliaColors(useColorScheme());
+  const C = getPeoliaColors(usePeoliaScheme());
   const st = gridStyles(C);
   const tileW = Math.floor((SCREEN_WIDTH - paddingHorizontal * 2 - gap * (columns - 1)) / columns);
   const tileH = Math.round((tileW * 16) / 9);

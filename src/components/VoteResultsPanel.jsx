@@ -11,7 +11,13 @@
 // ─────────────────────────────────────────────
 
 import React, { useRef, useEffect } from 'react';
-import { View, Text, Animated, StyleSheet, useColorScheme } from 'react-native';
+import {
+  View,
+  Text,
+  Animated,
+  StyleSheet,
+} from 'react-native';
+import { usePeoliaScheme } from '../context/ThemeContext';
 import { getPeoliaColors } from '../constants/peoliaTheme';
 import { fs, ms, vs, s } from '../utils/peoliaScale';
 
@@ -20,7 +26,7 @@ const MAX_BAR = vs(60);   // tallest a bar can be (100%)
 const MIN_BAR = vs(4);    // always visible, even at low %
 
 export default function VoteResultsPanel({ visible, results }) {
-  const scheme = useColorScheme();
+  const scheme = usePeoliaScheme();
   const C = getPeoliaColors(scheme);
   const st = makeStyles(C);
 

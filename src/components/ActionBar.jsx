@@ -4,7 +4,13 @@
 // ─────────────────────────────────────────────
 
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, useColorScheme } from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+} from 'react-native';
+import { usePeoliaScheme } from '../context/ThemeContext';
 import { getPeoliaColors } from '../constants/peoliaTheme';
 import { fs, ms, s, vs } from '../utils/peoliaScale';
 
@@ -50,7 +56,7 @@ export default function ActionBar({
   onAsk,
   onFlag,
 }) {
-  const scheme = useColorScheme();
+  const scheme = usePeoliaScheme();
   const C = getPeoliaColors(scheme);
   const st = makeStyles(C);
 

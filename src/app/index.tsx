@@ -1,16 +1,21 @@
-import { useEffect, useRef, useState } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   StyleSheet,
   View,
-  useColorScheme,
 } from 'react-native';
+import { usePeoliaScheme } from '../context/ThemeContext';
+import { useNotifications } from '../context/NotificationContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../lib/supabase';
 
 // ── Peolia components ──────────────────────────
 import TabBar from '../components/TabBar';
+import NotificationToast from '../components/NotificationToast';
 
 // ── Screens ────────────────────────────────────
 import AuthScreen      from '../screens/AuthScreen';
@@ -24,7 +29,6 @@ import SplashScreen         from '../screens/onboarding/SplashScreen';
 import WalkthroughScreen    from '../screens/onboarding/WalkthroughScreen';
 import UsernameDisplayNameScreen from '../screens/onboarding/UsernameDisplayNameScreen';
 import PhoneDOBGenderScreen from '../screens/onboarding/PhoneDOBGenderScreen';
-import WavePickerScreen     from '../screens/onboarding/WavePickerScreen';
 import YoureInScreen        from '../screens/onboarding/YoureInScreen';
 
 // Tab keys used by TabBar: 'trending' | 'float' | 'sentarium' | 'pin' | 'profile'
@@ -32,18 +36,27 @@ import YoureInScreen        from '../screens/onboarding/YoureInScreen';
 
 export default function Index() {
   const insets = useSafeAreaInsets();
-  const scheme = useColorScheme();
+  const scheme = usePeoliaScheme();
   const bg     = scheme === 'dark' ? '#0F0F14' : '#FFFFFF';
+  const {
+    registerNavigationHandler,
+    currentToast,
+    dismissCurrentToast,
+    navigateToNotification,
+  } = useNotifications();
 
   const [session,       setSession]       = useState(null);
   const [loading,       setLoading]       = useState(true);
   const [activeTab,     setActiveTab]     = useState('sentarium');
   const [userProfileId, setUserProfileId] = useState<string | null>(null);
   const [feedScrollToId, setFeedScrollToId] = useState<string | null>(null);
+  const [focusSenti, setFocusSenti] = useState<
+    { id: string; openVoice: boolean; token: number } | null
+  >(null);
   const [isGuest, setIsGuest] = useState(false);
   const [onboardingStep, setOnboardingStep] = useState<
     'splash' | 'walkthrough' | 'auth' |
-    'username' | 'phone-dob-gender' | 'wave-picker' | 'youre-in' | 'complete'
+    'username' | 'phone-dob-gender' | 'youre-in' | 'complete'
   >('splash');
   const [onboardingChecked, setOnboardingChecked] = useState(false);
 
@@ -115,6 +128,23 @@ export default function Index() {
     );
 
     return () => subscription.unsubscribe();
+  }, []);
+
+  // ── Notification navigation ───────────────────
+  // Registered once; the context calls this when a toast or list row is tapped.
+  // 'follow' → that citizen's profile overlay; everything else → the senti in
+  // the feed (voice/reply also open the VoiceSheet via focusSenti.openVoice).
+  useEffect(() => {
+    registerNavigationHandler((n) => {
+      if (n.type === 'follow') {
+        setUserProfileId(n.actor_id);
+      } else if (n.senti_id) {
+        setUserProfileId(null);
+        setFocusSenti({ id: n.senti_id, openVoice: n.type !== 'react', token: Date.now() });
+        goToTab('sentarium');
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (loading) {
@@ -362,16 +392,6 @@ export default function Index() {
           <View style={[styles.container, { backgroundColor: bg }]}>
             <PhoneDOBGenderScreen
               userId={session?.user?.id ?? ''}
-              onDone={() => setOnboardingStep('wave-picker')}
-            />
-          </View>
-        );
-      case 'wave-picker':
-        return (
-          <View style={[styles.container, { backgroundColor: bg }]}>
-            <WavePickerScreen
-              userId={session?.user?.id ?? ''}
-              onBack={() => setOnboardingStep('phone-dob-gender')}
               onDone={() => setOnboardingStep('youre-in')}
             />
           </View>
@@ -403,6 +423,7 @@ export default function Index() {
             onNavigateToUser={handleNavigateToUser}
             scrollToId={feedScrollToId}
             onScrolled={() => setFeedScrollToId(null)}
+            focusSenti={focusSenti}
           />
         </View>
 
@@ -418,6 +439,13 @@ export default function Index() {
           <TabBar activeTab={visibleTab} onTabPress={handleTabPress} />
         </View>
       )}
+
+      {/* In-app notification toast — absolute, above everything */}
+      <NotificationToast
+        notification={currentToast}
+        onDismiss={dismissCurrentToast}
+        onPress={() => navigateToNotification(currentToast)}
+      />
     </View>
   );
 }

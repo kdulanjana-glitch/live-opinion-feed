@@ -4,7 +4,14 @@
 // ─────────────────────────────────────────────
 
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, useColorScheme, Image } from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Image,
+} from 'react-native';
+import { usePeoliaScheme } from '../context/ThemeContext';
 import { getPeoliaColors } from '../constants/peoliaTheme';
 import { fs, ms, s, vs } from '../utils/peoliaScale';
 import WavePill from './WavePill';
@@ -30,7 +37,7 @@ export default function SentiCard({
   userVote = null,
   userViewedReacts = false,
 }) {
-  const scheme = useColorScheme();
+  const scheme = usePeoliaScheme();
   const C = getPeoliaColors(scheme);
   const s_ = makeStyles(C);
 
