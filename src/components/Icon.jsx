@@ -29,6 +29,7 @@ const MAP = {
   'ti-help-circle':     'help-circle',
   'ti-logout':          'log-out',
   'ti-heart':           'heart',
+  'ti-thumbs-down':     'thumbs-down',
   'ti-pin':             'bookmark',
   'ti-x':               'x',
   'ti-check':           'check',
@@ -41,6 +42,7 @@ const MAP = {
   'ti-shield':          'shield',
   'ti-alert-triangle':  'alert-triangle',
   'ti-trash':           'trash-2',
+  'ti-ban':             'slash',
 };
 
 export default function Icon({ name, size, color, style }) {

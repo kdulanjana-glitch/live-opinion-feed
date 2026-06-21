@@ -20,6 +20,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { usePeoliaScheme } from '../context/ThemeContext';
+import { useBlocks } from '../context/BlockContext';
 import { supabase } from '../lib/supabase';
 import { getPeoliaColors } from '../constants/peoliaTheme';
 import { fs, ms, vs, SCREEN_WIDTH } from '../utils/peoliaScale';
@@ -70,9 +71,12 @@ export default function TrendingScreen({ onOpenSenti }) {
   const [loading,    setLoading]    = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeWave, setActiveWave] = useState('All');
+  const { hiddenIds } = useBlocks();
 
-  // Query trending_sentis view — pass wave filter directly to Supabase
-  const fetchTrending = useCallback(async (wave = 'All') => {
+  // Query trending_sentis view — pass wave filter directly to Supabase.
+  // trending_sentis has no creator column, so blocked users are filtered out
+  // afterwards by looking up the creators of the returned ids.
+  const fetchTrending = useCallback(async (wave = 'All', hidden = []) => {
     try {
       let query = supabase
         .from('trending_sentis')
@@ -86,7 +90,18 @@ export default function TrendingScreen({ onOpenSenti }) {
 
       const { data, error } = await query;
       if (error) throw error;
-      setSentis(data ?? []);
+
+      let rows = data ?? [];
+      if (hidden.length && rows.length) {
+        const { data: blockedRows } = await supabase
+          .from('sentis')
+          .select('id')
+          .in('id', rows.map((r) => r.id))
+          .in('user_id', hidden);
+        const blockedSet = new Set((blockedRows ?? []).map((r) => r.id));
+        rows = rows.filter((r) => !blockedSet.has(r.id));
+      }
+      setSentis(rows);
     } catch (err) {
       console.error('TrendingScreen fetchTrending error', err);
     } finally {
@@ -97,12 +112,12 @@ export default function TrendingScreen({ onOpenSenti }) {
 
   useEffect(() => {
     setLoading(true);
-    fetchTrending(activeWave);
-  }, [activeWave, fetchTrending]);
+    fetchTrending(activeWave, hiddenIds);
+  }, [activeWave, hiddenIds, fetchTrending]);
 
   const handleRefresh = () => {
     setRefreshing(true);
-    fetchTrending(activeWave);
+    fetchTrending(activeWave, hiddenIds);
   };
 
   const handleWaveChange = (wave) => {

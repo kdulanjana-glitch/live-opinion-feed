@@ -28,6 +28,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { usePeoliaScheme } from '../context/ThemeContext';
+import { useBlocks } from '../context/BlockContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../lib/supabase';
 import Icon from './Icon';
@@ -63,6 +64,7 @@ export default function VoiceSheet({ visible, onClose, sentiId, session, onVoice
   const C  = getPeoliaColors(scheme);
   const st = makeStyles(C);
   const insets = useSafeAreaInsets();
+  const { hiddenIds } = useBlocks();
 
   const [voices,     setVoices]     = useState([]);   // flat list of all rows
   const [text,       setText]       = useState('');
@@ -71,16 +73,18 @@ export default function VoiceSheet({ visible, onClose, sentiId, session, onVoice
 
   const [sortMode,   setSortMode]   = useState('new');           // 'new' | 'top'
   const [replyingTo, setReplyingTo] = useState(null);            // { id, displayName }
-  const [voiceLikes, setVoiceLikes] = useState(new Set());       // liked voice ids
+  const [voiceLikes,    setVoiceLikes]    = useState(new Set());  // liked voice ids
+  const [voiceDislikes, setVoiceDislikes] = useState(new Set());  // disliked voice ids
   const [meProfile,  setMeProfile]  = useState(null);            // my user row for optimistic rows
   const [expanded,   setExpanded]   = useState(new Set());       // parent ids with all replies shown
+  const [expandedCollapsed, setExpandedCollapsed] = useState(new Set()); // heavily-disliked ids manually revealed
 
   const myId = session?.user?.id ?? null;
 
   useEffect(() => {
     if (visible && sentiId) fetchVoices();
     if (visible && myId)    fetchMe();
-    if (!visible) { setText(''); setReplyingTo(null); setExpanded(new Set()); }
+    if (!visible) { setText(''); setReplyingTo(null); setExpanded(new Set()); setExpandedCollapsed(new Set()); }
   }, [visible, sentiId]);
 
   // My own profile — used to render the optimistic row before the DB round-trip.
@@ -101,27 +105,34 @@ export default function VoiceSheet({ visible, onClose, sentiId, session, onVoice
   const fetchVoices = async () => {
     setLoading(true);
 
-    // Step 1 — all voices for this senti
-    const { data: voicesData } = await supabase
+    // Step 1 — all voices for this senti (blocked authors filtered out; replies
+    // left orphaned under a removed parent simply don't render).
+    let query = supabase
       .from('voices')
-      .select('id, body, created_at, parent_id, like_count, is_pinned, users(username, display_name, avatar_initials, avatar_url)')
+      .select('id, body, created_at, parent_id, like_count, dislike_count, net_score, is_pinned, users(username, display_name, avatar_initials, avatar_url)')
       .eq('senti_id', sentiId)
       .order('is_pinned', { ascending: false })
-      .order(sortMode === 'top' ? 'like_count' : 'created_at', { ascending: false })
+      .order(sortMode === 'top' ? 'net_score' : 'created_at', { ascending: false })
       .limit(100);
+    if (hiddenIds.length) {
+      query = query.not('user_id', 'in', `(${hiddenIds.map((id) => `"${id}"`).join(',')})`);
+    }
+    const { data: voicesData } = await query;
     const rows = voicesData ?? [];
     setVoices(rows);
 
-    // Step 2 — which of these have I liked?
+    // Step 2 — which of these have I liked / disliked?
     if (myId && rows.length) {
-      const { data: likeData } = await supabase
-        .from('voice_likes')
-        .select('voice_id')
-        .eq('user_id', myId)
-        .in('voice_id', rows.map((v) => v.id));
+      const ids = rows.map((v) => v.id);
+      const [{ data: likeData }, { data: dislikeData }] = await Promise.all([
+        supabase.from('voice_likes').select('voice_id').eq('user_id', myId).in('voice_id', ids),
+        supabase.from('voice_dislikes').select('voice_id').eq('user_id', myId).in('voice_id', ids),
+      ]);
       setVoiceLikes(new Set(likeData?.map((l) => l.voice_id) ?? []));
+      setVoiceDislikes(new Set(dislikeData?.map((d) => d.voice_id) ?? []));
     } else {
       setVoiceLikes(new Set());
+      setVoiceDislikes(new Set());
     }
 
     setLoading(false);
@@ -137,34 +148,90 @@ export default function VoiceSheet({ visible, onClose, sentiId, session, onVoice
     list.sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
   );
 
+  // Patch a single voice's counts in the flat `voices` list, keeping net_score
+  // consistent. Shared by both the like and dislike handlers.
+  const updateVoiceCountsLocally = (voiceId, { likeDelta = 0, dislikeDelta = 0 }) => {
+    setVoices((prev) => prev.map((v) => {
+      if (v.id !== voiceId) return v;
+      const like_count    = (v.like_count ?? 0) + likeDelta;
+      const dislike_count = (v.dislike_count ?? 0) + dislikeDelta;
+      return { ...v, like_count, dislike_count, net_score: like_count - dislike_count };
+    }));
+  };
+
   const handleLikeVoice = async (voiceId) => {
     if (!myId) return;
-    const wasLiked = voiceLikes.has(voiceId);
+    const wasLiked    = voiceLikes.has(voiceId);
+    const wasDisliked = voiceDislikes.has(voiceId);
 
-    // Optimistic
+    // Optimistic — toggle like, clear any opposite dislike (mutual exclusivity)
     setVoiceLikes((prev) => {
       const next = new Set(prev);
       wasLiked ? next.delete(voiceId) : next.add(voiceId);
       return next;
     });
-    setVoices((prev) => prev.map((v) =>
-      v.id === voiceId ? { ...v, like_count: (v.like_count ?? 0) + (wasLiked ? -1 : 1) } : v
-    ));
-
-    const { error } = wasLiked
-      ? await supabase.from('voice_likes').delete().eq('voice_id', voiceId).eq('user_id', myId)
-      : await supabase.from('voice_likes').insert({ voice_id: voiceId, user_id: myId });
-
-    if (error) {
-      // Rollback
-      setVoiceLikes((prev) => {
+    if (!wasLiked && wasDisliked) {
+      setVoiceDislikes((prev) => {
         const next = new Set(prev);
-        wasLiked ? next.add(voiceId) : next.delete(voiceId);
+        next.delete(voiceId);
         return next;
       });
-      setVoices((prev) => prev.map((v) =>
-        v.id === voiceId ? { ...v, like_count: (v.like_count ?? 0) + (wasLiked ? 1 : -1) } : v
-      ));
+    }
+    updateVoiceCountsLocally(voiceId, {
+      likeDelta:    wasLiked ? -1 : 1,
+      dislikeDelta: (!wasLiked && wasDisliked) ? -1 : 0,
+    });
+
+    try {
+      let error;
+      if (wasLiked) {
+        ({ error } = await supabase.from('voice_likes').delete().eq('voice_id', voiceId).eq('user_id', myId));
+      } else {
+        // DB trigger removes the opposite dislike row server-side if one existed.
+        ({ error } = await supabase.from('voice_likes').insert({ voice_id: voiceId, user_id: myId }));
+      }
+      if (error) throw error;
+    } catch (err) {
+      console.error('handleLikeVoice error', err);
+      fetchVoices(); // reliable rollback given the cross-table mutual-exclusivity side effect
+    }
+  };
+
+  const handleDislikeVoice = async (voiceId) => {
+    if (!myId) return;
+    const wasDisliked = voiceDislikes.has(voiceId);
+    const wasLiked    = voiceLikes.has(voiceId);
+
+    // Optimistic — toggle dislike, clear any opposite like (mutual exclusivity)
+    setVoiceDislikes((prev) => {
+      const next = new Set(prev);
+      wasDisliked ? next.delete(voiceId) : next.add(voiceId);
+      return next;
+    });
+    if (!wasDisliked && wasLiked) {
+      setVoiceLikes((prev) => {
+        const next = new Set(prev);
+        next.delete(voiceId);
+        return next;
+      });
+    }
+    updateVoiceCountsLocally(voiceId, {
+      dislikeDelta: wasDisliked ? -1 : 1,
+      likeDelta:    (!wasDisliked && wasLiked) ? -1 : 0,
+    });
+
+    try {
+      let error;
+      if (wasDisliked) {
+        ({ error } = await supabase.from('voice_dislikes').delete().eq('voice_id', voiceId).eq('user_id', myId));
+      } else {
+        // DB trigger removes the opposite like row server-side if one existed.
+        ({ error } = await supabase.from('voice_dislikes').insert({ voice_id: voiceId, user_id: myId }));
+      }
+      if (error) throw error;
+    } catch (err) {
+      console.error('handleDislikeVoice error', err);
+      fetchVoices(); // reliable rollback given the cross-table mutual-exclusivity side effect
     }
   };
 
@@ -188,6 +255,8 @@ export default function VoiceSheet({ visible, onClose, sentiId, session, onVoice
       created_at: new Date().toISOString(),
       parent_id:  parentId,
       like_count: 0,
+      dislike_count: 0,
+      net_score:  0,
       is_pinned:  false,
       users: meProfile ?? { username: '', display_name: '', avatar_initials: '', avatar_url: null },
     };
@@ -202,7 +271,7 @@ export default function VoiceSheet({ visible, onClose, sentiId, session, onVoice
     const { data, error } = await supabase
       .from('voices')
       .insert({ senti_id: sentiId, user_id: myId, body, parent_id: parentId })
-      .select('id, body, created_at, parent_id, like_count, is_pinned')
+      .select('id, body, created_at, parent_id, like_count, dislike_count, net_score, is_pinned')
       .single();
 
     if (error || !data) {
@@ -223,6 +292,23 @@ export default function VoiceSheet({ visible, onClose, sentiId, session, onVoice
   const renderActor = (v, { isReply } = {}) => {
     const u = v.users;
     const hasDisplay = !!(u?.display_name && u.display_name.trim());
+
+    // Heavily-disliked voices/replies collapse behind a tap-to-show placeholder.
+    const isCollapsed = (v.net_score ?? 0) <= -5;
+    if (isCollapsed && !expandedCollapsed.has(v.id)) {
+      return (
+        <TouchableOpacity
+          onPress={() => setExpandedCollapsed((prev) => new Set(prev).add(v.id))}
+          style={st.collapsedRow}
+          activeOpacity={0.7}
+        >
+          <Text style={st.collapsedText}>
+            This voice received a lot of dislikes — tap to show
+          </Text>
+        </TouchableOpacity>
+      );
+    }
+
     return (
       <View style={[st.row, isReply && st.replyRow]}>
         <View style={[st.avatar, isReply && st.avatarSmall, { backgroundColor: C.accentLight, borderColor: C.accentMid }]}>
@@ -268,6 +354,19 @@ export default function VoiceSheet({ visible, onClose, sentiId, session, onVoice
                 style={voiceLikes.has(v.id) ? st.heartFilled : undefined}
               />
               {(v.like_count ?? 0) > 0 && <Text style={st.likeCount}>{v.like_count}</Text>}
+            </TouchableOpacity>
+            {/* Dislike — own filled/outline state only; never shows a count */}
+            <TouchableOpacity
+              style={st.dislikeBtn}
+              onPress={() => handleDislikeVoice(v.id)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              activeOpacity={0.7}
+            >
+              <Icon
+                name="ti-thumbs-down"
+                size={fs(14)}
+                color={voiceDislikes.has(v.id) ? C.nahText : C.iconMuted}
+              />
             </TouchableOpacity>
           </View>
         </View>
@@ -466,8 +565,16 @@ const makeStyles = (C) => StyleSheet.create({
   actionRow: { flexDirection: 'row', alignItems: 'center', gap: ms(12), marginTop: vs(6) },
   replyBtn:  { fontSize: fs(12), fontWeight: '700', color: C.textMuted },
   likeBtn:   { flexDirection: 'row', alignItems: 'center', gap: ms(4) },
+  dislikeBtn: { flexDirection: 'row', alignItems: 'center', gap: ms(3) },
   heartFilled: {},   // Feather heart is outline; color conveys liked state
   likeCount: { fontSize: fs(12), fontWeight: '600', color: C.textMuted },
+
+  // Collapsed placeholder for heavily-disliked voices/replies
+  collapsedRow: {
+    paddingVertical: vs(8), paddingHorizontal: ms(10),
+    backgroundColor: C.surfaceAlt, borderRadius: ms(10), marginBottom: vs(8),
+  },
+  collapsedText: { fontSize: fs(9), color: C.textMuted, fontWeight: '600' },
 
   repliesWrap: { marginLeft: ms(34), marginTop: vs(2) },
   showMore:    { fontSize: fs(12), fontWeight: '700', color: C.accent, marginTop: vs(8) },

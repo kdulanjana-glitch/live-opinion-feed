@@ -5,7 +5,7 @@ since `expo-dev-client` was added). Votes, likes, pins, voices, follow, share, p
 view-reacts lock, theming, settings, and in-app notifications all function.
 
 **App-wide providers (in `src/app/_layout.tsx`):**
-`SafeAreaProvider → ThemeProvider → NotificationProvider → ErrorBoundary → AppLockGate → Stack`.
+`SafeAreaProvider → ThemeProvider → NotificationProvider → BlockProvider → ErrorBoundary → AppLockGate → Stack`.
 
 **THEMING:** never import `useColorScheme` from react-native. Use
 `const scheme = usePeoliaScheme()` from `src/context/ThemeContext`. It honors the citizen's
@@ -33,7 +33,11 @@ Both files were created 2026-06-12 to fix "stuck at 99% bundling" + blank white 
 
 - **`metro.config.js`** — `getDefaultConfig(__dirname)` from `expo/metro-config`. Without it,
   Metro never learns the router root is `src/app` (falls back to non-existent `app/`), Expo Router
-  finds zero routes, and the app renders a blank white screen with no error.
+  finds zero routes, and the app renders a blank white screen with no error. It ALSO carries a
+  `resolver.resolveRequest` shim that redirects `react-async-hook` → its valid CJS entry
+  (`dist/index.js`): that package (v3.6.1, pulled in by `react-native-country-picker-modal`) ships
+  a broken `"module"` field pointing at a non-existent root `react-async-hook.esm.js`, which makes
+  Metro fail to resolve it. Keep both the `getDefaultConfig` line and the shim.
 - **`babel.config.js`** — `babel-preset-expo` with `'react-compiler': false`. Do NOT add
   `react-native-reanimated/plugin` or `react-native-worklets/plugin` manually — babel-preset-expo
   v56 auto-detects and adds the worklets plugin; adding it again runs the transform twice and
@@ -259,6 +263,25 @@ All in `src/app/index.tsx` via `activeTab` state. Tab keys:
 `users.dna_public` already exists. The `notifications` table + insert triggers must exist for
 toasts/badges; Realtime must be enabled on `public.notifications` for live toasts.
 App lock + haptics need a dev build that includes those native modules (degrade gracefully otherwise).
+
+## Changelog — 2026-06-20 (block user)
+
+| Change | Where |
+|---|---|
+| **BlockContext** — single source of truth for "users I can't see". `hiddenIds` (UNION of users I blocked + users who blocked me, from `get_blocked_ids()` RPC) drives content filtering; `iBlocked` drives the profile toggle. `block()`/`unblock()` call `block_user`/`unblock_user` RPCs (which also tear down follow edges). Added `BlockProvider` to the provider stack. | src/context/BlockContext.jsx, _layout.tsx |
+| **Feed filter** — `sentarium_feed` query gets `.not('user_id','in',(…))` for blocked ids; a `hiddenIds` effect also drops already-loaded blocked cards (covers blocking from a profile overlay then returning). | SentariumScreen |
+| **Trending filter** — `trending_sentis` has no creator column, so blocked rows are removed post-fetch by looking up creators of the returned ids. | TrendingScreen |
+| **Voices filter** — VoiceSheet's `voices` query gets `.not('user_id','in',(…))`; replies left orphaned under a removed (blocked) parent just don't render. | VoiceSheet |
+| **Profile block UI** — other-citizen profiles get a ⋮ menu (Block/Unblock); blocked profiles show a "You blocked this citizen" notice (stats/DNA/tabs hidden) with Unblock; avatar-row shows Unblock instead of Follow/Ask. Block confirm via Alert. | ProfileScreen |
+| `ti-ban` → Feather `slash` added to the Icon map. | Icon.jsx |
+
+**⚠️ SQL PENDING — run `supabase/sprint7-block-user.sql`** in the dashboard before
+testing block: creates `user_blocks` (blocker_id, blocked_id, created_at) + RLS
+(insert/delete/select own) and the `block_user` / `unblock_user` / `get_blocked_ids`
+SECURITY DEFINER RPCs. Until applied, block/unblock and the feed/trending filters no-op
+(RPCs return empty / error). This + the existing Flag/report feature completes Google Play
+UGC compliance. Filtering now covers feed, trending, profile **and voices**.
+**Not yet done:** moderation path on `senti_reports`.
 
 ---
 

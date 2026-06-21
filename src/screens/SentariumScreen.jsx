@@ -26,6 +26,7 @@ import {
   Alert,
 } from 'react-native';
 import { usePeoliaScheme } from '../context/ThemeContext';
+import { useBlocks } from '../context/BlockContext';
 import { supabase } from '../lib/supabase';
 import { getPeoliaColors } from '../constants/peoliaTheme';
 import { SCREEN_HEIGHT, ms, vs, fs } from '../utils/peoliaScale';
@@ -38,6 +39,13 @@ import { FeedSkeleton } from '../components/Skeletons';
 // ── Constants ─────────────────────────────────
 const PAGE_SIZE   = 10;
 const PREFETCH_AT = 3;  // prefetch when this many cards remain
+
+// Apply a "creator is not blocked" filter to a sentarium_feed query.
+// PostgREST not-in list — quote each uuid so any value form is accepted.
+const applyBlockFilter = (query, hiddenIds) =>
+  hiddenIds.length
+    ? query.not('user_id', 'in', `(${hiddenIds.map((id) => `"${id}"`).join(',')})`)
+    : query;
 
 // ── Helpers ───────────────────────────────────
 const capitalize = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : 'Tech');
@@ -96,6 +104,7 @@ export default function SentariumScreen({
   const scheme = usePeoliaScheme();
   const C      = getPeoliaColors(scheme);
   const st     = makeStyles(C);
+  const { hiddenIds } = useBlocks();
 
   const [sentis,        setSentis]        = useState([]);
   const [loading,       setLoading]       = useState(true);
@@ -125,6 +134,8 @@ export default function SentariumScreen({
   // AND synchronously in handlers (catches rapid double-taps before effect fires).
   const likedSentisRef    = useRef({});
   const pinnedSentisRef   = useRef({});
+  // Mirror blocked-user ids so the stable fetch callbacks read the latest set
+  const hiddenIdsRef      = useRef([]);
   // One DB call at a time per senti — block any tap while a call is in-flight
   const perSentiLikeInFlight = useRef({}); // { sentiId: true }
   const perSentiPinInFlight  = useRef({}); // { sentiId: true }
@@ -135,6 +146,16 @@ export default function SentariumScreen({
   // Sync refs from state so batchFetchStates results are visible to handlers
   useEffect(() => { likedSentisRef.current  = likedSentis;  }, [likedSentis]);
   useEffect(() => { pinnedSentisRef.current = pinnedSentis; }, [pinnedSentis]);
+
+  // ── Blocked users: keep ref in sync + drop any already-loaded blocked cards ──
+  // Covers the case where the citizen blocks someone from a profile overlay and
+  // returns to the feed — their cards vanish without a refetch.
+  useEffect(() => {
+    hiddenIdsRef.current = hiddenIds;
+    if (!hiddenIds.length) return;
+    const hidden = new Set(hiddenIds);
+    setSentis((prev) => prev.filter((s) => !hidden.has(s.creator?.userId)));
+  }, [hiddenIds]);
 
   // ── Per-card realtime: subscribe / unsubscribe ─
   const subscribeToVisible = useCallback((sentiId) => {
@@ -254,11 +275,14 @@ export default function SentariumScreen({
     setLoading(true);
     setLoadError(false);
     try {
-      const { data, error } = await supabase
-        .from('sentarium_feed')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(PAGE_SIZE);
+      const { data, error } = await applyBlockFilter(
+        supabase
+          .from('sentarium_feed')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(PAGE_SIZE),
+        hiddenIdsRef.current,
+      );
 
       if (error) throw error;
 
@@ -302,12 +326,15 @@ export default function SentariumScreen({
     loadingMoreRef.current = true;
     setLoadingMore(true);
     try {
-      const { data, error } = await supabase
-        .from('sentarium_feed')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .lt('created_at', cursorRef.current)
-        .limit(PAGE_SIZE);
+      const { data, error } = await applyBlockFilter(
+        supabase
+          .from('sentarium_feed')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .lt('created_at', cursorRef.current)
+          .limit(PAGE_SIZE),
+        hiddenIdsRef.current,
+      );
 
       if (error) throw error;
 
@@ -338,6 +365,31 @@ export default function SentariumScreen({
       if (visibleChannelRef.current) supabase.removeChannel(visibleChannelRef.current);
     };
   }, [fetchSentis]);
+
+  // ── Feed-wide realtime: drop auto-hidden sentis live ──────────────────────
+  // When enough reports trip the DB trigger, a senti's status flips to
+  // 'under_review'. Every citizen viewing the feed (not just the reporter, who
+  // already gets an optimistic local removal in submitReport) sees it vanish
+  // without refreshing. One channel for the whole screen, removed on unmount.
+  useEffect(() => {
+    const channel = supabase
+      .channel('sentis-status-feed')
+      .on('postgres_changes', {
+        event:  'UPDATE',
+        schema: 'public',
+        table:  'sentis',
+      }, (payload) => {
+        if (
+          payload.new?.status === 'under_review' &&
+          payload.old?.status !== 'under_review'
+        ) {
+          setSentis((prev) => prev.filter((s) => s.id !== payload.new.id));
+        }
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, []);
 
   // ── scrollToId prop change ────────────────────
   // The feed stays mounted across tab switches, so this effect (not a remount +
@@ -600,7 +652,7 @@ export default function SentariumScreen({
       return;
     }
     setSentis((prev) => prev.filter((item) => item.id !== sentiId));
-    Alert.alert('Thanks for reporting', "We'll review this senti.");
+    Alert.alert('Thanks for reporting', "We've noted this. Our team reviews reports regularly.");
   }, [reportSentiId]);
 
   // ── Pin — in-flight guard, optimistic update, rollback on failure ──────────

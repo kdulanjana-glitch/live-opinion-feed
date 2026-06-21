@@ -37,6 +37,7 @@ import {
 } from 'react-native';
 import { usePeoliaScheme } from '../context/ThemeContext';
 import { useNotifications } from '../context/NotificationContext';
+import { useBlocks } from '../context/BlockContext';
 import Svg, { Polygon, Circle, Line, Text as SvgText } from 'react-native-svg';
 import { supabase } from '../lib/supabase';
 import SentiTile from '../components/SentiTile';
@@ -108,6 +109,8 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser,
   const [menuVisible, setMenuVisible] = useState(false);
   const [dnaVisible,  setDnaVisible]  = useState(true);
   const { unreadCount } = useNotifications();
+  const { isBlocked, block, unblock } = useBlocks();
+  const blocked = !isOwnProfile && !!userId && isBlocked(userId);
 
   // Tabbed content under the stats: 'sentis' | 'reacts' | 'followers' | 'following'
   const [tab,        setTab]        = useState('sentis');
@@ -351,6 +354,35 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser,
     }
   }, [myId, userId, following]);
 
+  // ── Block / unblock ─────────────────────────────
+  const handleBlock = useCallback(() => {
+    if (!userId) return;
+    const name = profile?.username ? `@${profile.username}` : 'this citizen';
+    Alert.alert(
+      `Block ${name}?`,
+      `They won't be able to see your sentis, and you won't see theirs. This also removes any follow between you.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Block',
+          style: 'destructive',
+          onPress: async () => {
+            const ok = await block(userId);
+            if (ok) setFollowing(false);   // block tears down follow edges
+            else Alert.alert('Could not block', 'Please try again.');
+          },
+        },
+      ],
+    );
+  }, [userId, profile, block]);
+
+  const handleUnblock = useCallback(async () => {
+    if (!userId) return;
+    const ok = await unblock(userId);
+    if (!ok) { Alert.alert('Could not unblock', 'Please try again.'); return; }
+    fetchProfile();   // reload their content now that they're visible again
+  }, [userId, unblock, fetchProfile]);
+
   if (loading) {
     return (
       <View style={st.screen}>
@@ -406,7 +438,7 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser,
         ) : (
           <Text style={st.headerTitle}>Profile</Text>
         )}
-        {isOwnProfile && (
+        {isOwnProfile ? (
           <View style={st.headerActions}>
             <TouchableOpacity style={st.notifBtn} onPress={() => setSubScreen('notif-hub')} activeOpacity={0.8}>
               <Icon name="ti-message-circle" size={fs(15)} color={C.textSecondary} />
@@ -425,6 +457,15 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser,
               <Icon name="ti-dots-vertical" size={fs(14)} color={C.textSecondary} />
             </TouchableOpacity>
           </View>
+        ) : (
+          <TouchableOpacity
+            onPress={() => setMenuVisible(true)}
+            style={st.menuBtn}
+            activeOpacity={0.7}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Icon name="ti-dots-vertical" size={fs(14)} color={C.textSecondary} />
+          </TouchableOpacity>
         )}
       </View>
 
@@ -469,30 +510,52 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser,
                 <Text style={st.username}>@{profile?.username ?? '—'}</Text>
               </View>
               <View style={st.actionButtons}>
-                <TouchableOpacity
-                  style={[st.followBtn, following && st.followingBtn]}
-                  onPress={handleFollow}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[st.followText, following && st.followingText]}>
-                    {following ? 'Following' : 'Follow'}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={st.askBtn} activeOpacity={0.7}>
-                  <Text style={st.askText}>Ask</Text>
-                </TouchableOpacity>
+                {blocked ? (
+                  <TouchableOpacity style={[st.followBtn, st.followingBtn]} onPress={handleUnblock} activeOpacity={0.7}>
+                    <Text style={[st.followText, st.followingText]}>Unblock</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <>
+                    <TouchableOpacity
+                      style={[st.followBtn, following && st.followingBtn]}
+                      onPress={handleFollow}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[st.followText, following && st.followingText]}>
+                        {following ? 'Following' : 'Follow'}
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={st.askBtn} activeOpacity={0.7}>
+                      <Text style={st.askText}>Ask</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
               </View>
             </>
           )}
         </View>
 
+        {/* Blocked notice — replaces all of this citizen's content */}
+        {blocked && (
+          <View style={st.blockedCard}>
+            <Icon name="ti-ban" size={fs(28)} color={C.textMuted} />
+            <Text style={st.blockedTitle}>You blocked this citizen</Text>
+            <Text style={st.blockedBody}>
+              They can't see your sentis and you won't see theirs. Unblock to restore.
+            </Text>
+            <TouchableOpacity style={st.unblockBtn} onPress={handleUnblock} activeOpacity={0.7}>
+              <Text style={st.unblockText}>Unblock</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* Bio (other profiles — own profile shows it inline above) */}
-        {!isOwnProfile && !!profile?.bio && (
+        {!isOwnProfile && !blocked && !!profile?.bio && (
           <Text style={st.bioText}>{profile.bio}</Text>
         )}
 
         {/* Citizen DNA — between avatar row and stats */}
-        {(isOwnProfile || profile?.dna_public) && profile?.dna?.length > 0 && (
+        {!blocked && (isOwnProfile || profile?.dna_public) && profile?.dna?.length > 0 && (
           <View style={st.dnaCard}>
             <View style={st.dnaCardHeader}>
               <Text style={st.dnaCardTitle}>Citizen DNA</Text>
@@ -515,6 +578,7 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser,
         )}
 
         {/* Stats row — tappable tabs (Sentis / Reacts / Followers / Following) */}
+        {!blocked && (
         <View style={st.statsRow}>
           {[
             { key: 'sentis',    label: 'Sentis',    value: formatCount(stats.sentis_count)    },
@@ -535,8 +599,10 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser,
             );
           })}
         </View>
+        )}
 
         {/* Tab content */}
+        {!blocked && (
         <View style={st.gridSection}>
           {tab === 'sentis' && (
             sentis.length === 0 ? (
@@ -596,6 +662,7 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser,
             )
           )}
         </View>
+        )}
 
       </ScrollView>
 
@@ -614,45 +681,60 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser,
         </TouchableOpacity>
       </Modal>
 
-      {/* ⋮ menu (own profile only) */}
+      {/* ⋮ menu — own profile (About/Settings/Support/Logout) or other (Block) */}
       <Modal visible={menuVisible} transparent animationType="fade" onRequestClose={() => setMenuVisible(false)}>
         <TouchableWithoutFeedback onPress={() => setMenuVisible(false)}>
           <View style={{ flex: 1 }}>
             <TouchableWithoutFeedback>
               <View style={st.menuCard}>
-                <TouchableOpacity
-                  style={st.menuItem}
-                  onPress={() => { setMenuVisible(false); setSubScreen('about'); }}
-                  activeOpacity={0.7}
-                >
-                  <Icon name="ti-user-circle" size={fs(13)} color={C.textSecondary} />
-                  <Text style={st.menuLabel}>About</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={st.menuItem}
-                  onPress={() => { setMenuVisible(false); onOpenSettings ? onOpenSettings() : setSubScreen('settings'); }}
-                  activeOpacity={0.7}
-                >
-                  <Icon name="ti-settings" size={fs(13)} color={C.textSecondary} />
-                  <Text style={st.menuLabel}>Settings</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={st.menuItem}
-                  onPress={() => { setMenuVisible(false); setSubScreen('faq'); }}
-                  activeOpacity={0.7}
-                >
-                  <Icon name="ti-help-circle" size={fs(13)} color={C.textSecondary} />
-                  <Text style={st.menuLabel}>Support</Text>
-                </TouchableOpacity>
-                <View style={st.menuDivider} />
-                <TouchableOpacity
-                  style={st.menuItem}
-                  onPress={() => { setMenuVisible(false); supabase.auth.signOut(); }}
-                  activeOpacity={0.7}
-                >
-                  <Icon name="ti-logout" size={fs(13)} color="#EF4444" />
-                  <Text style={[st.menuLabel, { color: '#EF4444' }]}>Log out</Text>
-                </TouchableOpacity>
+                {isOwnProfile ? (
+                  <>
+                    <TouchableOpacity
+                      style={st.menuItem}
+                      onPress={() => { setMenuVisible(false); setSubScreen('about'); }}
+                      activeOpacity={0.7}
+                    >
+                      <Icon name="ti-user-circle" size={fs(13)} color={C.textSecondary} />
+                      <Text style={st.menuLabel}>About</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={st.menuItem}
+                      onPress={() => { setMenuVisible(false); onOpenSettings ? onOpenSettings() : setSubScreen('settings'); }}
+                      activeOpacity={0.7}
+                    >
+                      <Icon name="ti-settings" size={fs(13)} color={C.textSecondary} />
+                      <Text style={st.menuLabel}>Settings</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={st.menuItem}
+                      onPress={() => { setMenuVisible(false); setSubScreen('faq'); }}
+                      activeOpacity={0.7}
+                    >
+                      <Icon name="ti-help-circle" size={fs(13)} color={C.textSecondary} />
+                      <Text style={st.menuLabel}>Support</Text>
+                    </TouchableOpacity>
+                    <View style={st.menuDivider} />
+                    <TouchableOpacity
+                      style={st.menuItem}
+                      onPress={() => { setMenuVisible(false); supabase.auth.signOut(); }}
+                      activeOpacity={0.7}
+                    >
+                      <Icon name="ti-logout" size={fs(13)} color="#EF4444" />
+                      <Text style={[st.menuLabel, { color: '#EF4444' }]}>Log out</Text>
+                    </TouchableOpacity>
+                  </>
+                ) : (
+                  <TouchableOpacity
+                    style={st.menuItem}
+                    onPress={() => { setMenuVisible(false); blocked ? handleUnblock() : handleBlock(); }}
+                    activeOpacity={0.7}
+                  >
+                    <Icon name="ti-ban" size={fs(13)} color={blocked ? C.textSecondary : '#EF4444'} />
+                    <Text style={[st.menuLabel, !blocked && { color: '#EF4444' }]}>
+                      {blocked ? 'Unblock' : 'Block'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
               </View>
             </TouchableWithoutFeedback>
           </View>
@@ -814,6 +896,22 @@ const makeStyles = (C) => StyleSheet.create({
     fontSize: fs(14), fontWeight: '400', color: C.textSecondary,
     lineHeight: fs(20), paddingHorizontal: ms(16), paddingTop: vs(8),
   },
+  // Blocked-citizen notice (replaces stats/DNA/tabs on a blocked profile)
+  blockedCard: {
+    marginHorizontal: ms(16), marginTop: vs(24),
+    alignItems: 'center', paddingVertical: vs(28), paddingHorizontal: ms(20),
+    backgroundColor: C.surface, borderWidth: 0.5, borderColor: C.border, borderRadius: ms(14),
+  },
+  blockedTitle: { fontSize: fs(16), fontWeight: '800', color: C.textPrimary, marginTop: vs(10) },
+  blockedBody: {
+    fontSize: fs(13), fontWeight: '500', color: C.textMuted,
+    textAlign: 'center', lineHeight: fs(19), marginTop: vs(6),
+  },
+  unblockBtn: {
+    marginTop: vs(16), paddingVertical: vs(8), paddingHorizontal: ms(24),
+    borderRadius: ms(20), backgroundColor: C.surfaceAlt, borderWidth: 0.5, borderColor: C.border,
+  },
+  unblockText: { fontSize: fs(14), fontWeight: '700', color: C.textSecondary },
   statsRow:    { flexDirection: 'row', paddingHorizontal: ms(16), paddingTop: vs(12) },
   statItem:    { flex: 1, alignItems: 'center', gap: vs(2) },
   statValue:   { fontSize: fs(19), fontWeight: '800', color: C.textPrimary },   // was fs(17) ×1.10
