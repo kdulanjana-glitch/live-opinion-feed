@@ -264,6 +264,18 @@ All in `src/app/index.tsx` via `activeTab` state. Tab keys:
 toasts/badges; Realtime must be enabled on `public.notifications` for live toasts.
 App lock + haptics need a dev build that includes those native modules (degrade gracefully otherwise).
 
+## Changelog — 2026-06-20 (share-card / "Ask")
+
+| Change | Where |
+|---|---|
+| **Ask → branded image share** — replaced the text-only `Share.share` with a captured 1080×1080 PNG. `handleAsk` mounts an off-screen `ShareCard`, waits ~350ms, `captureRef`s it, then `Sharing.shareAsync` (image + stance-aware caption + Play URL). Caption uses `userVotes[sentiId]` (Yes/Hmm/Nah → stance, else neutral). | SentariumScreen `handleAsk`, off-screen `<ShareCard>` sibling to FlatList |
+| **ShareCard** — off-screen capture surface, `forwardRef` + `collapsable={false}` (Android-blank-capture guard), **fixed 1080px units (no fs/ms/vs)**, real wave gradient via `react-native-svg` LinearGradient (no new gradient dep). ≥10 total reacts → Yes/Hmm/Nah % bars (winner highlighted green); <10 → 👍🤔👎 invitation. | src/components/ShareCard.jsx |
+| **PeoliaWordmark** — reusable brand mark (SVG wave + "Peolia"); the one file to swap when a real logo arrives. | src/components/PeoliaWordmark.jsx |
+| **Native deps added**: `react-native-view-shot` (5.1.0), `expo-sharing` (~56.0.18). ⚠️ **NATIVE MODULES — a new dev-client build is required; cannot be tested via JS reload.** | package.json |
+
+**Rebuild after pulling this:** `eas build --profile development -p android`, reinstall, then
+`set EXPO_PACKAGER_PROXY_URL=` + `adb reverse tcp:8081 tcp:8081` + `npx expo start --dev-client --clear`.
+
 ## Changelog — 2026-06-20 (block user)
 
 | Change | Where |

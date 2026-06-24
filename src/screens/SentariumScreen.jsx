@@ -22,7 +22,6 @@ import {
   StatusBar,
   Platform,
   TouchableOpacity,
-  Share,
   Alert,
 } from 'react-native';
 import { usePeoliaScheme } from '../context/ThemeContext';
@@ -30,9 +29,12 @@ import { useBlocks } from '../context/BlockContext';
 import { supabase } from '../lib/supabase';
 import { getPeoliaColors } from '../constants/peoliaTheme';
 import { SCREEN_HEIGHT, ms, vs, fs } from '../utils/peoliaScale';
+import { captureRef } from 'react-native-view-shot';
+import * as Sharing from 'expo-sharing';
 import SentiCard   from '../components/SentiCard';
 import VoiceSheet  from '../components/VoiceSheet';
 import ReportSheet from '../components/ReportSheet';
+import ShareCard   from '../components/ShareCard';
 import EmptyState  from '../components/EmptyState';
 import { FeedSkeleton } from '../components/Skeletons';
 
@@ -118,9 +120,11 @@ export default function SentariumScreen({
   const [voiceSentiId,  setVoiceSentiId]  = useState(null); // sentiId for open VoiceSheet
   const [reportSentiId, setReportSentiId] = useState(null); // sentiId for open ReportSheet
   const [reportBusy,    setReportBusy]    = useState(false);
+  const [shareSenti,    setShareSenti]    = useState(null);  // senti mounted off-screen for share-card capture
 
   // Refs — avoid stale closures in callbacks
   const flatListRef       = useRef(null);
+  const shareCardRef      = useRef(null);
   const sentisRef         = useRef([]);
   const sessionRef        = useRef(session);
   const onScrolledRef     = useRef(onScrolled);
@@ -581,18 +585,57 @@ export default function SentariumScreen({
     }
   }, [onRequireAuth]);
 
-  // ── Ask (share) — opens the Android share sheet ─
+  // ── Ask (share) — capture a branded 1080×1080 card and share it ─
   const handleAsk = useCallback(async (sentiId) => {
     const senti = sentisRef.current.find((i) => i.id === sentiId);
     if (!senti) return;
+
+    // 1. Mount the off-screen card for this senti
+    setShareSenti(senti);
+
+    // 2. Wait for it to render before capturing (layout + fonts need a few frames)
+    await new Promise((resolve) => setTimeout(resolve, 350));
+
     try {
-      await Share.share({
-        message: `"${senti.question}"\n\nFloat your reaction on Peolia 🌊`,
+      // 3. Capture the off-screen card to a PNG file
+      const uri = await captureRef(shareCardRef, {
+        format: 'png',
+        quality: 1,
+        result: 'tmpfile',
+        width: 1080,
+        height: 1080,
       });
+
+      // 4. Build the caption — stance variant if THIS user voted, else neutral
+      const myVote = userVotes[sentiId] ?? null;
+      const stanceWord =
+        myVote === 'yes' ? 'I said Yes 🌊' :
+        myVote === 'hmm' ? "I'm still on the fence 🤔" :
+        myVote === 'nah' ? 'I said Nah ✨' : null;
+
+      const PLAY_URL = 'https://play.google.com/store/apps/details?id=com.peolia.app';
+
+      const caption = stanceWord
+        ? `${stanceWord} on this — what's your take?\n\n${PLAY_URL}`
+        : `What's your take on this?\n\n${PLAY_URL}`;
+
+      // 5. Share image + caption (caption surfaced via dialog where the target accepts it)
+      const canShare = await Sharing.isAvailableAsync();
+      if (canShare) {
+        await Sharing.shareAsync(uri, {
+          mimeType: 'image/png',
+          dialogTitle: caption,
+          UTI: 'public.png',
+        });
+      }
     } catch (err) {
       console.error('handleAsk share error', err);
+      Alert.alert('Could not share', 'Please try again.');
+    } finally {
+      // 6. Unmount the off-screen card
+      setShareSenti(null);
     }
-  }, []);
+  }, [userVotes]);
 
   // ── Voice (comment) — opens VoiceSheet ────────
   const handleVoice = useCallback((sentiId) => {
@@ -805,6 +848,17 @@ export default function SentariumScreen({
         onClose={() => setReportSentiId(null)}
         onSubmit={submitReport}
       />
+
+      {/* Off-screen share card — rendered (not display:none) so view-shot can
+          capture it, positioned far off-screen so it's never visible. */}
+      {shareSenti && (
+        <View
+          style={{ position: 'absolute', left: -9999, top: 0 }}
+          pointerEvents="none"
+        >
+          <ShareCard ref={shareCardRef} senti={shareSenti} />
+        </View>
+      )}
     </View>
   );
 }
