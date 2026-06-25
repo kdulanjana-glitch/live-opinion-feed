@@ -1,7 +1,6 @@
 import 'react-native-get-random-values';
-import 'react-native-get-random-values';
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, processLock } from "@supabase/supabase-js";
 import { Platform } from "react-native";
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
@@ -16,6 +15,11 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     // PKCE so OAuth returns ?code=… (which _layout.tsx exchanges) instead of an
     // #access_token fragment that native can't auto-consume.
     flowType: "pkce",
+    // Serialize concurrent session reads/refreshes across the app (index.tsx,
+    // NotificationContext, BlockContext all touch auth at startup). Without this,
+    // RN has no cross-call lock and racing refreshes hit "Invalid Refresh Token:
+    // Already Used" (single-use rotated tokens).
+    lock: processLock,
   },
 });
 
