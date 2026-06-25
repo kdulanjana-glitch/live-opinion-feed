@@ -441,7 +441,7 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser,
         {isOwnProfile ? (
           <View style={st.headerActions}>
             <TouchableOpacity style={st.notifBtn} onPress={() => setSubScreen('notif-hub')} activeOpacity={0.8}>
-              <Icon name="ti-message-circle" size={fs(15)} color={C.textSecondary} />
+              <Icon name="ti-message-circle" size={fs(19)} color={C.textSecondary} />
               {unreadCount > 0 && (
                 <View style={st.notifBadge}>
                   <Text style={st.notifBadgeText}>{unreadCount > 99 ? '99+' : String(unreadCount)}</Text>
@@ -454,7 +454,7 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser,
               activeOpacity={0.7}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <Icon name="ti-dots-vertical" size={fs(14)} color={C.textSecondary} />
+              <Icon name="ti-dots-vertical" size={fs(20)} color={C.textSecondary} />
             </TouchableOpacity>
           </View>
         ) : (
@@ -694,7 +694,7 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser,
                       onPress={() => { setMenuVisible(false); setSubScreen('about'); }}
                       activeOpacity={0.7}
                     >
-                      <Icon name="ti-user-circle" size={fs(13)} color={C.textSecondary} />
+                      <Icon name="ti-user-circle" size={fs(16)} color={C.textSecondary} />
                       <Text style={st.menuLabel}>About</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
@@ -702,7 +702,7 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser,
                       onPress={() => { setMenuVisible(false); onOpenSettings ? onOpenSettings() : setSubScreen('settings'); }}
                       activeOpacity={0.7}
                     >
-                      <Icon name="ti-settings" size={fs(13)} color={C.textSecondary} />
+                      <Icon name="ti-settings" size={fs(16)} color={C.textSecondary} />
                       <Text style={st.menuLabel}>Settings</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
@@ -710,7 +710,7 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser,
                       onPress={() => { setMenuVisible(false); setSubScreen('faq'); }}
                       activeOpacity={0.7}
                     >
-                      <Icon name="ti-help-circle" size={fs(13)} color={C.textSecondary} />
+                      <Icon name="ti-help-circle" size={fs(16)} color={C.textSecondary} />
                       <Text style={st.menuLabel}>Support</Text>
                     </TouchableOpacity>
                     <View style={st.menuDivider} />
@@ -719,7 +719,7 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser,
                       onPress={() => { setMenuVisible(false); supabase.auth.signOut(); }}
                       activeOpacity={0.7}
                     >
-                      <Icon name="ti-logout" size={fs(13)} color="#EF4444" />
+                      <Icon name="ti-logout" size={fs(16)} color="#EF4444" />
                       <Text style={[st.menuLabel, { color: '#EF4444' }]}>Log out</Text>
                     </TouchableOpacity>
                   </>
@@ -729,7 +729,7 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser,
                     onPress={() => { setMenuVisible(false); blocked ? handleUnblock() : handleBlock(); }}
                     activeOpacity={0.7}
                   >
-                    <Icon name="ti-ban" size={fs(13)} color={blocked ? C.textSecondary : '#EF4444'} />
+                    <Icon name="ti-ban" size={fs(16)} color={blocked ? C.textSecondary : '#EF4444'} />
                     <Text style={[st.menuLabel, !blocked && { color: '#EF4444' }]}>
                       {blocked ? 'Unblock' : 'Block'}
                     </Text>
@@ -817,27 +817,27 @@ const makeStyles = (C) => StyleSheet.create({
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: ms(8) },
   // ⋮ header button
   menuBtn: {
-    width: s(28), height: s(28), borderRadius: s(14),
+    width: s(36), height: s(36), borderRadius: s(18),
     backgroundColor: C.surfaceAlt, borderWidth: 0.5, borderColor: C.border,
     alignItems: 'center', justifyContent: 'center',
   },
   // Own-profile avatar-row name/bio (compact)
-  ownName:   { fontSize: fs(12), fontWeight: '800', color: C.textPrimary },
-  ownHandle: { fontSize: fs(8), color: C.textMuted, marginTop: vs(1) },
-  bioInline: { fontSize: fs(7.5), color: C.textSecondary, marginTop: vs(2), lineHeight: fs(11) },
+  ownName:   { fontSize: fs(17), fontWeight: '800', color: C.textPrimary },
+  ownHandle: { fontSize: fs(13), color: C.textMuted, marginTop: vs(1) },
+  bioInline: { fontSize: fs(13), color: C.textSecondary, marginTop: vs(3), lineHeight: fs(18) },
   // Notification icon button + unread badge
   notifBtn: {
-    width: s(28), height: s(28), borderRadius: s(14),
+    width: s(36), height: s(36), borderRadius: s(18),
     backgroundColor: C.surfaceAlt, borderWidth: 0.5, borderColor: C.border,
     alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
   notifBadge: {
-    position: 'absolute', top: -2, right: -2,
-    minWidth: s(13), height: s(13), borderRadius: s(7),
+    position: 'absolute', top: -3, right: -3,
+    minWidth: s(16), height: s(16), borderRadius: s(8),
     backgroundColor: '#EF4444', borderWidth: 1.5, borderColor: C.bg,
-    alignItems: 'center', justifyContent: 'center', paddingHorizontal: ms(2),
+    alignItems: 'center', justifyContent: 'center', paddingHorizontal: ms(3),
   },
-  notifBadgeText: { fontSize: fs(6), color: '#FFFFFF', fontWeight: '800', textAlign: 'center' },
+  notifBadgeText: { fontSize: fs(9), color: '#FFFFFF', fontWeight: '800', textAlign: 'center' },
   // Standalone Citizen DNA card (between avatar row and stats)
   dnaCard: {
     marginHorizontal: ms(12), marginBottom: vs(10),
@@ -845,7 +845,7 @@ const makeStyles = (C) => StyleSheet.create({
     borderRadius: ms(11), paddingVertical: vs(8), paddingHorizontal: ms(10),
   },
   dnaCardHeader:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: vs(6) },
-  dnaCardTitle:   { fontSize: fs(9), fontWeight: '700', color: C.textPrimary },
+  dnaCardTitle:   { fontSize: fs(13), fontWeight: '700', color: C.textPrimary },
   dnaCardRight:   { flexDirection: 'row', alignItems: 'center', gap: ms(6) },
   dnaCardPrivacy: { fontSize: fs(6.5), color: C.textMuted },
   dnaToggle:  { width: ms(26), height: vs(14), borderRadius: vs(7), flexDirection: 'row', alignItems: 'center', paddingHorizontal: ms(2) },
@@ -859,7 +859,7 @@ const makeStyles = (C) => StyleSheet.create({
     paddingHorizontal: ms(16), paddingTop: vs(12), gap: ms(12),
   },
   avatar: {
-    width: s(50), height: s(50), borderRadius: s(25),
+    width: s(56), height: s(56), borderRadius: s(28),
     alignItems: 'center', justifyContent: 'center', flexShrink: 0,
     overflow: 'hidden',
   },
@@ -955,11 +955,11 @@ const makeStyles = (C) => StyleSheet.create({
   tileText:    { fontSize: fs(10), fontWeight: '700', color: 'rgba(255,255,255,0.92)', lineHeight: fs(14), textAlign: 'center' }, // was fs(9) ×1.10
   // ⋮ dropdown menu
   menuCard: {
-    position: 'absolute', top: vs(55), right: ms(14), width: ms(150),
+    position: 'absolute', top: vs(58), right: ms(14), width: ms(190),
     backgroundColor: C.sheetBg, borderRadius: ms(13), borderWidth: 0.5, borderColor: C.border,
-    paddingVertical: vs(4),
+    paddingVertical: vs(5),
   },
-  menuItem:    { flexDirection: 'row', alignItems: 'center', gap: ms(7), paddingVertical: vs(9), paddingHorizontal: ms(11) },
-  menuLabel:   { fontSize: fs(10), fontWeight: '600', color: C.textPrimary },
+  menuItem:    { flexDirection: 'row', alignItems: 'center', gap: ms(10), paddingVertical: vs(12), paddingHorizontal: ms(14) },
+  menuLabel:   { fontSize: fs(14), fontWeight: '600', color: C.textPrimary },
   menuDivider: { height: 0.5, backgroundColor: C.border, marginVertical: vs(3), marginHorizontal: ms(8) },
 });

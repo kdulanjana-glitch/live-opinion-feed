@@ -47,7 +47,7 @@ export default function NotificationsHubScreen({ onBack, onOpenList }) {
       {/* Notifications pill */}
       <TouchableOpacity style={[st.card, st.cardAccent]} onPress={onOpenList} activeOpacity={0.85}>
         <View style={[st.iconCircle, { backgroundColor: C.accentLight }]}>
-          <Icon name="ti-bell" size={fs(16)} color={C.accent} />
+          <Icon name="ti-bell" size={fs(18)} color={C.accent} />
         </View>
         <View style={st.cardMid}>
           <Text style={st.cardTitle}>Notifications</Text>
@@ -61,14 +61,14 @@ export default function NotificationsHubScreen({ onBack, onOpenList }) {
               <Text style={st.badgeText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
             </View>
           )}
-          <Icon name="ti-chevron-right" size={fs(13)} color={C.textMuted} />
+          <Icon name="ti-chevron-right" size={fs(16)} color={C.textMuted} />
         </View>
       </TouchableOpacity>
 
       {/* DM placeholder */}
       <View style={[st.card, st.cardPlain]}>
         <View style={[st.iconCircle, { backgroundColor: C.surfaceAlt }]}>
-          <Icon name="ti-message-2" size={fs(16)} color={C.textMuted} />
+          <Icon name="ti-message-2" size={fs(18)} color={C.textMuted} />
         </View>
         <View style={st.cardMid}>
           <Text style={st.dmTitle}>No messages yet</Text>
@@ -99,14 +99,14 @@ const makeStyles = (C) => StyleSheet.create({
   },
   cardAccent: { borderWidth: 0.5, borderColor: C.accent },
   cardPlain:  { borderWidth: 0.5, borderColor: C.border },
-  iconCircle: { width: s(32), height: s(32), borderRadius: s(16), alignItems: 'center', justifyContent: 'center' },
+  iconCircle: { width: s(38), height: s(38), borderRadius: s(19), alignItems: 'center', justifyContent: 'center' },
   cardMid:    { flex: 1 },
-  cardTitle:  { fontSize: fs(10), fontWeight: '800', color: C.textPrimary },
-  cardSub:    { fontSize: fs(7), color: C.textSecondary, marginTop: vs(1) },
+  cardTitle:  { fontSize: fs(15), fontWeight: '800', color: C.textPrimary },
+  cardSub:    { fontSize: fs(12), color: C.textSecondary, marginTop: vs(2) },
   cardRight:  { flexDirection: 'row', alignItems: 'center', gap: ms(6) },
   badge:      { backgroundColor: C.accent, borderRadius: ms(12), paddingVertical: vs(2), paddingHorizontal: ms(7) },
-  badgeText:  { fontSize: fs(8), color: '#FFFFFF', fontWeight: '800' },
+  badgeText:  { fontSize: fs(11), color: '#FFFFFF', fontWeight: '800' },
 
-  dmTitle: { fontSize: fs(9.5), fontWeight: '600', color: C.textMuted },
-  dmSub:   { fontSize: fs(7), color: C.textMuted, marginTop: vs(1) },
+  dmTitle: { fontSize: fs(14), fontWeight: '600', color: C.textMuted },
+  dmSub:   { fontSize: fs(12), color: C.textMuted, marginTop: vs(2) },
 });

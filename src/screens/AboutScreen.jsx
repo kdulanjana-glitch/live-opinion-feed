@@ -138,7 +138,7 @@ export default function AboutScreen({ profile, onBack }) {
           {rows.map((r, i) => (
             <View key={r.key} style={[st.infoRow, i === rows.length - 1 && st.infoRowLast]}>
               <View style={st.infoLeft}>
-                <Icon name={r.icon} size={fs(13)} color={C.textMuted} />
+                <Icon name={r.icon} size={fs(16)} color={C.textMuted} />
                 <Text style={st.infoLabel}>{r.label}</Text>
               </View>
               {r.pill ? (
@@ -176,8 +176,8 @@ const makeStyles = (C) => StyleSheet.create({
   avatarImg:  { width: '100%', height: '100%' },
   avatarText: { fontSize: fs(26), fontWeight: '800', color: '#FFFFFF' },
   nameBlock:  { alignItems: 'center', marginTop: vs(8) },
-  displayName: { fontSize: fs(15), fontWeight: '800', color: C.textPrimary },
-  username:    { fontSize: fs(11), color: C.textMuted, marginTop: vs(2) },
+  displayName: { fontSize: fs(18), fontWeight: '800', color: C.textPrimary },
+  username:    { fontSize: fs(13), color: C.textMuted, marginTop: vs(2) },
 
   divider: { height: 0.5, backgroundColor: C.border, marginHorizontal: ms(14) },
 
@@ -188,11 +188,11 @@ const makeStyles = (C) => StyleSheet.create({
   },
   infoRowLast: { borderBottomWidth: 0 },
   infoLeft:  { flexDirection: 'row', alignItems: 'center', gap: ms(6) },
-  infoLabel: { fontSize: fs(9.5), fontWeight: '600', color: C.textSecondary },
-  infoValue: { fontSize: fs(9.5), fontWeight: '700', color: C.textPrimary },
+  infoLabel: { fontSize: fs(14), fontWeight: '600', color: C.textSecondary },
+  infoValue: { fontSize: fs(14), fontWeight: '700', color: C.textPrimary },
   accountPill: {
     backgroundColor: C.accentLight, borderRadius: ms(10),
     paddingVertical: vs(3), paddingHorizontal: ms(10),
   },
-  accountPillText: { fontSize: fs(9.5), fontWeight: '700', color: C.accentDark },
+  accountPillText: { fontSize: fs(13), fontWeight: '700', color: C.accentDark },
 });
