@@ -8,11 +8,12 @@
 // Queries (new schema):
 //   users           — id, username
 //   user_stats      — sentis_count, reacts_count, followers_count, following_count
-//   user_wave_stats — wave, react_count  (drives DNA chart)
+//   user_wave_stats — wave, score        (drives DNA chart; reacts + floats)
+//   wave_preferences — wave, dna_include  (which waves show on the DNA chart)
 //   sentis          — id, question, wave, status, user_id
 // ─────────────────────────────────────────────
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import Icon from '../components/Icon';
 import AboutScreen from './AboutScreen';
 import SettingsScreen from './SettingsScreen';
@@ -38,6 +39,7 @@ import {
 import { usePeoliaScheme } from '../context/ThemeContext';
 import { useNotifications } from '../context/NotificationContext';
 import { useBlocks } from '../context/BlockContext';
+import { useWavePrefs } from '../context/WavePrefsContext';
 import Svg, { Polygon, Circle, Line, Text as SvgText } from 'react-native-svg';
 import { supabase } from '../lib/supabase';
 import SentiTile from '../components/SentiTile';
@@ -90,7 +92,7 @@ const formatCount = (n) => {
   return String(n);
 };
 
-export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser, onOpenSettings }) {
+export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser, onOpenSettings, onOpenDM }) {
   const scheme       = usePeoliaScheme();
   const C            = getPeoliaColors(scheme);
   const st           = makeStyles(C);
@@ -98,6 +100,13 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser,
 
   const [profile,    setProfile]    = useState(null);
   const [sentis,     setSentis]     = useState([]);
+  // DNA chart source kept raw (all 13 scored waves) so visibility can be applied
+  // reactively. For OWN profile the include map comes from the shared context
+  // (live updates from Settings); for OTHER profiles it's that citizen's saved map.
+  const [rawDna,        setRawDna]        = useState([]);
+  const [dnaIncludeMap, setDnaIncludeMap] = useState({});
+  const [dnaW,          setDnaW]          = useState(0);   // measured chart width → square radar
+  const { wavePrefs }  = useWavePrefs();
   const [loading,    setLoading]    = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [following,  setFollowing]  = useState(false);
@@ -144,7 +153,7 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser,
         : supabase.rpc('get_public_profile', { target: targetId });
 
       // Run all queries in parallel
-      const [userRes, sentisRes, dnaRes, floatedRes, userStatsRes, followRes, followersRes, followingRes, detailsRes] = await Promise.all([
+      const [userRes, sentisRes, dnaRes, floatedRes, userStatsRes, followRes, followersRes, followingRes, detailsRes, dnaPrefRes] = await Promise.all([
         // Basic user info
         supabase.from('users').select('id, username, display_name, bio, avatar_url, created_at, dna_public').eq('id', targetId).single(),
 
@@ -155,13 +164,14 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser,
           .eq('user_id', targetId)
           .eq('status', 'approved'),
 
-        // Wave breakdown for DNA chart
+        // Wave breakdown for DNA chart — behavioral score (reacts + floats).
+        // Fetch all 13; filtered client-side by dna_include, then top 6.
         supabase
           .from('user_wave_stats')
-          .select('wave, react_count')
+          .select('wave, score')
           .eq('user_id', targetId)
-          .order('react_count', { ascending: false })
-          .limit(6),
+          .order('score', { ascending: false })
+          .limit(13),
 
         // Floated sentis grid
         supabase
@@ -186,9 +196,24 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser,
         supabase.from('follows').select('following_id', { count: 'exact', head: true }).eq('follower_id', targetId),
 
         detailsQuery,
+
+        // DNA wave visibility — which waves this citizen shows on their chart
+        supabase
+          .from('wave_preferences')
+          .select('wave, dna_include')
+          .eq('user_id', targetId),
       ]);
 
       setFollowing(!!followRes.data);
+
+      // Raw DNA (all 13 scored) + this citizen's dna_include map. Filtering to the
+      // visible top-6 happens in a memo so own-profile edits apply live.
+      setRawDna(dnaRes.data ?? []);
+      const includeMap = {};
+      (dnaPrefRes?.data ?? []).forEach((r) => {
+        if (r?.wave) includeMap[r.wave] = r.dna_include;
+      });
+      setDnaIncludeMap(includeMap);
 
       // Normalize profile details. Own profile shows everything (with each field's
       // visibility flag); other profiles already arrive pre-gated from the RPC.
@@ -236,7 +261,6 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser,
           followers_count: followersRes.count ?? 0,  // live from follows
           following_count: followingRes.count ?? 0,  // live from follows
         },
-        dna: dnaRes.data ?? [],
         details,
       });
 
@@ -383,6 +407,16 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser,
     fetchProfile();   // reload their content now that they're visible again
   }, [userId, unblock, fetchProfile]);
 
+  // Visible DNA = raw scores filtered by dna_include (all included waves, up to
+  // 13). Own profile uses the shared context map (live), so toggling a chip in
+  // Settings updates this at once.
+  const displayedDna = useMemo(() => {
+    const includeMap = isOwnProfile
+      ? Object.fromEntries(Object.entries(wavePrefs).map(([w, p]) => [w, p.dna_include]))
+      : dnaIncludeMap;
+    return (rawDna ?? []).filter((d) => includeMap[d.wave] !== false);
+  }, [rawDna, isOwnProfile, wavePrefs, dnaIncludeMap]);
+
   if (loading) {
     return (
       <View style={st.screen}>
@@ -414,7 +448,7 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser,
     return <FAQScreen onBack={() => setSubScreen(null)} />;
 
   if (subScreen === 'notif-hub')
-    return <NotificationsHubScreen onBack={() => setSubScreen(null)} onOpenList={() => setSubScreen('notif-list')} />;
+    return <NotificationsHubScreen onBack={() => setSubScreen(null)} onOpenList={() => setSubScreen('notif-list')} onOpenDM={onOpenDM} />;
 
   if (subScreen === 'notif-list')
     return <NotificationListScreen onBack={() => setSubScreen('notif-hub')} />;
@@ -525,8 +559,8 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser,
                         {following ? 'Following' : 'Follow'}
                       </Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={st.askBtn} activeOpacity={0.7}>
-                      <Text style={st.askText}>Ask</Text>
+                    <TouchableOpacity style={st.askBtn} activeOpacity={0.7} onPress={() => userId && onOpenDM?.(userId)}>
+                      <Text style={st.askText}>Message</Text>
                     </TouchableOpacity>
                   </>
                 )}
@@ -555,7 +589,7 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser,
         )}
 
         {/* Citizen DNA — between avatar row and stats */}
-        {!blocked && (isOwnProfile || profile?.dna_public) && profile?.dna?.length > 0 && (
+        {!blocked && (isOwnProfile || profile?.dna_public) && displayedDna.length > 0 && (
           <View style={st.dnaCard}>
             <View style={st.dnaCardHeader}>
               <Text style={st.dnaCardTitle}>Citizen DNA</Text>
@@ -568,11 +602,14 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser,
               </TouchableOpacity>
             </View>
             {dnaVisible && (
-              <CitizenDNAChart
-                data={profile.dna}
-                color={isOwnProfile ? C.accent : '#059669'}
-                gridColor={C.border}
-              />
+              <View onLayout={(e) => setDnaW(Math.round(e.nativeEvent.layout.width))}>
+                <CitizenDNAChart
+                  data={displayedDna}
+                  size={dnaW}
+                  color={isOwnProfile ? C.accent : '#059669'}
+                  gridColor={C.border}
+                />
+              </View>
             )}
           </View>
         )}
@@ -745,14 +782,15 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser,
 }
 
 // ── Citizen DNA Radar Chart ───────────────────
-function CitizenDNAChart({ data, color, gridColor }) {
+function CitizenDNAChart({ data, color, gridColor, size }) {
   if (!data.length) return null;
-  const SIZE   = 200;
-  const CX     = 100;
-  const CY     = 80;
-  const RADIUS = 60;
-  const N      = Math.min(data.length, 6);
-  const maxVal = Math.max(...data.map((d) => d.react_count), 1);
+  // Square radar sized to fit all 13 waves with room for the perimeter labels.
+  const SIZE   = 260;
+  const CX     = 130;
+  const CY     = 130;
+  const RADIUS = 80;
+  const N      = data.length;            // show every included wave (up to 13)
+  const maxVal = Math.max(...data.map((d) => d.score), 1);
 
   const getPoint = (i, r) => {
     const angle = (Math.PI * 2 * i) / N - Math.PI / 2;
@@ -760,12 +798,16 @@ function CitizenDNAChart({ data, color, gridColor }) {
   };
 
   const rings      = [RADIUS, RADIUS * 0.66, RADIUS * 0.33];
-  const dataPoints = data.slice(0, N).map((d, i) =>
-    getPoint(i, (d.react_count / maxVal) * RADIUS)
+  const dataPoints = data.map((d, i) =>
+    getPoint(i, (d.score / maxVal) * RADIUS)
   );
 
+  // Square: render height = measured width so the radar fills the card edge-to-edge
+  // (no horizontal letterboxing). Falls back to 280 before the first onLayout.
+  const renderH = size > 0 ? size : 280;
+
   return (
-    <Svg width="100%" height={SIZE * 0.75} viewBox={`0 0 ${SIZE} ${SIZE * 0.75}`}>
+    <Svg width="100%" height={renderH} viewBox={`0 0 ${SIZE} ${SIZE}`}>
       {rings.map((r, ri) => (
         <Polygon
           key={ri}
@@ -785,10 +827,10 @@ function CitizenDNAChart({ data, color, gridColor }) {
         fill={`${color}30`} stroke={color} strokeWidth="1.5"
       />
       {dataPoints.map((p, i) => <Circle key={i} cx={p.x} cy={p.y} r="2.5" fill={color} />)}
-      {data.slice(0, N).map((d, i) => {
-        const lp = getPoint(i, RADIUS + 12);
+      {data.map((d, i) => {
+        const lp = getPoint(i, RADIUS + 15);
         return (
-          <SvgText key={i} x={lp.x} y={lp.y} textAnchor="middle" fontSize="6.5" fill="#6B7280" fontWeight="600">
+          <SvgText key={i} x={lp.x} y={lp.y} textAnchor="middle" fontSize="7" fill="#6B7280" fontWeight="600">
             {WAVE_EMOJIS[d.wave] ?? '🌊'} {d.wave}
           </SvgText>
         );
@@ -840,7 +882,7 @@ const makeStyles = (C) => StyleSheet.create({
   notifBadgeText: { fontSize: fs(9), color: '#FFFFFF', fontWeight: '800', textAlign: 'center' },
   // Standalone Citizen DNA card (between avatar row and stats)
   dnaCard: {
-    marginHorizontal: ms(12), marginBottom: vs(10),
+    marginHorizontal: ms(12), marginTop: vs(18), marginBottom: vs(10),
     backgroundColor: C.surface, borderWidth: 0.5, borderColor: C.border,
     borderRadius: ms(11), paddingVertical: vs(8), paddingHorizontal: ms(10),
   },

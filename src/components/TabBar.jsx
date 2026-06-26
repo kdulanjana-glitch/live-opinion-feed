@@ -11,8 +11,9 @@ import {
   StyleSheet,
 } from 'react-native';
 import { usePeoliaScheme } from '../context/ThemeContext';
+import { useNotifications } from '../context/NotificationContext';
 import { getPeoliaColors } from '../constants/peoliaTheme';
-import { fs, ms, vs } from '../utils/peoliaScale';
+import { fs, ms, vs, s } from '../utils/peoliaScale';
 
 const TABS = [
   { key: 'trending',  label: 'Trending',  icon: '↗'  },
@@ -26,6 +27,9 @@ export default function TabBar({ activeTab, onTabPress }) {
   const scheme = usePeoliaScheme();
   const C = getPeoliaColors(scheme);
   const st = makeStyles(C);
+
+  const { unreadCount, dmUnreadTotal } = useNotifications();
+  const totalBadge = (unreadCount || 0) + (dmUnreadTotal || 0);
 
   return (
     <View style={st.wrapper}>
@@ -41,6 +45,11 @@ export default function TabBar({ activeTab, onTabPress }) {
             >
               <Text style={[st.icon, isActive && st.iconActive]}>{tab.icon}</Text>
               <Text style={[st.label, isActive && st.labelActive]}>{tab.label}</Text>
+              {tab.key === 'profile' && totalBadge > 0 && (
+                <View style={st.badge}>
+                  <Text style={st.badgeText}>{totalBadge > 99 ? '99+' : totalBadge}</Text>
+                </View>
+              )}
             </TouchableOpacity>
           );
         })}
@@ -68,6 +77,7 @@ const makeStyles = (C) => StyleSheet.create({
     paddingHorizontal: ms(4),
   },
   tab: {
+    position: 'relative',
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
@@ -77,6 +87,13 @@ const makeStyles = (C) => StyleSheet.create({
     borderRadius: ms(18),
     minWidth: ms(44),
   },
+  badge: {
+    position: 'absolute', top: vs(2), right: ms(4),
+    minWidth: s(14), height: s(14), borderRadius: s(7),
+    backgroundColor: '#EF4444', borderWidth: 1.5, borderColor: C.tabBg,
+    alignItems: 'center', justifyContent: 'center', paddingHorizontal: ms(2),
+  },
+  badgeText: { fontSize: fs(7), color: '#FFFFFF', fontWeight: '800' },
   tabActive:   { backgroundColor: C.tabActive },
   icon:        { fontSize: fs(20), color: C.tabInactive },
   iconActive:  { color: '#FFFFFF' },

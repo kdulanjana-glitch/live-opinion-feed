@@ -26,6 +26,7 @@ import {
 } from 'react-native';
 import { usePeoliaScheme } from '../context/ThemeContext';
 import { useBlocks } from '../context/BlockContext';
+import { useWavePrefs } from '../context/WavePrefsContext';
 import { supabase } from '../lib/supabase';
 import { getPeoliaColors } from '../constants/peoliaTheme';
 import { SCREEN_HEIGHT, ms, vs, fs } from '../utils/peoliaScale';
@@ -41,6 +42,39 @@ import { FeedSkeleton } from '../components/Skeletons';
 // ── Constants ─────────────────────────────────
 const PAGE_SIZE   = 10;
 const PREFETCH_AT = 3;  // prefetch when this many cards remain
+
+// Wave-preference feed shaping. We fetch a larger pool, then select TARGET
+// sentis weighted by each wave's Low/Mid/High level (excluded waves dropped).
+const FETCH_POOL    = 90;
+const TARGET        = 30;
+const LEVEL_WEIGHTS = { high: 100, mid: 50, low: 20 };
+
+// Pure: take the raw (normalised) pool, return a TARGET-sized weighted selection.
+// No DB calls. Excluded waves are dropped; remaining waves get slots proportional
+// to their level weight; pools and final order are shuffled.
+const applyWavePreferences = (sentis, wavePrefs) => {
+  const filtered = sentis.filter((s) => !wavePrefs[s.wave]?.excluded);
+
+  const byWave = {};
+  filtered.forEach((s) => { (byWave[s.wave] ??= []).push(s); });
+
+  const waves = Object.keys(byWave);
+  const totalWeight = waves.reduce(
+    (sum, wave) => sum + LEVEL_WEIGHTS[wavePrefs[wave]?.level ?? 'high'],
+    0,
+  );
+  if (totalWeight === 0) return filtered.slice(0, TARGET);
+
+  const selected = [];
+  waves.forEach((wave) => {
+    const weight = LEVEL_WEIGHTS[wavePrefs[wave]?.level ?? 'high'];
+    const slots  = Math.max(1, Math.round((weight / totalWeight) * TARGET));
+    const pool   = [...byWave[wave]].sort(() => Math.random() - 0.5);
+    selected.push(...pool.slice(0, Math.min(slots, pool.length)));
+  });
+
+  return selected.sort(() => Math.random() - 0.5).slice(0, TARGET);
+};
 
 // Apply a "creator is not blocked" filter to a sentarium_feed query.
 // PostgREST not-in list — quote each uuid so any value form is accepted.
@@ -102,11 +136,13 @@ export default function SentariumScreen({
   scrollToId,
   onScrolled,
   focusSenti,   // { id, openVoice, token } | null — notification / cross-screen deep-link
+  onShareSentiToDM,   // (sentiId) → open the share-to-DM picker
 }) {
   const scheme = usePeoliaScheme();
   const C      = getPeoliaColors(scheme);
   const st     = makeStyles(C);
   const { hiddenIds } = useBlocks();
+  const { wavePrefs } = useWavePrefs();   // shared — changes re-shape the feed live
 
   const [sentis,        setSentis]        = useState([]);
   const [loading,       setLoading]       = useState(true);
@@ -140,6 +176,8 @@ export default function SentariumScreen({
   const pinnedSentisRef   = useRef({});
   // Mirror blocked-user ids so the stable fetch callbacks read the latest set
   const hiddenIdsRef      = useRef([]);
+  // Mirror wave prefs so the stable fetchSentis callback reads the latest set
+  const wavePrefsRef      = useRef({});
   // One DB call at a time per senti — block any tap while a call is in-flight
   const perSentiLikeInFlight = useRef({}); // { sentiId: true }
   const perSentiPinInFlight  = useRef({}); // { sentiId: true }
@@ -150,6 +188,7 @@ export default function SentariumScreen({
   // Sync refs from state so batchFetchStates results are visible to handlers
   useEffect(() => { likedSentisRef.current  = likedSentis;  }, [likedSentis]);
   useEffect(() => { pinnedSentisRef.current = pinnedSentis; }, [pinnedSentis]);
+  useEffect(() => { wavePrefsRef.current    = wavePrefs;    }, [wavePrefs]);
 
   // ── Blocked users: keep ref in sync + drop any already-loaded blocked cards ──
   // Covers the case where the citizen blocks someone from a profile overlay and
@@ -274,7 +313,11 @@ export default function SentariumScreen({
     });
   }, []);
 
-  // ── Fetch first page ──────────────────────────
+  // ── Fetch the feed ────────────────────────────
+  // Pulls a larger pool (FETCH_POOL), then applyWavePreferences selects TARGET
+  // sentis weighted by the citizen's wave levels (excluded waves dropped). This
+  // is a one-shot shaped feed — cursor pagination is intentionally disabled so
+  // the weighted selection isn't disturbed by appended pages.
   const fetchSentis = useCallback(async () => {
     setLoading(true);
     setLoadError(false);
@@ -284,15 +327,24 @@ export default function SentariumScreen({
           .from('sentarium_feed')
           .select('*')
           .order('created_at', { ascending: false })
-          .limit(PAGE_SIZE),
+          .limit(FETCH_POOL),
         hiddenIdsRef.current,
       );
 
       if (error) throw error;
 
-      let items = (data ?? []).map(normalise);
+      const normalised = (data ?? []).map(normalise);
 
-      // Move pending scroll target to index 0
+      // Shape the pool down to TARGET by wave preference. If prefs haven't loaded
+      // yet ({}), keep existing behavior (most-recent slice) — the re-shape effect
+      // re-runs once prefs arrive.
+      const prefs  = wavePrefsRef.current;
+      let items = Object.keys(prefs).length > 0
+        ? applyWavePreferences(normalised, prefs)
+        : normalised.slice(0, TARGET);
+
+      // Move pending scroll target to index 0 (it may have been shaped out of the
+      // selection — a deep-link should still surface it).
       const pending = pendingScrollRef.current;
       if (pending) {
         const idx = items.findIndex((i) => i.id === pending);
@@ -300,21 +352,28 @@ export default function SentariumScreen({
           const [t] = items.splice(idx, 1);
           items.unshift(t);
         } else if (idx < 0) {
-          const { data: single } = await supabase
-            .from('sentarium_feed')
-            .select('*')
-            .eq('id', pending)
-            .maybeSingle();
-          if (single) items.unshift(normalise(single));
+          const inPool = normalised.find((i) => i.id === pending);
+          if (inPool) {
+            items = items.filter((i) => i.id !== pending);
+            items.unshift(inPool);
+          } else {
+            const { data: single } = await supabase
+              .from('sentarium_feed')
+              .select('*')
+              .eq('id', pending)
+              .maybeSingle();
+            if (single) items.unshift(normalise(single));
+          }
         }
         setTimeout(() => { pendingScrollRef.current = null; onScrolledRef.current?.(); }, 400);
       }
 
       setSentis(items);
-      cursorRef.current  = items.at(-1)?.created_at ?? null;
-      hasMoreRef.current = (data?.length ?? 0) === PAGE_SIZE;
+      // Shaped feed is one-shot — disable pagination so fetchMore is a no-op.
+      cursorRef.current  = null;
+      hasMoreRef.current = false;
 
-      // Batch-fetch reaction state for all cards on this page (fire-and-forget)
+      // Batch-fetch reaction state for all selected cards (fire-and-forget)
       batchFetchStates(items.map((i) => i.id));
     } catch (err) {
       console.error('SentariumScreen fetchSentis error', err);
@@ -369,6 +428,16 @@ export default function SentariumScreen({
       if (visibleChannelRef.current) supabase.removeChannel(visibleChannelRef.current);
     };
   }, [fetchSentis]);
+
+  // ── Re-shape on preference change ─────────────
+  // When the citizen updates wave prefs in Settings and returns to the feed,
+  // re-run the weighting on the already-loaded sentis — no re-fetch. Also catches
+  // the mount race where the first fetch ran before prefs finished loading.
+  useEffect(() => {
+    if (!sentisRef.current?.length || !Object.keys(wavePrefs).length) return;
+    setSentis(applyWavePreferences(sentisRef.current, wavePrefs));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wavePrefs]);
 
   // ── Feed-wide realtime: drop auto-hidden sentis live ──────────────────────
   // When enough reports trip the DB trigger, a senti's status flips to
@@ -815,6 +884,7 @@ export default function SentariumScreen({
               onVoice={handleVoice}
               onPin={handlePin}
               onAsk={handleAsk}
+              onShareToDM={onShareSentiToDM}
               onFlag={handleFlag}
               onAvatarPress={
                 // Guests may view profiles — no auth gate here (follow inside

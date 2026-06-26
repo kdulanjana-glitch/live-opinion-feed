@@ -64,7 +64,6 @@ export default function EditProfileSheet({ visible, onClose, initial, onSaved, e
   const [email,       setEmail]       = useState('');   // read-only (auth)
   const [displayName, setDisplayName] = useState('');
   const [bio,         setBio]         = useState('');
-  const [dnaPublic,   setDnaPublic]   = useState(false); // Citizen DNA visibility
   const [phone,       setPhone]       = useState('');
   const [birthday,    setBirthday]    = useState('');
   const [gender,      setGender]      = useState(null);
@@ -128,7 +127,6 @@ export default function EditProfileSheet({ visible, onClose, initial, onSaved, e
     setUsername(initial?.username ?? '');
     setDisplayName(initial?.displayName ?? '');
     setBio(initial?.bio ?? '');
-    setDnaPublic(!!initial?.dnaPublic);
     setAvatarUrl(initial?.avatarUrl ?? null);
     setNewAvatar(null);
     setCurrentPw('');
@@ -356,7 +354,6 @@ export default function EditProfileSheet({ visible, onClose, initial, onSaved, e
       const updates = {
         display_name: displayName.trim() || null,
         bio:          bio.trim() || null,
-        dna_public:   dnaPublic,
         ...(uploadedAvatarUrl ? { avatar_url: uploadedAvatarUrl } : {}),
       };
       const { error: dbError } = await supabase.from('users').update(updates).eq('id', user.id);
@@ -574,27 +571,6 @@ export default function EditProfileSheet({ visible, onClose, initial, onSaved, e
                 )}
               </View>
               {renderVisibility(dobPublic, setDobPublic)}
-
-              {/* Citizen DNA visibility — who can see the wave-DNA radar on the profile */}
-              <Text style={st.label}>Citizen DNA visibility</Text>
-              <View style={st.segment}>
-                {[
-                  { val: false, label: 'Only me' },
-                  { val: true,  label: 'Everyone' },
-                ].map((opt) => {
-                  const active = dnaPublic === opt.val;
-                  return (
-                    <TouchableOpacity
-                      key={opt.label}
-                      style={[st.segmentBtn, active && st.segmentBtnActive]}
-                      onPress={() => setDnaPublic(opt.val)}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={[st.segmentText, active && st.segmentTextActive]}>{opt.label}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
 
               {/* Gender */}
               <Text style={st.label}>Gender</Text>

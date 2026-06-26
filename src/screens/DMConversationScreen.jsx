@@ -1,0 +1,745 @@
+// ─────────────────────────────────────────────
+// Peolia — DMConversationScreen
+// src/screens/DMConversationScreen.jsx
+//
+// 1:1 direct-message thread. Renders on top of everything as an absolute overlay
+// (wired in src/app/index.tsx). Realtime messages + reactions, image messages
+// (private dm-media bucket → signed URLs), long-press action sheet with reactions
+// and delete-for-me / delete-for-everyone.
+//
+// Props: otherUserId: string, onBack: () => void
+// ─────────────────────────────────────────────
+
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  FlatList,
+  StyleSheet,
+  Image,
+  Modal,
+  Pressable,
+  KeyboardAvoidingView,
+  Platform,
+  StatusBar,
+  ActivityIndicator,
+  Alert,
+} from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { decode } from 'base64-arraybuffer';
+import { usePeoliaScheme } from '../context/ThemeContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Icon from '../components/Icon';
+import { supabase } from '../lib/supabase';
+import { getPeoliaColors } from '../constants/peoliaTheme';
+import { fs, ms, vs, s, SCREEN_WIDTH } from '../utils/peoliaScale';
+import { clockTime } from '../utils/timeUtils';
+import {
+  getOrCreateDMConversation,
+  markConversationRead,
+  generateDMSignedUrl,
+  dmInitials,
+} from '../lib/dmUtils';
+
+const REACTIONS = ['❤️', '👍', '😂', '😮', '😢', '🔥'];
+const OTHER_AVATAR_BG = '#059669';   // matches the other-citizen avatar elsewhere in the app
+
+const WAVE_EMOJIS = {
+  'Tech': '💻', 'Love': '❤️', 'Money': '💰', 'Life': '🌱',
+  'Society': '🌍', 'Politics': '🏛️', 'Food': '🍕', 'Health': '💪',
+  'Sports': '⚽', 'Entertainment': '🎬', 'Science': '🔬',
+  'Education': '📚', 'Environment': '🌿',
+};
+const capWave = (w) => (w ? w.charAt(0).toUpperCase() + w.slice(1) : 'Tech');
+
+export default function DMConversationScreen({ otherUserId, onBack, onOpenSenti }) {
+  const scheme = usePeoliaScheme();
+  const C      = getPeoliaColors(scheme);
+  const st     = makeStyles(C);
+  const insets = useSafeAreaInsets();
+
+  const [conversationId,  setConversationId]  = useState(null);
+  const [messages,        setMessages]        = useState([]);
+  const [otherUser,       setOtherUser]       = useState(null);
+  const [currentUserId,   setCurrentUserId]   = useState(null);
+  const [isParticipant1,  setIsParticipant1]  = useState(false);
+  const [inputText,       setInputText]       = useState('');
+  const [loadingConv,     setLoadingConv]     = useState(true);
+  const [sendingImage,    setSendingImage]    = useState(false);
+  const [selectedMessage, setSelectedMessage] = useState(null);
+  const [showActionSheet, setShowActionSheet] = useState(false);
+  const [viewerImageUrl,  setViewerImageUrl]  = useState(null);   // full-screen image viewer
+
+  const flatListRef     = useRef(null);
+  const conversationRef = useRef(null);
+  const currentUserRef  = useRef(null);
+  const isP1Ref         = useRef(false);
+  const messagesRef     = useRef([]);
+  useEffect(() => { messagesRef.current = messages; }, [messages]);
+
+  const scrollToEnd = (animated) =>
+    requestAnimationFrame(() => flatListRef.current?.scrollToEnd({ animated }));
+
+  // ── Attach a signed URL to an image message ──
+  const withSignedUrl = useCallback(async (msg) => {
+    if (!msg?.image_path) return msg;
+    const imageUrl = await generateDMSignedUrl(supabase, msg.image_path);
+    return { ...msg, imageUrl };
+  }, []);
+
+  // ── Load the last 50 messages ──
+  const loadMessages = useCallback(async (convId) => {
+    const { data, error } = await supabase
+      .from('dm_messages')
+      .select('*, dm_message_reactions(id, emoji, user_id)')
+      .eq('conversation_id', convId)
+      .order('created_at', { ascending: true })
+      .limit(50);
+    if (error) { console.error('loadMessages error', error); return; }
+
+    const rows = data ?? [];
+    // Attach shared-senti previews
+    const sentiIds = [...new Set(rows.filter((m) => m.senti_id).map((m) => m.senti_id))];
+    const sentiMap = {};
+    if (sentiIds.length) {
+      const { data: sentis } = await supabase
+        .from('sentis').select('id, question, wave, image_url').in('id', sentiIds);
+      (sentis ?? []).forEach((sn) => { sentiMap[sn.id] = sn; });
+    }
+
+    const enriched = await Promise.all(rows.map(async (m) => ({
+      ...(await withSignedUrl(m)),
+      senti: m.senti_id ? (sentiMap[m.senti_id] ?? null) : null,
+    })));
+    setMessages(enriched);
+    scrollToEnd(false);
+  }, [withSignedUrl]);
+
+  // ── Mount: resolve user + conversation, load, subscribe ──
+  useEffect(() => {
+    let cancelled = false;
+    let channel = null;
+
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      const uid = user?.id ?? null;
+      if (!uid || cancelled) { setLoadingConv(false); return; }
+      setCurrentUserId(uid);
+      currentUserRef.current = uid;
+
+      const p1 = uid < otherUserId;
+      setIsParticipant1(p1);
+      isP1Ref.current = p1;
+
+      // Other user's profile
+      const { data: ou } = await supabase
+        .from('users')
+        .select('id, display_name, username, avatar_initials, avatar_url')
+        .eq('id', otherUserId)
+        .maybeSingle();
+      if (!cancelled) setOtherUser(ou ?? null);
+
+      // Conversation
+      let convId = null;
+      try {
+        convId = await getOrCreateDMConversation(supabase, uid, otherUserId);
+      } catch (err) {
+        console.error('getOrCreateDMConversation error', err);
+        if (!cancelled) setLoadingConv(false);
+        return;
+      }
+      if (cancelled) return;
+      setConversationId(convId);
+      conversationRef.current = convId;
+
+      await loadMessages(convId);
+      await markConversationRead(supabase, convId, uid, p1);
+      if (!cancelled) setLoadingConv(false);
+
+      // ── Realtime ──
+      channel = supabase
+        .channel(`dm-conv-${convId}`)
+        .on('postgres_changes',
+          { event: 'INSERT', schema: 'public', table: 'dm_messages', filter: `conversation_id=eq.${convId}` },
+          async (payload) => {
+            const row = payload.new;
+            if (messagesRef.current.some((m) => m.id === row.id)) return;  // dedupe
+            let senti = null;
+            if (row.senti_id) {
+              const { data: sd } = await supabase
+                .from('sentis').select('id, question, wave, image_url').eq('id', row.senti_id).maybeSingle();
+              senti = sd ?? null;
+            }
+            const enriched = await withSignedUrl({ ...row, dm_message_reactions: [], senti });
+            setMessages((prev) => (prev.some((m) => m.id === row.id) ? prev : [...prev, enriched]));
+            if (row.sender_id !== currentUserRef.current) {
+              markConversationRead(supabase, conversationRef.current, currentUserRef.current, isP1Ref.current);
+            }
+            scrollToEnd(true);
+          })
+        .on('postgres_changes',
+          { event: 'UPDATE', schema: 'public', table: 'dm_messages', filter: `conversation_id=eq.${convId}` },
+          async (payload) => {
+            const row = payload.new;
+            const prevMsg = messagesRef.current.find((m) => m.id === row.id);
+            if (!prevMsg) return;
+            // Reuse the already-signed URL unless the image changed; preserve the
+            // senti preview + reactions (the payload only carries raw columns).
+            const sameImage = row.image_path && row.image_path === prevMsg.image_path;
+            const base = sameImage ? { ...row, imageUrl: prevMsg.imageUrl } : await withSignedUrl({ ...row });
+            const merged = {
+              ...base,
+              dm_message_reactions: prevMsg.dm_message_reactions ?? [],
+              senti: prevMsg.senti ?? null,
+            };
+            setMessages((prev) => prev.map((m) => (m.id === row.id ? merged : m)));
+          })
+        .on('postgres_changes',
+          { event: 'INSERT', schema: 'public', table: 'dm_message_reactions' },
+          (payload) => {
+            const r = payload.new;
+            setMessages((prev) => prev.map((m) => {
+              if (m.id !== r.message_id) return m;
+              const others = (m.dm_message_reactions ?? []).filter((x) => x.user_id !== r.user_id);
+              return { ...m, dm_message_reactions: [...others, { id: r.id, emoji: r.emoji, user_id: r.user_id }] };
+            }));
+          })
+        .on('postgres_changes',
+          { event: 'DELETE', schema: 'public', table: 'dm_message_reactions' },
+          (payload) => {
+            const deletedId = payload.old?.id;
+            if (!deletedId) return;
+            setMessages((prev) => prev.map((m) => {
+              const reactions = m.dm_message_reactions ?? [];
+              if (!reactions.some((x) => x.id === deletedId)) return m;
+              return { ...m, dm_message_reactions: reactions.filter((x) => x.id !== deletedId) };
+            }));
+          })
+        .subscribe();
+    })();
+
+    return () => {
+      cancelled = true;
+      if (channel) supabase.removeChannel(channel);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [otherUserId]);
+
+  // ── Send text ──
+  const sendMessage = useCallback(async () => {
+    const body = inputText.trim();
+    if (!body || !conversationId || !currentUserId) return;
+    setInputText('');   // optimistic clear
+    const { error } = await supabase.from('dm_messages').insert({
+      conversation_id: conversationId,
+      sender_id: currentUserId,
+      body,
+    });
+    if (error) {
+      console.error('sendMessage error', error);
+      setInputText(body);   // restore
+      Alert.alert('Could not send', 'Please try again.');
+    }
+  }, [inputText, conversationId, currentUserId]);
+
+  // ── Send image (private bucket: store path, mirror FloatScreen upload) ──
+  const sendImage = useCallback(async () => {
+    if (!conversationId || !currentUserId) return;
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Allow photo access to send an image.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 0.8,
+      base64: true,           // REQUIRED — decode() needs the base64 (fetch().arrayBuffer is broken in RN)
+    });
+    if (result.canceled) return;
+    const asset = result.assets[0];
+    if (!asset?.base64) { Alert.alert('Could not read image', 'Please try a different photo.'); return; }
+
+    setSendingImage(true);
+    try {
+      const ext  = (asset.uri.split('.').pop() || 'jpg').toLowerCase();
+      const contentType =
+        asset.mimeType ?? (ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg');
+      const path = `${conversationId}/${Date.now()}.${ext}`;
+
+      const { error: upErr } = await supabase.storage
+        .from('dm-media')
+        .upload(path, decode(asset.base64), { contentType });
+      if (upErr) throw upErr;
+
+      const { error: insErr } = await supabase.from('dm_messages').insert({
+        conversation_id: conversationId,
+        sender_id: currentUserId,
+        image_path: path,
+      });
+      if (insErr) throw insErr;
+    } catch (err) {
+      console.error('sendImage error', err);
+      Alert.alert('Could not send image', 'Please try again.');
+    } finally {
+      setSendingImage(false);
+    }
+  }, [conversationId, currentUserId]);
+
+  // ── Long-press → action sheet ──
+  const handleLongPress = (message) => {
+    if (message.deleted_for_all) return;
+    setSelectedMessage(message);
+    setShowActionSheet(true);
+  };
+  const closeActionSheet = () => { setShowActionSheet(false); setSelectedMessage(null); };
+
+  // ── Reactions ──
+  const applyReaction = useCallback(async (message, emoji) => {
+    if (!message || !currentUserId) return;
+    const existing = (message.dm_message_reactions ?? []).find((r) => r.user_id === currentUserId);
+
+    if (existing && existing.emoji === emoji) {
+      // toggle off
+      setMessages((prev) => prev.map((m) => m.id !== message.id ? m : {
+        ...m,
+        dm_message_reactions: (m.dm_message_reactions ?? []).filter((r) => r.user_id !== currentUserId),
+      }));
+      const { error } = await supabase.from('dm_message_reactions')
+        .delete().eq('message_id', message.id).eq('user_id', currentUserId);
+      if (error) console.error('reaction delete error', error);
+    } else {
+      // add or change
+      setMessages((prev) => prev.map((m) => m.id !== message.id ? m : {
+        ...m,
+        dm_message_reactions: [
+          ...(m.dm_message_reactions ?? []).filter((r) => r.user_id !== currentUserId),
+          { id: existing?.id ?? `temp-${Date.now()}`, emoji, user_id: currentUserId },
+        ],
+      }));
+      const { error } = await supabase.from('dm_message_reactions')
+        .upsert({ message_id: message.id, user_id: currentUserId, emoji }, { onConflict: 'message_id,user_id' });
+      if (error) console.error('reaction upsert error', error);
+    }
+  }, [currentUserId]);
+
+  const handleReaction = (emoji) => {
+    if (selectedMessage) applyReaction(selectedMessage, emoji);
+    closeActionSheet();
+  };
+  const handleReactionFromPill = (emoji, message) => applyReaction(message, emoji);
+
+  // ── Delete ──
+  const performDeleteForMe = async (msg) => {
+    if (!msg || !currentUserId) return;
+    setMessages((prev) => prev.filter((m) => m.id !== msg.id));   // RLS hides it after; local removal is correct
+    const { error } = await supabase.rpc('dm_hide_message', { p_message_id: msg.id });
+    if (error) console.error('deleteForMe error', error);
+  };
+
+  const handleDeleteForMe = () => {
+    const msg = selectedMessage;
+    closeActionSheet();
+    if (!msg) return;
+    Alert.alert(
+      'Delete for you?',
+      'This removes the message from your view only. The other person will still see it.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete for me', style: 'destructive', onPress: () => performDeleteForMe(msg) },
+      ],
+    );
+  };
+
+  const performDeleteForAll = async (msg) => {
+    if (!msg || msg.sender_id !== currentUserId) return;
+    setMessages((prev) => prev.map((m) => (m.id === msg.id ? { ...m, deleted_for_all: true } : m)));
+    const { error } = await supabase.rpc('dm_delete_message_for_all', { p_message_id: msg.id });
+    if (error) console.error('deleteForAll error', error);
+  };
+
+  const handleDeleteForAll = () => {
+    const msg = selectedMessage;
+    closeActionSheet();
+    if (!msg || msg.sender_id !== currentUserId) return;
+    Alert.alert(
+      'Delete for everyone?',
+      'This replaces the message with "Message deleted" for both of you. This can\'t be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete for everyone', style: 'destructive', onPress: () => performDeleteForAll(msg) },
+      ],
+    );
+  };
+
+  // Last message I sent that has been read → where the "Seen" receipt shows.
+  const lastReadSentId = (() => {
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      const m = messages[i];
+      if (m.sender_id === currentUserId && m.is_read && !m.deleted_for_all) return m.id;
+    }
+    return null;
+  })();
+
+  // ── Render a message ──
+  const renderMessage = ({ item }) => {
+    const isMe = item.sender_id === currentUserId;
+
+    if (item.deleted_for_all) {
+      return (
+        <View style={[st.msgRow, isMe ? st.rowRight : st.rowLeft]}>
+          <View style={[st.bubble, st.bubbleDeleted, isMe ? st.bubbleMe : st.bubbleOther]}>
+            <Text style={st.deletedText}>Message deleted</Text>
+          </View>
+        </View>
+      );
+    }
+
+    // Group reactions by emoji
+    const groupsMap = {};
+    (item.dm_message_reactions ?? []).forEach((r) => {
+      const g = groupsMap[r.emoji] ?? { emoji: r.emoji, count: 0, iMine: false };
+      g.count += 1;
+      if (r.user_id === currentUserId) g.iMine = true;
+      groupsMap[r.emoji] = g;
+    });
+    const groups = Object.values(groupsMap);
+
+    return (
+      <View style={[st.msgRow, isMe ? st.rowRight : st.rowLeft]}>
+        {!isMe && (
+          <View style={st.smallAvatar}>
+            {otherUser?.avatar_url
+              ? <Image source={{ uri: otherUser.avatar_url }} style={st.avatarFill} resizeMode="cover" />
+              : <Text style={st.smallAvatarText}>{dmInitials(otherUser)}</Text>}
+          </View>
+        )}
+
+        <View style={st.bubbleCol}>
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={() => {
+              if (item.senti_id) onOpenSenti?.(item.senti_id);
+              else if (item.imageUrl) setViewerImageUrl(item.imageUrl);
+            }}
+            onLongPress={() => handleLongPress(item)}
+            delayLongPress={250}
+          >
+            <View style={[st.bubble, isMe ? st.bubbleMe : st.bubbleOther]}>
+              {/* Shared senti preview */}
+              {item.senti_id && (
+                <View style={st.sentiCard}>
+                  {!!item.senti?.image_url && (
+                    <Image source={{ uri: item.senti.image_url }} style={st.sentiThumb} resizeMode="cover" />
+                  )}
+                  <View style={st.sentiBody}>
+                    <Text style={st.sentiWave}>
+                      {WAVE_EMOJIS[capWave(item.senti?.wave)] ?? '🌊'} {capWave(item.senti?.wave)}
+                    </Text>
+                    <Text style={st.sentiQuestion} numberOfLines={3}>
+                      {item.senti?.question ?? 'Senti unavailable'}
+                    </Text>
+                    <Text style={st.sentiOpen}>View senti →</Text>
+                  </View>
+                </View>
+              )}
+
+              {/* Image (with loading placeholder while the signed URL resolves) */}
+              {item.image_path && (
+                item.imageUrl
+                  ? <Image source={{ uri: item.imageUrl }} style={st.msgImage} resizeMode="cover" />
+                  : <View style={[st.msgImage, st.msgImagePlaceholder]}><ActivityIndicator color={C.accent} /></View>
+              )}
+
+              {!!item.body && (
+                <Text style={[st.msgText, isMe ? st.msgTextMe : st.msgTextOther]}>{item.body}</Text>
+              )}
+            </View>
+          </TouchableOpacity>
+
+          {groups.length > 0 && (
+            <View style={[st.reactionRow, isMe ? st.reactionRowRight : st.reactionRowLeft]}>
+              {groups.map((g) => (
+                <TouchableOpacity
+                  key={g.emoji}
+                  style={[st.reactionPill, g.iMine ? st.reactionPillMine : st.reactionPillOther]}
+                  onPress={() => handleReactionFromPill(g.emoji, item)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={st.reactionEmoji}>{g.emoji}</Text>
+                  <Text style={st.reactionCount}>{g.count}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+
+          <View style={[st.metaRow, isMe ? st.metaRight : st.metaLeft]}>
+            <Text style={st.timestamp}>{clockTime(item.created_at)}</Text>
+            {item.id === lastReadSentId && (
+              <View style={st.seenRow}>
+                <Text style={st.seenText}>Seen</Text>
+                <Icon name="ti-check" size={fs(11)} color={C.accent} />
+                <View style={st.seenCheck2}><Icon name="ti-check" size={fs(11)} color={C.accent} /></View>
+              </View>
+            )}
+          </View>
+        </View>
+      </View>
+    );
+  };
+
+  const myReactionEmoji = (selectedMessage?.dm_message_reactions ?? [])
+    .find((r) => r.user_id === currentUserId)?.emoji ?? null;
+
+  return (
+    <View style={st.screen}>
+      <StatusBar barStyle={scheme === 'dark' ? 'light-content' : 'dark-content'} backgroundColor={C.bg} />
+
+      {/* Header */}
+      <View style={st.header}>
+        <TouchableOpacity onPress={onBack} style={st.backBtn} activeOpacity={0.7} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+          <Icon name="ti-chevron-left" size={fs(22)} color={C.textPrimary} />
+        </TouchableOpacity>
+        <View style={st.headerAvatar}>
+          {otherUser?.avatar_url
+            ? <Image source={{ uri: otherUser.avatar_url }} style={st.avatarFill} resizeMode="cover" />
+            : <Text style={st.headerAvatarText}>{dmInitials(otherUser)}</Text>}
+        </View>
+        <View style={st.headerNames}>
+          <Text style={st.headerName} numberOfLines={1}>
+            {otherUser?.display_name?.trim() || otherUser?.username || 'Citizen'}
+          </Text>
+          <Text style={st.headerHandle} numberOfLines={1}>@{otherUser?.username ?? '—'}</Text>
+        </View>
+        <Icon name="ti-dots-vertical" size={fs(20)} color={C.textMuted} />
+      </View>
+
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={st.flex}
+        keyboardVerticalOffset={Platform.OS === 'android' ? vs(60) : 0}
+      >
+        {loadingConv ? (
+          <View style={st.loader}><ActivityIndicator color={C.accent} /></View>
+        ) : (
+          <FlatList
+            ref={flatListRef}
+            data={messages}
+            keyExtractor={(item) => item.id}
+            renderItem={renderMessage}
+            contentContainerStyle={st.listContent}
+            onLayout={() => scrollToEnd(false)}
+            ListEmptyComponent={
+              <View style={st.emptyWrap}>
+                <Text style={st.emptyText}>Say hi 👋</Text>
+              </View>
+            }
+          />
+        )}
+
+        {/* Input bar */}
+        <View style={[st.inputBar, { paddingBottom: vs(8) + insets.bottom }]}>
+          <TouchableOpacity onPress={sendImage} disabled={sendingImage} style={st.inputIconBtn} activeOpacity={0.7}>
+            {sendingImage
+              ? <ActivityIndicator color={C.accent} size="small" />
+              : <Icon name="ti-photo" size={fs(22)} color={C.textSecondary} />}
+          </TouchableOpacity>
+          <TextInput
+            style={st.input}
+            value={inputText}
+            onChangeText={setInputText}
+            placeholder="Message..."
+            placeholderTextColor={C.textMuted}
+            multiline
+          />
+          <TouchableOpacity onPress={sendMessage} style={st.inputIconBtn} activeOpacity={0.7}>
+            <Icon name="ti-send" size={fs(22)} color={inputText.trim() ? C.accent : C.textMuted} />
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
+
+      {/* Full-screen image viewer */}
+      <Modal visible={!!viewerImageUrl} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setViewerImageUrl(null)}>
+        <Pressable style={st.viewerBackdrop} onPress={() => setViewerImageUrl(null)}>
+          {!!viewerImageUrl && (
+            <Image source={{ uri: viewerImageUrl }} style={st.viewerImage} resizeMode="contain" />
+          )}
+        </Pressable>
+      </Modal>
+
+      {/* Action sheet */}
+      <Modal visible={showActionSheet} transparent animationType="fade" onRequestClose={closeActionSheet}>
+        <Pressable style={st.sheetBackdrop} onPress={closeActionSheet}>
+          <Pressable style={[st.sheet, { paddingBottom: vs(16) + insets.bottom }]} onPress={() => {}}>
+            <View style={st.sheetHandle} />
+
+            {/* Reaction picker */}
+            <View style={st.reactionPicker}>
+              {REACTIONS.map((emoji) => (
+                <TouchableOpacity
+                  key={emoji}
+                  style={[st.reactionPick, myReactionEmoji === emoji && st.reactionPickActive]}
+                  onPress={() => handleReaction(emoji)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={st.reactionPickEmoji}>{emoji}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <View style={st.sheetDivider} />
+
+            <TouchableOpacity style={st.sheetRow} onPress={handleDeleteForMe} activeOpacity={0.7}>
+              <Icon name="ti-trash" size={fs(18)} color={C.textSecondary} />
+              <Text style={st.sheetRowText}>Delete for me</Text>
+            </TouchableOpacity>
+
+            {selectedMessage?.sender_id === currentUserId && (
+              <TouchableOpacity style={st.sheetRow} onPress={handleDeleteForAll} activeOpacity={0.7}>
+                <Icon name="ti-ban" size={fs(18)} color="#DC2626" />
+                <Text style={[st.sheetRowText, { color: '#DC2626' }]}>Delete for everyone</Text>
+              </TouchableOpacity>
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </View>
+  );
+}
+
+const makeStyles = (C) => StyleSheet.create({
+  screen: {
+    flex: 1, backgroundColor: C.bg,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : 0,
+  },
+  flex: { flex: 1 },
+  loader: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+
+  // Header
+  header: {
+    flexDirection: 'row', alignItems: 'center', gap: ms(8),
+    paddingHorizontal: ms(12), paddingTop: vs(8), paddingBottom: vs(8),
+    borderBottomWidth: 0.5, borderBottomColor: C.border,
+  },
+  backBtn: { padding: ms(2) },
+  headerAvatar: {
+    width: s(36), height: s(36), borderRadius: s(18), backgroundColor: OTHER_AVATAR_BG,
+    alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+  },
+  headerAvatarText: { fontSize: fs(15), fontWeight: '800', color: '#FFFFFF' },
+  avatarFill: { width: '100%', height: '100%' },
+  headerNames: { flex: 1 },
+  headerName:   { fontSize: fs(15), fontWeight: '800', color: C.textPrimary },
+  headerHandle: { fontSize: fs(12), fontWeight: '500', color: C.textMuted },
+
+  // List
+  listContent: { padding: ms(10), gap: vs(8), flexGrow: 1 },
+  emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: vs(60) },
+  emptyText: { fontSize: fs(15), fontWeight: '600', color: C.textMuted },
+
+  // Message row
+  msgRow:   { flexDirection: 'row', alignItems: 'flex-end', gap: ms(6), maxWidth: '100%' },
+  rowRight: { justifyContent: 'flex-end' },
+  rowLeft:  { justifyContent: 'flex-start' },
+  smallAvatar: {
+    width: s(18), height: s(18), borderRadius: s(9), backgroundColor: OTHER_AVATAR_BG,
+    alignItems: 'center', justifyContent: 'center', marginBottom: vs(16), overflow: 'hidden',
+  },
+  smallAvatarText: { fontSize: fs(8), fontWeight: '800', color: '#FFFFFF' },
+  bubbleCol: { maxWidth: '78%' },
+
+  bubble: { paddingVertical: vs(8), paddingHorizontal: ms(12) },
+  bubbleMe: {
+    backgroundColor: C.accent,
+    borderTopLeftRadius: ms(12), borderTopRightRadius: ms(12),
+    borderBottomRightRadius: ms(3), borderBottomLeftRadius: ms(12),
+  },
+  bubbleOther: {
+    backgroundColor: C.surfaceAlt,
+    borderTopLeftRadius: ms(12), borderTopRightRadius: ms(12),
+    borderBottomLeftRadius: ms(3), borderBottomRightRadius: ms(12),
+  },
+  bubbleDeleted: { backgroundColor: C.surfaceAlt },
+  deletedText: { fontSize: fs(13), fontStyle: 'italic', color: C.textMuted },
+  msgText:      { fontSize: fs(14), lineHeight: fs(20) },
+  msgTextMe:    { color: '#FFFFFF' },
+  msgTextOther: { color: C.textPrimary },
+  msgImage: {
+    width: Math.min(SCREEN_WIDTH * 0.6, ms(240)),
+    height: Math.min(SCREEN_WIDTH * 0.6, ms(240)),
+    borderRadius: ms(8), marginBottom: vs(2),
+  },
+  msgImagePlaceholder: {
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: C.surfaceAlt, borderWidth: 0.5, borderColor: C.border,
+  },
+
+  // Shared senti preview card (inside a bubble)
+  sentiCard: {
+    width: Math.min(SCREEN_WIDTH * 0.6, ms(240)),
+    backgroundColor: C.surface, borderRadius: ms(10), borderWidth: 0.5, borderColor: C.border,
+    overflow: 'hidden', marginBottom: vs(2),
+  },
+  sentiThumb: { width: '100%', height: vs(90) },
+  sentiBody:  { padding: ms(10) },
+  sentiWave:  { fontSize: fs(10), fontWeight: '700', color: C.textSecondary, marginBottom: vs(3) },
+  sentiQuestion: { fontSize: fs(13), fontWeight: '700', color: C.textPrimary, lineHeight: fs(18) },
+  sentiOpen:  { fontSize: fs(11), fontWeight: '700', color: C.accent, marginTop: vs(6) },
+
+  // Reactions on a bubble
+  reactionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: ms(4), marginTop: vs(3) },
+  reactionRowRight: { justifyContent: 'flex-end' },
+  reactionRowLeft:  { justifyContent: 'flex-start' },
+  reactionPill: {
+    flexDirection: 'row', alignItems: 'center', gap: ms(3),
+    paddingVertical: vs(2), paddingHorizontal: ms(6), borderRadius: ms(20), borderWidth: 0.5,
+  },
+  reactionPillMine:  { backgroundColor: C.accentLight, borderColor: C.accentMid },
+  reactionPillOther: { backgroundColor: C.surface, borderColor: C.border },
+  reactionEmoji: { fontSize: fs(11) },
+  reactionCount: { fontSize: fs(10), fontWeight: '700', color: C.textSecondary },
+
+  // Meta (timestamp + seen)
+  metaRow:  { flexDirection: 'row', alignItems: 'center', gap: ms(5), marginTop: vs(2) },
+  metaRight: { justifyContent: 'flex-end' },
+  metaLeft:  { justifyContent: 'flex-start' },
+  timestamp: { fontSize: fs(9), color: C.textMuted },
+  seenRow: { flexDirection: 'row', alignItems: 'center' },
+  seenText: { fontSize: fs(9), color: C.accent, fontWeight: '600', marginRight: ms(2) },
+  seenCheck2: { marginLeft: -ms(6) },   // overlap the two checks → ✓✓
+
+  // Input bar
+  inputBar: {
+    flexDirection: 'row', alignItems: 'flex-end', gap: ms(6),
+    paddingHorizontal: ms(10), paddingTop: vs(8),
+    borderTopWidth: 0.5, borderTopColor: C.border, backgroundColor: C.bg,
+  },
+  inputIconBtn: { width: s(36), height: s(36), alignItems: 'center', justifyContent: 'center' },
+  input: {
+    flex: 1, maxHeight: vs(120),
+    backgroundColor: C.surfaceAlt, borderWidth: 0.5, borderColor: C.border, borderRadius: ms(20),
+    paddingHorizontal: ms(14), paddingVertical: vs(8), fontSize: fs(14), color: C.textPrimary,
+  },
+
+  // Action sheet
+  sheetBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
+  sheet: {
+    backgroundColor: C.sheetBg,
+    borderTopLeftRadius: ms(20), borderTopRightRadius: ms(20),
+    borderTopWidth: 0.5, borderColor: C.sheetBorder,
+    paddingHorizontal: ms(16), paddingTop: vs(10),
+  },
+  sheetHandle: { width: ms(36), height: vs(4), borderRadius: ms(2), backgroundColor: C.border, alignSelf: 'center', marginBottom: vs(14) },
+  reactionPicker: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', marginBottom: vs(10) },
+  reactionPick: { padding: ms(6), borderRadius: ms(20), borderWidth: 1.5, borderColor: 'transparent' },
+  reactionPickActive: { borderColor: C.accent, backgroundColor: C.accentLight },
+  reactionPickEmoji: { fontSize: fs(26) },
+  sheetDivider: { height: 0.5, backgroundColor: C.border, marginBottom: vs(6) },
+  sheetRow: { flexDirection: 'row', alignItems: 'center', gap: ms(12), paddingVertical: vs(13) },
+  sheetRowText: { fontSize: fs(15), fontWeight: '600', color: C.textPrimary },
+
+  // Full-screen image viewer
+  viewerBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.93)', alignItems: 'center', justifyContent: 'center' },
+  viewerImage:    { width: '92%', height: '80%' },
+});

@@ -29,6 +29,7 @@ import {
   Keyboard,
 } from 'react-native';
 import { usePeoliaScheme, useThemePref } from '../context/ThemeContext';
+import { useWavePrefs, ALL_WAVES, DEFAULT_PREF } from '../context/WavePrefsContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
@@ -61,10 +62,21 @@ const NOTIF_DEFAULTS = {
 };
 
 const TABS = [
-  { key: 'general',  label: 'General'  },
-  { key: 'profile',  label: 'Profile'  },
-  { key: 'security', label: 'Security' },
+  { key: 'general',     label: 'General'     },
+  { key: 'profile',     label: 'Profile'     },
+  { key: 'security',    label: 'Security'    },
+  { key: 'personalize', label: 'Personalize' },
 ];
+
+// ALL_WAVES + DEFAULT_PREF are imported from WavePrefsContext (shared source).
+const WAVE_EMOJIS = {
+  'Tech': '💻', 'Love': '❤️', 'Money': '💰', 'Life': '🌱',
+  'Society': '🌍', 'Politics': '🏛️', 'Food': '🍕', 'Health': '💪',
+  'Sports': '⚽', 'Entertainment': '🎬', 'Science': '🔬',
+  'Education': '📚', 'Environment': '🌿',
+};
+
+const LEVELS = ['low', 'mid', 'high'];
 
 export default function SettingsScreen({ onBack, session, profile, onSaved }) {
   const scheme = usePeoliaScheme();
@@ -79,6 +91,12 @@ export default function SettingsScreen({ onBack, session, profile, onSaved }) {
   const [hapticsEnabled, setHapticsEnabled] = useState(true);
   const [appLockEnabled, setAppLockEnabled] = useState(false);
   const [notifPrefs, setNotifPrefs] = useState(NOTIF_DEFAULTS);
+
+  // Personalize tab — per-wave preferences come from the shared context (so
+  // changes propagate live to the feed + Profile DNA). DNA visibility is a
+  // users column, kept local here.
+  const { wavePrefs, setWavePref } = useWavePrefs();
+  const [dnaPublic, setDnaPublic] = useState(false);
 
   // Profile-tab seed for EditProfileSheet — always fetched from the DB below so we
   // don't depend on the caller's profile-object shape.
@@ -160,6 +178,7 @@ export default function SettingsScreen({ onBack, session, profile, onSaved }) {
           avatarUrl:   u.avatar_url ?? null,
           dnaPublic:   !!u.dna_public,
         });
+        setDnaPublic(!!u.dna_public);
       }
     })();
   }, [uid]);
@@ -186,6 +205,27 @@ export default function SettingsScreen({ onBack, session, profile, onSaved }) {
       );
     if (error) {
       setNotifPrefs(prev);
+      Alert.alert('Could not save', error.message ?? 'Please try again.');
+    }
+  };
+
+  // ── Personalize: per-wave preference — context handles optimistic + rollback ──
+  // Changes apply live (feed re-shapes, Profile DNA re-filters via the context).
+  const saveWavePref = async (wave, changes) => {
+    const ok = await setWavePref(wave, changes);
+    if (!ok) Alert.alert('Could not save', 'Please try again.');
+  };
+
+  // ── Personalize: DNA visibility (users.dna_public) — optimistic + rollback ──
+  const saveDnaPublic = async (next) => {
+    const prev = dnaPublic;
+    setDnaPublic(next);
+    const { error } = await supabase
+      .from('users')
+      .update({ dna_public: next })
+      .eq('id', uid);
+    if (error) {
+      setDnaPublic(prev);
       Alert.alert('Could not save', error.message ?? 'Please try again.');
     }
   };
@@ -367,6 +407,110 @@ export default function SettingsScreen({ onBack, session, profile, onSaved }) {
     </>
   );
 
+  // Three-dot Low/Mid/High selector for one wave.
+  const LevelSelector = ({ wave, level, disabled }) => (
+    <View style={st.dotTrack}>
+      {LEVELS.map((lvl) => {
+        const selected = level === lvl;
+        return (
+          <TouchableOpacity
+            key={lvl}
+            disabled={disabled}
+            onPress={() => saveWavePref(wave, { level: lvl })}
+            activeOpacity={0.7}
+            hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+          >
+            <View style={[st.dot, selected ? st.dotSelected : st.dotUnselected]} />
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+
+  const renderPersonalize = () => (
+    <>
+      <Section title="WAVE MIX">
+        <Text style={st.subtitle}>Control how much of each wave appears in your Sentarium</Text>
+        <View style={st.waveList}>
+          {ALL_WAVES.map((wave, i) => {
+            const pref     = wavePrefs[wave] ?? DEFAULT_PREF;
+            const excluded = pref.excluded;
+            return (
+              <View key={wave}>
+                <View style={st.waveRow}>
+                  {/* Top line: emoji + name + on/off toggle */}
+                  <View style={st.waveTopLine}>
+                    <Text style={st.waveName} numberOfLines={1}>
+                      {WAVE_EMOJIS[wave] ?? '🌊'}  {wave}
+                    </Text>
+                    <Switch
+                      value={!excluded}
+                      onValueChange={(on) => saveWavePref(wave, { excluded: !on })}
+                      trackColor={{ false: C.surfaceAlt, true: C.accent }}
+                      thumbColor="#FFFFFF"
+                    />
+                  </View>
+                  {/* Bottom line: Low — selector — High (dimmed + locked when excluded) */}
+                  <View style={[st.waveBottomLine, excluded && st.waveBottomLineOff]}>
+                    <Text style={[st.lvlLabel, pref.level === 'low' ? st.lvlLabelOn : st.lvlLabelOff]}>Low</Text>
+                    <LevelSelector wave={wave} level={pref.level} disabled={excluded} />
+                    <Text style={[st.lvlLabel, pref.level === 'high' ? st.lvlLabelOn : st.lvlLabelOff]}>High</Text>
+                  </View>
+                </View>
+                {i < ALL_WAVES.length - 1 && <View style={st.divider} />}
+              </View>
+            );
+          })}
+        </View>
+      </Section>
+
+      <Section title="CITIZEN DNA">
+        <Text style={st.subtitle}>
+          Based on your reacts and floats. Tap waves to show or hide them on your chart.
+        </Text>
+        <View style={st.chipFlow}>
+          {ALL_WAVES.map((wave) => {
+            const included = (wavePrefs[wave] ?? DEFAULT_PREF).dna_include;
+            return (
+              <TouchableOpacity
+                key={wave}
+                style={[st.dnaChip, included ? st.dnaChipOn : st.dnaChipOff]}
+                onPress={() => saveWavePref(wave, { dna_include: !included })}
+                activeOpacity={0.8}
+              >
+                <Text style={[st.dnaChipText, included ? st.dnaChipTextOn : st.dnaChipTextOff]}>
+                  {WAVE_EMOJIS[wave] ?? '🌊'} {wave}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        <View style={st.dnaVisRow}>
+          <Text style={st.dnaVisLabel}>DNA visible to</Text>
+          <View style={st.segment}>
+            {[
+              { val: false, label: 'Only me'  },
+              { val: true,  label: 'Everyone' },
+            ].map((opt) => {
+              const active = dnaPublic === opt.val;
+              return (
+                <TouchableOpacity
+                  key={opt.label}
+                  style={[st.segmentBtn, active && st.segmentBtnActive]}
+                  onPress={() => saveDnaPublic(opt.val)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[st.segmentText, active && st.segmentTextActive]}>{opt.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+      </Section>
+    </>
+  );
+
   return (
     <View style={st.screen}>
       <StatusBar barStyle={scheme === 'dark' ? 'light-content' : 'dark-content'} backgroundColor={C.bg} />
@@ -379,8 +523,13 @@ export default function SettingsScreen({ onBack, session, profile, onSaved }) {
         </TouchableOpacity>
       </View>
 
-      {/* Tabs */}
-      <View style={st.tabRow}>
+      {/* Tabs — horizontal scroll so all four pills fit at any width */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={st.tabScroll}
+        contentContainerStyle={st.tabRow}
+      >
         {TABS.map((t) => {
           const active = activeTab === t.key;
           return (
@@ -394,7 +543,7 @@ export default function SettingsScreen({ onBack, session, profile, onSaved }) {
             </TouchableOpacity>
           );
         })}
-      </View>
+      </ScrollView>
 
       {/* Body */}
       {activeTab === 'profile' ? (
@@ -410,7 +559,11 @@ export default function SettingsScreen({ onBack, session, profile, onSaved }) {
           contentContainerStyle={{ paddingBottom: vs(24) + insets.bottom }}
           showsVerticalScrollIndicator={false}
         >
-          {activeTab === 'general' ? renderGeneral() : renderSecurity()}
+          {activeTab === 'general'
+            ? renderGeneral()
+            : activeTab === 'personalize'
+              ? renderPersonalize()
+              : renderSecurity()}
         </ScrollView>
       )}
 
@@ -485,7 +638,8 @@ const makeStyles = (C) => StyleSheet.create({
   backBtn: { flexDirection: 'row', alignItems: 'center', gap: ms(4) },
   headerTitle: { fontSize: fs(20), fontWeight: '800', color: C.textPrimary },
 
-  // Tabs (same visual pattern as VoiceSheet New/Top)
+  // Tabs (same visual pattern as VoiceSheet New/Top) — horizontal scroll
+  tabScroll: { flexGrow: 0 },
   tabRow: { flexDirection: 'row', gap: ms(8), paddingHorizontal: ms(16), paddingVertical: vs(10) },
   tabPill: { paddingVertical: vs(7), paddingHorizontal: ms(16), borderRadius: ms(20) },
   tabPillActive:   { backgroundColor: C.accent },
@@ -546,4 +700,60 @@ const makeStyles = (C) => StyleSheet.create({
   confirmDeleteBtn: { backgroundColor: DANGER },
   deleteBtnDisabled: { opacity: 0.5 },
   deleteBtnText: { fontSize: fs(15), fontWeight: '700' },
+
+  // ── Personalize tab ──
+  subtitle: { fontSize: fs(13), fontWeight: '500', color: C.textMuted, marginBottom: vs(10), lineHeight: fs(19) },
+
+  // Wave Mix rows
+  waveList: { paddingBottom: vs(4) },
+  waveRow:  { paddingVertical: vs(11) },
+  waveTopLine: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  waveName: { fontSize: fs(15), fontWeight: '700', color: C.textPrimary, flexShrink: 1 },
+  waveBottomLine: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: ms(12), marginTop: vs(10),
+  },
+  waveBottomLineOff: { opacity: 0.4 },
+  lvlLabel:    { fontSize: fs(12), fontWeight: '600' },
+  lvlLabelOn:  { color: C.accent },
+  lvlLabelOff: { color: C.textMuted },
+
+  // Three-dot Low/Mid/High selector
+  dotTrack: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    gap: ms(20),
+    backgroundColor: C.surfaceAlt, borderWidth: 0.5, borderColor: C.border,
+    borderRadius: ms(20), paddingVertical: vs(7), paddingHorizontal: ms(16),
+  },
+  dot: { width: s(14), height: s(14), borderRadius: s(7) },
+  dotSelected: {
+    backgroundColor: C.accent, borderWidth: 2, borderColor: C.accentText,
+    shadowColor: C.accent, shadowOpacity: 0.6, shadowRadius: 4, shadowOffset: { width: 0, height: 0 },
+    elevation: 3,
+  },
+  dotUnselected: { backgroundColor: C.surfaceAlt, borderWidth: 1.5, borderColor: C.border },
+
+  // Citizen DNA chips
+  chipFlow: { flexDirection: 'row', flexWrap: 'wrap', gap: ms(8), marginTop: vs(4) },
+  dnaChip: { paddingVertical: vs(9), paddingHorizontal: ms(13), borderRadius: ms(20) },
+  dnaChipOn:  { backgroundColor: C.accent },
+  dnaChipOff: { backgroundColor: C.surfaceAlt, borderWidth: 0.5, borderColor: C.border },
+  dnaChipText:    { fontSize: fs(13) },
+  dnaChipTextOn:  { color: '#FFFFFF', fontWeight: '700' },
+  dnaChipTextOff: { color: C.textMuted, fontWeight: '600' },
+
+  // DNA visibility segmented control
+  dnaVisRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginTop: vs(16), paddingVertical: vs(10),
+  },
+  dnaVisLabel: { fontSize: fs(15), fontWeight: '600', color: C.textPrimary, flexShrink: 1 },
+  segment:    { flexDirection: 'row', gap: ms(8) },
+  segmentBtn: {
+    paddingVertical: vs(9), paddingHorizontal: ms(16), borderRadius: ms(12),
+    borderWidth: 0.5, borderColor: C.border, backgroundColor: C.surfaceAlt,
+  },
+  segmentBtnActive: { backgroundColor: C.accent, borderColor: C.accent },
+  segmentText:       { fontSize: fs(13), fontWeight: '700', color: C.textMuted },
+  segmentTextActive: { color: '#FFFFFF' },
 });

@@ -8,6 +8,7 @@ import AppLockGate from '../components/AppLockGate';
 import { ThemeProvider } from '../context/ThemeContext';
 import { NotificationProvider } from '../context/NotificationContext';
 import { BlockProvider } from '../context/BlockContext';
+import { WavePrefsProvider } from '../context/WavePrefsContext';
 import { supabase } from '../lib/supabase';
 
 // Silence a deprecation warning fired from inside react-native-country-picker-modal
@@ -49,11 +50,13 @@ export default function Layout() {
       <ThemeProvider>
         <NotificationProvider>
           <BlockProvider>
-            <ErrorBoundary>
-              <AppLockGate>
-                <Stack screenOptions={{ headerShown: false }} />
-              </AppLockGate>
-            </ErrorBoundary>
+            <WavePrefsProvider>
+              <ErrorBoundary>
+                <AppLockGate>
+                  <Stack screenOptions={{ headerShown: false }} />
+                </AppLockGate>
+              </ErrorBoundary>
+            </WavePrefsProvider>
           </BlockProvider>
         </NotificationProvider>
       </ThemeProvider>

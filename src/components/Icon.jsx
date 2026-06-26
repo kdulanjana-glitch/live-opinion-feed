@@ -43,6 +43,10 @@ const MAP = {
   'ti-alert-triangle':  'alert-triangle',
   'ti-trash':           'trash-2',
   'ti-ban':             'slash',
+  'ti-send':            'send',
+  'ti-photo':           'image',
+  'ti-edit':            'edit-2',
+  'ti-search':          'search',
 };
 
 export default function Icon({ name, size, color, style }) {

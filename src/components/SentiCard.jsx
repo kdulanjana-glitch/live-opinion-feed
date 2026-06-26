@@ -29,6 +29,7 @@ export default function SentiCard({
   onVoice,
   onPin,
   onAsk,
+  onShareToDM,
   onFlag,
   onAvatarPress,
   onViewLocked,
@@ -133,6 +134,7 @@ export default function SentiCard({
           }}
           onLike={() => onLike?.(senti?.id)}   onVoice={() => onVoice?.(senti?.id)}
           onPin={() => onPin?.(senti?.id)}     onAsk={() => onAsk?.(senti?.id)}
+          onAskLongPress={onShareToDM ? () => onShareToDM(senti?.id) : undefined}
           onFlag={() => onFlag?.(senti?.id)}
         />
       </View>

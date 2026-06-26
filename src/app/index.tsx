@@ -24,6 +24,8 @@ import TrendingScreen  from '../screens/TrendingScreen';
 import FloatScreen     from '../screens/FloatScreen';
 import PinScreen      from '../screens/PinScreen';         // Pin tab
 import ProfileScreen   from '../screens/ProfileScreen';    // own + other citizen
+import DMConversationScreen from '../screens/DMConversationScreen';  // direct messages overlay
+import ShareToDMSheet from '../components/ShareToDMSheet';            // share a senti into a DM
 
 import SplashScreen         from '../screens/onboarding/SplashScreen';
 import WalkthroughScreen    from '../screens/onboarding/WalkthroughScreen';
@@ -49,6 +51,8 @@ export default function Index() {
   const [loading,       setLoading]       = useState(true);
   const [activeTab,     setActiveTab]     = useState('sentarium');
   const [userProfileId, setUserProfileId] = useState<string | null>(null);
+  const [dmOverlayUserId, setDmOverlayUserId] = useState<string | null>(null);
+  const [shareSentiId, setShareSentiId] = useState<string | null>(null);
   const [feedScrollToId, setFeedScrollToId] = useState<string | null>(null);
   const [focusSenti, setFocusSenti] = useState<
     { id: string; openVoice: boolean; token: number } | null
@@ -68,6 +72,9 @@ export default function Index() {
     activeTabRef.current = tab;
     setActiveTab(tab);
   };
+
+  // Open a DM thread on top of everything (incl. the profile overlay).
+  const openDM = (userId: string) => setDmOverlayUserId(userId);
 
   const checkOnboarding = async (userId: string) => {
     try {
@@ -230,6 +237,7 @@ export default function Index() {
           onBack={() => setUserProfileId(null)}
           onOpenSenti={handleNavigateToFeedOpinion}
           onOpenUser={handleNavigateToUser}
+          onOpenDM={openDM}
         />
       );
     }
@@ -316,6 +324,7 @@ export default function Index() {
           <ProfileScreen
             onOpenSenti={handleNavigateToFeedOpinion}
             onOpenUser={handleNavigateToUser}
+            onOpenDM={openDM}
           />
         ) : (
           <AuthScreen
@@ -424,6 +433,7 @@ export default function Index() {
             scrollToId={feedScrollToId}
             onScrolled={() => setFeedScrollToId(null)}
             focusSenti={focusSenti}
+            onShareSentiToDM={(sentiId: string) => setShareSentiId(sentiId)}
           />
         </View>
 
@@ -439,6 +449,32 @@ export default function Index() {
           <TabBar activeTab={visibleTab} onTabPress={handleTabPress} />
         </View>
       )}
+
+      {/* DM conversation overlay — on top of everything incl. the profile overlay
+          and tab bar. Profile stays mounted underneath (scroll preserved). */}
+      {dmOverlayUserId && (
+        <View style={StyleSheet.absoluteFill}>
+          <DMConversationScreen
+            otherUserId={dmOverlayUserId}
+            onBack={() => setDmOverlayUserId(null)}
+            onOpenSenti={(sentiId: string) => {
+              setDmOverlayUserId(null);
+              handleNavigateToFeedOpinion(sentiId);
+            }}
+          />
+        </View>
+      )}
+
+      {/* Share-a-senti-to-DM recipient picker */}
+      <ShareToDMSheet
+        visible={!!shareSentiId}
+        sentiId={shareSentiId}
+        onClose={() => setShareSentiId(null)}
+        onShared={(userId: string) => {
+          setShareSentiId(null);
+          setDmOverlayUserId(userId);
+        }}
+      />
 
       {/* In-app notification toast — absolute, above everything */}
       <NotificationToast

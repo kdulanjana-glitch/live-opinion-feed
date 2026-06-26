@@ -16,6 +16,7 @@ const NotificationContext = createContext(null);
 export function NotificationProvider({ children }) {
   const [currentUserId, setCurrentUserId] = useState(null);
   const [unreadCount,   setUnreadCount]   = useState(0);
+  const [dmUnreadTotal, setDmUnreadTotal] = useState(0);
   const [toastQueue,    setToastQueue]    = useState([]);
 
   // A function registered by the root layout — NOT state (no re-render needed).
@@ -31,18 +32,34 @@ export function NotificationProvider({ children }) {
     setUnreadCount(count ?? 0);
   };
 
+  // Sum my unread DM counts across all conversations (which column depends on
+  // whether I'm participant 1 or 2 in each).
+  const fetchDMUnread = async (userId) => {
+    if (!userId) { setDmUnreadTotal(0); return; }
+    const { data } = await supabase
+      .from('dm_conversations')
+      .select('participant_1_id, unread_p1, unread_p2')
+      .or(`participant_1_id.eq.${userId},participant_2_id.eq.${userId}`);
+    const total = (data || []).reduce((sum, conv) => {
+      const mine = conv.participant_1_id === userId ? conv.unread_p1 : conv.unread_p2;
+      return sum + (mine || 0);
+    }, 0);
+    setDmUnreadTotal(total);
+  };
+
   // ── Identify the current user (on mount + on auth changes) ──
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       setCurrentUserId(user?.id ?? null);
       fetchUnread(user?.id ?? null);
+      fetchDMUnread(user?.id ?? null);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       const uid = session?.user?.id ?? null;
       setCurrentUserId(uid);
-      if (uid) fetchUnread(uid);
-      else { setUnreadCount(0); setToastQueue([]); }
+      if (uid) { fetchUnread(uid); fetchDMUnread(uid); }
+      else { setUnreadCount(0); setDmUnreadTotal(0); setToastQueue([]); }
     });
 
     return () => subscription.unsubscribe();
@@ -106,6 +123,20 @@ export function NotificationProvider({ children }) {
     return () => { supabase.removeChannel(channel); };
   }, [currentUserId]);
 
+  // ── DM unread: refetch the total whenever any of my conversations changes ──
+  useEffect(() => {
+    if (!currentUserId) return;
+    const channel = supabase
+      .channel('dm-unread-watch')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'dm_conversations' },
+        () => fetchDMUnread(currentUserId)
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [currentUserId]);
+
   // ── Toast queue ──
   const currentToast = toastQueue[0] ?? null;
   const dismissCurrentToast = () => setToastQueue((prev) => prev.slice(1));
@@ -135,12 +166,14 @@ export function NotificationProvider({ children }) {
     <NotificationContext.Provider
       value={{
         unreadCount,
+        dmUnreadTotal,
         currentToast,
         dismissCurrentToast,
         registerNavigationHandler,
         navigateToNotification,
         markAllRead,
         refreshUnreadCount,
+        refreshDMUnread: () => fetchDMUnread(currentUserId),
       }}
     >
       {children}
@@ -153,11 +186,13 @@ export function useNotifications() {
   // Safe fallback if a consumer renders outside the provider (shouldn't happen).
   return ctx ?? {
     unreadCount: 0,
+    dmUnreadTotal: 0,
     currentToast: null,
     dismissCurrentToast: () => {},
     registerNavigationHandler: () => {},
     navigateToNotification: () => {},
     markAllRead: async () => {},
     refreshUnreadCount: () => {},
+    refreshDMUnread: () => {},
   };
 }

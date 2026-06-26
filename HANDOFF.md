@@ -1,8 +1,26 @@
 # Peolia — Session Handoff
 
-**Last updated: 2026-06-20.** App is working end-to-end on device (Android; now a dev build
-since `expo-dev-client` was added). Votes, likes, pins, voices, follow, share, profile edit,
-view-reacts lock, theming, settings, and in-app notifications all function.
+**Last updated: 2026-06-25.** App is working end-to-end on device (Android; dev build via
+`expo-dev-client`). Votes, likes, pins, voices, follow, share, profile edit, view-reacts lock,
+theming, settings, in-app notifications, block-user, voice dislikes all function.
+
+### ⚠️ SESSION PICKUP STATE (2026-06-25)
+- **Uncommitted? No — all work is committed on branch `feat/ugc-block-dislike-and-metro-fix`**
+  (4 commits ahead of `main`, NOT yet merged). Merge when satisfied:
+  `git checkout main && git merge feat/ugc-block-dislike-and-metro-fix`.
+- **A NATIVE REBUILD IS OWED.** The share-card feature added native modules
+  (`react-native-view-shot`, `expo-sharing`) and is **not yet tested on device**. Run:
+  `eas build --profile development -p android` → reinstall → `set EXPO_PACKAGER_PROXY_URL=` +
+  `adb reverse tcp:8081 tcp:8081` + `npx expo start --dev-client --clear`. JS-only changes
+  (auth lock, sizing, block, dislike) load on Metro reload; the share card needs the rebuild.
+- **Build profiles:** `development` = dev-client, needs Metro (live JS). `preview` = standalone
+  APK with JS baked in, no Metro. A `development` build launched WITHOUT Metro crashes with
+  "Unable to load script" — that's expected, connect it to `expo start --dev-client`.
+- **SQL to confirm applied:** `sprint7-block-user.sql` (block — user said done) and the
+  **Block B SQL for voice dislikes** (`voice_dislikes` table + `dislike_count`/`net_score`
+  columns + mutual-exclusivity triggers on voices). Dislike UI errors until that's applied.
+- **If you see `Invalid Refresh Token: Already Used`:** the `processLock` fix is in; just sign
+  out/in once on the device to clear the stale token.
 
 **App-wide providers (in `src/app/_layout.tsx`):**
 `SafeAreaProvider → ThemeProvider → NotificationProvider → BlockProvider → ErrorBoundary → AppLockGate → Stack`.
@@ -263,6 +281,15 @@ All in `src/app/index.tsx` via `activeTab` state. Tab keys:
 `users.dna_public` already exists. The `notifications` table + insert triggers must exist for
 toasts/badges; Realtime must be enabled on `public.notifications` for live toasts.
 App lock + haptics need a dev build that includes those native modules (degrade gracefully otherwise).
+
+## Changelog — 2026-06-25 (dislikes, auto-hide, auth lock, sizing)
+
+| Change | Where |
+|---|---|
+| **Voice dislikes** — `voiceDislikes` state + `handleDislikeVoice`; shared `updateVoiceCountsLocally` keeps `net_score` in sync; Top sort uses `net_score`; dislike button shows OWN state only (no count); voices/replies with `net_score ≤ -5` auto-collapse behind a tap-to-show placeholder. Mutual exclusivity: liking clears dislike and vice-versa (client optimistic + DB trigger). **Needs Block B SQL.** | VoiceSheet.jsx, Icon.jsx (`ti-thumbs-down`) |
+| **Report auto-hide (realtime)** — feed-wide channel `sentis-status-feed` drops a senti live when its status flips to `under_review` (the report-threshold trigger). Softened report confirmation copy. | SentariumScreen |
+| **Supabase auth lock** — added `lock: processLock` to the auth config to serialize concurrent session refreshes (index.tsx + NotificationContext + BlockContext all read auth at startup) → fixes `Invalid Refresh Token: Already Used`. Removed a duplicate `react-native-get-random-values` import. | src/lib/supabase.js |
+| **Sizing pass** — Profile (own name/handle/bio, avatar, DNA title, header notif + 3-dot buttons, unread badge, 3-dot dropdown), About (rows, name, pill), Notifications hub (cards) and Notifications **list** (rows) were all undersized vs the rest of the app; bumped to consistent fs() sizes. | ProfileScreen, AboutScreen, NotificationsHubScreen, NotificationListScreen |
 
 ## Changelog — 2026-06-20 (share-card / "Ask")
 

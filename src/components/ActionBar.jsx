@@ -54,6 +54,7 @@ export default function ActionBar({
   onVoice,
   onPin,
   onAsk,
+  onAskLongPress,
   onFlag,
 }) {
   const scheme = usePeoliaScheme();
@@ -94,6 +95,7 @@ export default function ActionBar({
       color:   mutedColor,
       count:   'Ask',
       onPress: onAsk,
+      onLongPress: onAskLongPress,
     },
     {
       // Report / flag — emoji renders its own red regardless of `color`
@@ -106,8 +108,15 @@ export default function ActionBar({
 
   return (
     <View style={st.bar}>
-      {items.map(({ Icon, color, count, onPress, noCount }, i) => (
-        <TouchableOpacity key={i} style={st.item} onPress={onPress} activeOpacity={0.7}>
+      {items.map(({ Icon, color, count, onPress, onLongPress, noCount }, i) => (
+        <TouchableOpacity
+          key={i}
+          style={st.item}
+          onPress={onPress}
+          onLongPress={onLongPress}
+          delayLongPress={300}
+          activeOpacity={0.7}
+        >
           <Icon color={color} />
           {!noCount && <Text style={[st.count, onImage && st.countOnImage]}>{count}</Text>}
         </TouchableOpacity>
