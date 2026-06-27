@@ -80,6 +80,42 @@ export async function sendSentiToDM(supabase, conversationId, senderId, sentiId)
   if (error) throw error;
 }
 
+// ── Per-conversation prefs (pin / archive / mute) — dm_conversation_prefs table ──
+export const MUTE_OPTIONS = {
+  day:    () => new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+  week:   () => new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+  always: () => new Date('2999-01-01T00:00:00Z').toISOString(),
+};
+
+export function isMuted(pref) {
+  if (!pref?.muted_until) return false;
+  return new Date(pref.muted_until).getTime() > Date.now();
+}
+
+// Upsert a partial pref change for one conversation (optimistic callers handle UI).
+export async function setConversationPref(supabase, userId, conversationId, changes) {
+  if (!userId || !conversationId) return;
+  const { error } = await supabase
+    .from('dm_conversation_prefs')
+    .upsert(
+      { user_id: userId, conversation_id: conversationId, ...changes, updated_at: new Date().toISOString() },
+      { onConflict: 'user_id,conversation_id' },
+    );
+  if (error) throw error;
+}
+
+// Fetch one conversation's pref row (or null).
+export async function getConversationPref(supabase, userId, conversationId) {
+  if (!userId || !conversationId) return null;
+  const { data } = await supabase
+    .from('dm_conversation_prefs')
+    .select('pinned, archived, muted_until')
+    .eq('user_id', userId)
+    .eq('conversation_id', conversationId)
+    .maybeSingle();
+  return data ?? null;
+}
+
 // Initials for a DM avatar. avatar_initials is stale ('??') for many rows — skip it
 // and derive from display_name, then username.
 export function dmInitials(user) {

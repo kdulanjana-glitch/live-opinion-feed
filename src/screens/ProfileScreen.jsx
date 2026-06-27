@@ -448,7 +448,14 @@ export default function ProfileScreen({ userId, onBack, onOpenSenti, onOpenUser,
     return <FAQScreen onBack={() => setSubScreen(null)} />;
 
   if (subScreen === 'notif-hub')
-    return <NotificationsHubScreen onBack={() => setSubScreen(null)} onOpenList={() => setSubScreen('notif-list')} onOpenDM={onOpenDM} />;
+    return (
+      <NotificationsHubScreen
+        onBack={() => setSubScreen(null)}
+        onOpenList={() => setSubScreen('notif-list')}
+        onOpenDM={onOpenDM}
+        onOpenNotificationSettings={() => setSubScreen('settings')}
+      />
+    );
 
   if (subScreen === 'notif-list')
     return <NotificationListScreen onBack={() => setSubScreen('notif-hub')} />;

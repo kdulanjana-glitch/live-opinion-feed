@@ -47,6 +47,8 @@ const MAP = {
   'ti-photo':           'image',
   'ti-edit':            'edit-2',
   'ti-search':          'search',
+  'ti-bell-off':        'bell-off',
+  'ti-archive':         'archive',
 };
 
 export default function Icon({ name, size, color, style }) {

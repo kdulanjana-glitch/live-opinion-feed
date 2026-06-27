@@ -461,6 +461,10 @@ export default function Index() {
               setDmOverlayUserId(null);
               handleNavigateToFeedOpinion(sentiId);
             }}
+            onOpenProfile={(userId: string) => {
+              setDmOverlayUserId(null);
+              handleNavigateToUser(userId);
+            }}
           />
         </View>
       )}

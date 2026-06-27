@@ -30,6 +30,7 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import { decode } from 'base64-arraybuffer';
 import { usePeoliaScheme } from '../context/ThemeContext';
+import { useBlocks } from '../context/BlockContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../components/Icon';
 import { supabase } from '../lib/supabase';
@@ -41,6 +42,10 @@ import {
   markConversationRead,
   generateDMSignedUrl,
   dmInitials,
+  getConversationPref,
+  setConversationPref,
+  isMuted,
+  MUTE_OPTIONS,
 } from '../lib/dmUtils';
 
 const REACTIONS = ['❤️', '👍', '😂', '😮', '😢', '🔥'];
@@ -54,11 +59,12 @@ const WAVE_EMOJIS = {
 };
 const capWave = (w) => (w ? w.charAt(0).toUpperCase() + w.slice(1) : 'Tech');
 
-export default function DMConversationScreen({ otherUserId, onBack, onOpenSenti }) {
+export default function DMConversationScreen({ otherUserId, onBack, onOpenSenti, onOpenProfile }) {
   const scheme = usePeoliaScheme();
   const C      = getPeoliaColors(scheme);
   const st     = makeStyles(C);
   const insets = useSafeAreaInsets();
+  const { block } = useBlocks();
 
   const [conversationId,  setConversationId]  = useState(null);
   const [messages,        setMessages]        = useState([]);
@@ -71,6 +77,8 @@ export default function DMConversationScreen({ otherUserId, onBack, onOpenSenti 
   const [selectedMessage, setSelectedMessage] = useState(null);
   const [showActionSheet, setShowActionSheet] = useState(false);
   const [viewerImageUrl,  setViewerImageUrl]  = useState(null);   // full-screen image viewer
+  const [showMenu,        setShowMenu]        = useState(false);  // header ⋮ menu
+  const [convPref,        setConvPref]        = useState(null);   // { pinned, archived, muted_until }
 
   const flatListRef     = useRef(null);
   const conversationRef = useRef(null);
@@ -156,11 +164,16 @@ export default function DMConversationScreen({ otherUserId, onBack, onOpenSenti 
 
       await loadMessages(convId);
       await markConversationRead(supabase, convId, uid, p1);
+      getConversationPref(supabase, uid, convId).then((p) => { if (!cancelled) setConvPref(p); });
       if (!cancelled) setLoadingConv(false);
 
       // ── Realtime ──
+      // Unique topic per mount — reusing `dm-conv-<id>` after a fast-refresh or a
+      // quick close/reopen returns an already-subscribed channel, which throws
+      // "cannot add postgres_changes callbacks after subscribe()".
+      if (cancelled) return;
       channel = supabase
-        .channel(`dm-conv-${convId}`)
+        .channel(`dm-conv-${convId}-${Date.now()}`)
         .on('postgres_changes',
           { event: 'INSERT', schema: 'public', table: 'dm_messages', filter: `conversation_id=eq.${convId}` },
           async (payload) => {
@@ -373,6 +386,57 @@ export default function DMConversationScreen({ otherUserId, onBack, onOpenSenti 
     );
   };
 
+  // ── Header ⋮ menu actions ──
+  const muted  = isMuted(convPref);
+  const pinned = !!convPref?.pinned;
+
+  const updatePref = async (changes) => {
+    const prev = convPref;
+    setConvPref({ ...(convPref ?? {}), ...changes });
+    try {
+      await setConversationPref(supabase, currentUserId, conversationId, changes);
+    } catch (e) {
+      console.error('updatePref error', e);
+      setConvPref(prev);
+    }
+  };
+
+  const handleViewProfile = () => { setShowMenu(false); onOpenProfile?.(otherUserId); };
+
+  const handleTogglePin = () => { setShowMenu(false); updatePref({ pinned: !pinned }); };
+
+  const handleMute = () => {
+    setShowMenu(false);
+    if (muted) { updatePref({ muted_until: null }); return; }
+    Alert.alert('Mute notifications', 'Mute this conversation for…', [
+      { text: '1 day',  onPress: () => updatePref({ muted_until: MUTE_OPTIONS.day() }) },
+      { text: '1 week', onPress: () => updatePref({ muted_until: MUTE_OPTIONS.week() }) },
+      { text: 'Always', onPress: () => updatePref({ muted_until: MUTE_OPTIONS.always() }) },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
+
+  const handleBlock = () => {
+    setShowMenu(false);
+    const name = otherUser?.display_name?.trim() || (otherUser?.username ? `@${otherUser.username}` : 'this citizen');
+    Alert.alert(
+      `Block ${name}?`,
+      "They won't be able to see your sentis, and you won't see theirs. This also removes any follow between you.",
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Block',
+          style: 'destructive',
+          onPress: async () => {
+            const ok = await block(otherUserId);
+            if (ok) onBack?.();
+            else Alert.alert('Could not block', 'Please try again.');
+          },
+        },
+      ],
+    );
+  };
+
   // Last message I sent that has been read → where the "Seen" receipt shows.
   const lastReadSentId = (() => {
     for (let i = messages.length - 1; i >= 0; i -= 1) {
@@ -501,18 +565,35 @@ export default function DMConversationScreen({ otherUserId, onBack, onOpenSenti 
         <TouchableOpacity onPress={onBack} style={st.backBtn} activeOpacity={0.7} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
           <Icon name="ti-chevron-left" size={fs(22)} color={C.textPrimary} />
         </TouchableOpacity>
-        <View style={st.headerAvatar}>
-          {otherUser?.avatar_url
-            ? <Image source={{ uri: otherUser.avatar_url }} style={st.avatarFill} resizeMode="cover" />
-            : <Text style={st.headerAvatarText}>{dmInitials(otherUser)}</Text>}
-        </View>
-        <View style={st.headerNames}>
-          <Text style={st.headerName} numberOfLines={1}>
-            {otherUser?.display_name?.trim() || otherUser?.username || 'Citizen'}
-          </Text>
-          <Text style={st.headerHandle} numberOfLines={1}>@{otherUser?.username ?? '—'}</Text>
-        </View>
-        <Icon name="ti-dots-vertical" size={fs(20)} color={C.textMuted} />
+        {loadingConv || !otherUser ? (
+          <>
+            <View style={[st.headerAvatar, st.skelTone]} />
+            <View style={st.headerNames}><View style={st.skelNameBar} /></View>
+          </>
+        ) : (
+          <>
+            <TouchableOpacity
+              style={st.headerAvatar}
+              activeOpacity={0.8}
+              onPress={() => onOpenProfile?.(otherUserId)}
+            >
+              {otherUser?.avatar_url
+                ? <Image source={{ uri: otherUser.avatar_url }} style={st.avatarFill} resizeMode="cover" />
+                : <Text style={st.headerAvatarText}>{dmInitials(otherUser)}</Text>}
+            </TouchableOpacity>
+            <TouchableOpacity style={st.headerNames} activeOpacity={0.8} onPress={() => onOpenProfile?.(otherUserId)}>
+              <View style={st.headerNameRow}>
+                <Text style={st.headerName} numberOfLines={1}>
+                  {otherUser?.display_name?.trim() || otherUser?.username || 'Citizen'}
+                </Text>
+                {muted && <Icon name="ti-bell-off" size={fs(13)} color={C.textMuted} />}
+              </View>
+            </TouchableOpacity>
+          </>
+        )}
+        <TouchableOpacity onPress={() => setShowMenu(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
+          <Icon name="ti-dots-vertical" size={fs(20)} color={C.textMuted} />
+        </TouchableOpacity>
       </View>
 
       <KeyboardAvoidingView
@@ -521,7 +602,17 @@ export default function DMConversationScreen({ otherUserId, onBack, onOpenSenti 
         keyboardVerticalOffset={Platform.OS === 'android' ? vs(60) : 0}
       >
         {loadingConv ? (
-          <View style={st.loader}><ActivityIndicator color={C.accent} /></View>
+          <View style={st.skeletonWrap}>
+            {[0, 1, 2, 3, 4, 5].map((i) => {
+              const mine = i % 2 === 1;
+              return (
+                <View key={i} style={[st.skelRow, mine ? st.rowRight : st.rowLeft]}>
+                  {!mine && <View style={st.skelAvatar} />}
+                  <View style={[st.skelBubble, { width: ms(110 + (i % 3) * 45) }]} />
+                </View>
+              );
+            })}
+          </View>
         ) : (
           <FlatList
             ref={flatListRef}
@@ -604,6 +695,31 @@ export default function DMConversationScreen({ otherUserId, onBack, onOpenSenti 
           </Pressable>
         </Pressable>
       </Modal>
+
+      {/* Header ⋮ menu */}
+      <Modal visible={showMenu} transparent animationType="fade" onRequestClose={() => setShowMenu(false)}>
+        <Pressable style={st.menuBackdrop} onPress={() => setShowMenu(false)}>
+          <View style={[st.menuCard, { top: vs(54) + (Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : 0) }]}>
+            <TouchableOpacity style={st.menuItem} onPress={handleViewProfile} activeOpacity={0.7}>
+              <Icon name="ti-user" size={fs(16)} color={C.textSecondary} />
+              <Text style={st.menuLabel}>View profile</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={st.menuItem} onPress={handleMute} activeOpacity={0.7}>
+              <Icon name="ti-bell-off" size={fs(16)} color={C.textSecondary} />
+              <Text style={st.menuLabel}>{muted ? 'Unmute' : 'Mute notifications'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={st.menuItem} onPress={handleTogglePin} activeOpacity={0.7}>
+              <Icon name="ti-pin" size={fs(16)} color={C.textSecondary} />
+              <Text style={st.menuLabel}>{pinned ? 'Unpin' : 'Pin to top'}</Text>
+            </TouchableOpacity>
+            <View style={st.menuDivider} />
+            <TouchableOpacity style={st.menuItem} onPress={handleBlock} activeOpacity={0.7}>
+              <Icon name="ti-ban" size={fs(16)} color="#DC2626" />
+              <Text style={[st.menuLabel, { color: '#DC2626' }]}>Block citizen</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -629,9 +745,28 @@ const makeStyles = (C) => StyleSheet.create({
   },
   headerAvatarText: { fontSize: fs(15), fontWeight: '800', color: '#FFFFFF' },
   avatarFill: { width: '100%', height: '100%' },
+  skelTone:    { backgroundColor: C.surfaceAlt },
+  skelNameBar: { width: ms(130), height: vs(15), borderRadius: ms(6), backgroundColor: C.surfaceAlt },
   headerNames: { flex: 1 },
-  headerName:   { fontSize: fs(15), fontWeight: '800', color: C.textPrimary },
-  headerHandle: { fontSize: fs(12), fontWeight: '500', color: C.textMuted },
+  headerNameRow: { flexDirection: 'row', alignItems: 'center', gap: ms(6) },
+  headerName:   { fontSize: fs(16), fontWeight: '800', color: C.textPrimary, flexShrink: 1 },
+
+  // Header ⋮ dropdown menu
+  menuBackdrop: { flex: 1 },
+  menuCard: {
+    position: 'absolute', right: ms(10), width: ms(200),
+    backgroundColor: C.sheetBg, borderRadius: ms(13), borderWidth: 0.5, borderColor: C.border,
+    paddingVertical: vs(5),
+  },
+  menuItem:    { flexDirection: 'row', alignItems: 'center', gap: ms(10), paddingVertical: vs(12), paddingHorizontal: ms(14) },
+  menuLabel:   { fontSize: fs(14), fontWeight: '600', color: C.textPrimary },
+  menuDivider: { height: 0.5, backgroundColor: C.border, marginVertical: vs(3), marginHorizontal: ms(8) },
+
+  // Loading skeleton
+  skeletonWrap: { flex: 1, padding: ms(10) },
+  skelRow:    { flexDirection: 'row', alignItems: 'flex-end', gap: ms(6), marginBottom: vs(12) },
+  skelAvatar: { width: s(18), height: s(18), borderRadius: s(9), backgroundColor: C.surfaceAlt },
+  skelBubble: { height: vs(38), borderRadius: ms(12), backgroundColor: C.surfaceAlt },
 
   // List
   listContent: { padding: ms(10), gap: vs(8), flexGrow: 1 },
