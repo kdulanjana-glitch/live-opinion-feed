@@ -5,6 +5,7 @@ import {
 import {
   ActivityIndicator,
   Alert,
+  BackHandler,
   StyleSheet,
   View,
 } from 'react-native';
@@ -75,6 +76,23 @@ export default function Index() {
 
   // Open a DM thread on top of everything (incl. the profile overlay).
   const openDM = (userId: string) => setDmOverlayUserId(userId);
+
+  // ── Android hardware back — unwind overlays instead of exiting the app ──
+  // Modals (share sheet, action sheets, menus) already close themselves via
+  // onRequestClose; this handles the plain-View overlays + tab position.
+  // Order: DM overlay → profile overlay → non-home tab → default (exit).
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (dmOverlayUserId) { setDmOverlayUserId(null); return true; }
+      if (userProfileId)   { setUserProfileId(null);   return true; }
+      if (activeTab !== 'sentarium' && !['auth', 'reset-password'].includes(activeTab)) {
+        goToTab('sentarium');
+        return true;
+      }
+      return false;   // home tab, nothing open → let Android exit
+    });
+    return () => sub.remove();
+  }, [dmOverlayUserId, userProfileId, activeTab]);
 
   const checkOnboarding = async (userId: string) => {
     try {
