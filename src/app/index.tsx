@@ -25,6 +25,7 @@ import TrendingScreen  from '../screens/TrendingScreen';
 import FloatScreen     from '../screens/FloatScreen';
 import PinScreen      from '../screens/PinScreen';         // Pin tab
 import ProfileScreen   from '../screens/ProfileScreen';    // own + other citizen
+import SuspendedScreen from '../screens/SuspendedScreen';  // banned-account block
 import DMConversationScreen from '../screens/DMConversationScreen';  // direct messages overlay
 import ShareToDMSheet from '../components/ShareToDMSheet';            // share a senti into a DM
 
@@ -59,6 +60,7 @@ export default function Index() {
     { id: string; openVoice: boolean; token: number } | null
   >(null);
   const [isGuest, setIsGuest] = useState(false);
+  const [isBanned, setIsBanned] = useState(false);
   const [onboardingStep, setOnboardingStep] = useState<
     'splash' | 'walkthrough' | 'auth' |
     'username' | 'phone-dob-gender' | 'youre-in' | 'complete'
@@ -113,12 +115,31 @@ export default function Index() {
     }
   };
 
+  // ── Banned-account check (returns true when suspended) ──
+  const checkBanned = async (userId: string) => {
+    try {
+      const { data: userRecord } = await supabase
+        .from('users')
+        .select('is_banned')
+        .eq('id', userId)
+        .single();
+      if (userRecord?.is_banned) {
+        setIsBanned(true);
+        return true;
+      }
+    } catch {
+      // network/RLS hiccup — don't lock an innocent citizen out
+    }
+    return false;
+  };
+
   // ── Auth bootstrap ────────────────────────────
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       setSession(session);
       if (session?.user?.id) {
-        checkOnboarding(session.user.id);
+        const banned = await checkBanned(session.user.id);
+        if (!banned) checkOnboarding(session.user.id);
       } else {
         setOnboardingStep('splash');
         setOnboardingChecked(true);
@@ -127,11 +148,15 @@ export default function Index() {
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
+      async (event, session) => {
         if (event === 'SIGNED_IN') {
           setSession(session);
           setIsGuest(false);
           if (session?.user?.id) {
+            // Covers OAuth + deep-link sign-ins too (AuthScreen's own gate only
+            // sees the password path).
+            const banned = await checkBanned(session.user.id);
+            if (banned) return;
             checkOnboarding(session.user.id);
           }
           if (activeTabRef.current === 'auth') {
@@ -141,6 +166,7 @@ export default function Index() {
         if (event === 'SIGNED_OUT') {
           setSession(null);
           setIsGuest(false);
+          setIsBanned(false);
           setOnboardingStep('auth');
           goToTab('sentarium');
           setUserProfileId(null);
@@ -154,6 +180,23 @@ export default function Index() {
 
     return () => subscription.unsubscribe();
   }, []);
+
+  // ── Ban-watch: catch a mid-session ban live ───────────────────────────────
+  // If an admin bans this citizen while the app is open, flip to the
+  // SuspendedScreen immediately. Channel is removed on sign-out/unmount.
+  useEffect(() => {
+    const uid = session?.user?.id;
+    if (!uid) return;
+    const banChannel = supabase
+      .channel(`ban-watch-${uid}-${Date.now()}`)   // unique topic per mount (avoids reuse-after-subscribe)
+      .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'users', filter: `id=eq.${uid}` },
+        (payload) => {
+          if (payload.new?.is_banned === true) setIsBanned(true);
+        })
+      .subscribe();
+    return () => { supabase.removeChannel(banChannel); };
+  }, [session?.user?.id]);
 
   // ── Notification navigation ───────────────────
   // Registered once; the context calls this when a toast or list row is tapped.
@@ -176,6 +219,16 @@ export default function Index() {
     return (
       <View style={[styles.centered, { backgroundColor: bg }]}>
         <ActivityIndicator size="large" color="#4F46E5" />
+      </View>
+    );
+  }
+
+  // ── Suspended account — full-screen block, BEFORE the onboarding gate.
+  // No tab bar, no overlays; the only exit is Sign out.
+  if (isBanned) {
+    return (
+      <View style={[styles.container, { backgroundColor: bg }]}>
+        <SuspendedScreen onSignOut={() => setIsBanned(false)} />
       </View>
     );
   }

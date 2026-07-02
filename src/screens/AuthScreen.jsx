@@ -50,6 +50,7 @@ export default function AuthScreen({ onAuth, onGuest }) {
   const [pickerVisible,   setPickerVisible]   = useState(false);
   const [phone,           setPhone]           = useState('');
   const [loading,         setLoading]         = useState(false);
+  const [loginError,      setLoginError]      = useState('');   // inline red error (e.g. suspension)
   const [verifyNotice,    setVerifyNotice]    = useState(false);
   const [availStatus,     setAvailStatus]     = useState('');  // ''|checking|available|taken|invalid|short
 
@@ -163,8 +164,27 @@ export default function AuthScreen({ onAuth, onGuest }) {
     }
   };
 
+  // ── Ban gate ───────────────────────────────
+  // After a successful password sign-in, refuse entry to suspended accounts:
+  // force sign-out and surface the inline error. Returns true when blocked.
+  const blockIfBanned = async (userId) => {
+    if (!userId) return false;
+    const { data: userRecord } = await supabase
+      .from('users')
+      .select('is_banned')
+      .eq('id', userId)
+      .single();
+    if (userRecord?.is_banned) {
+      await supabase.auth.signOut();   // force sign out
+      setLoginError('Your account has been suspended.');
+      return true;
+    }
+    return false;
+  };
+
   // ── Log In ─────────────────────────────────
   const handleLogIn = async () => {
+    setLoginError('');
     if (!password) {
       Alert.alert('Missing fields', 'Please enter your password.');
       return;
@@ -187,7 +207,11 @@ export default function AuthScreen({ onAuth, onGuest }) {
       // Primary attempt: the identifier maps directly to a login (email, or the
       // synthetic email for a phone account).
       const { data, error } = await supabase.auth.signInWithPassword({ email: signInEmail, password });
-      if (!error) { onAuth?.(data.session); return; }
+      if (!error) {
+        if (await blockIfBanned(data.session?.user?.id)) return;
+        onAuth?.(data.session);
+        return;
+      }
 
       // Fallback: the identifier may be a SECONDARY contact (e.g. a phone account's
       // recovery email, or an email account's phone). login-secondary resolves it.
@@ -204,6 +228,7 @@ export default function AuthScreen({ onAuth, onGuest }) {
           access_token:  secData.session.access_token,
           refresh_token: secData.session.refresh_token,
         });
+        if (await blockIfBanned(secData.session?.user?.id)) return;
         onAuth?.(secData.session);
         return;
       }
@@ -219,6 +244,7 @@ export default function AuthScreen({ onAuth, onGuest }) {
 
   // ── Google OAuth ───────────────────────────
   const handleGoogle = async () => {
+    setLoginError('');
     setLoading(true);
     try {
       const redirectTo = Linking.createURL('/');
@@ -390,6 +416,11 @@ export default function AuthScreen({ onAuth, onGuest }) {
             />
           )}
 
+          {/* ── Inline error (e.g. account suspended) ── */}
+          {!!loginError && (
+            <Text style={styles.loginError}>{loginError}</Text>
+          )}
+
           {/* ── Primary CTA ── */}
           <TouchableOpacity
             style={[styles.primaryBtn, { backgroundColor: C.accent }, (loading || signupBlocked) && styles.disabled]}
@@ -550,6 +581,11 @@ const makeStyles = (C) => StyleSheet.create({
   },
   phoneInput: {
     flex: 1,
+  },
+  // Documented hardcoded-color exception: danger red for the suspension notice.
+  loginError: {
+    fontSize: fs(12), fontFamily: F.semiBold, color: '#DC2626',
+    textAlign: 'center', marginBottom: vs(6),
   },
   primaryBtn: {
     borderRadius: s(30),
