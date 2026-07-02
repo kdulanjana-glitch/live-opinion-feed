@@ -14,7 +14,7 @@
 //         avatar_initials, avatar_url); public.voice_likes (voice_id, user_id)
 // ─────────────────────────────────────────────
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -26,6 +26,7 @@ import {
   Image,
   KeyboardAvoidingView,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { PeoliaFonts as F , getPeoliaColors } from '../constants/peoliaTheme';
 import { usePeoliaScheme } from '../context/ThemeContext';
@@ -37,6 +38,7 @@ import Icon from './Icon';
 import { fs, ms, vs, s, SCREEN_HEIGHT } from '../utils/peoliaScale';
 
 const MAX_LEN = 300;
+const VOICE_PAGE = 50;   // voices per page (initial + load-more)
 
 // avatar_initials is stale ('??') for legacy rows — fall back to a derived letter.
 const initialsOf = (u) => {
@@ -70,7 +72,13 @@ export default function VoiceSheet({ visible, onClose, sentiId, session, onVoice
   const [voices,     setVoices]     = useState([]);   // flat list of all rows
   const [text,       setText]       = useState('');
   const [loading,    setLoading]    = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore,    setHasMore]    = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  // Offset over rows fetched via fetch/loadMore ONLY (optimistic + realtime rows
+  // are excluded so the DB offset doesn't drift).
+  const fetchedCountRef = useRef(0);
 
   const [sortMode,   setSortMode]   = useState('new');           // 'new' | 'top'
   const [replyingTo, setReplyingTo] = useState(null);            // { id, displayName }
@@ -103,40 +111,126 @@ export default function VoiceSheet({ visible, onClose, sentiId, session, onVoice
     if (visible && sentiId) fetchVoices();
   }, [sortMode]);
 
-  const fetchVoices = async () => {
-    setLoading(true);
+  // ── Realtime: other citizens' new voices appear while the sheet is open ──
+  // Own posts are skipped (already added optimistically); blocked authors skipped.
+  useEffect(() => {
+    if (!visible || !sentiId) return;
+    const channel = supabase
+      .channel(`voices-${sentiId}-${Date.now()}`)   // unique topic per open (avoids reuse-after-subscribe)
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'voices', filter: `senti_id=eq.${sentiId}` },
+        async (payload) => {
+          const row = payload.new;
+          if (!row || row.user_id === myId) return;
+          if (hiddenIds.includes(row.user_id)) return;
+          // Payload has no join — fetch the author's profile for rendering.
+          const { data: u } = await supabase
+            .from('users')
+            .select('username, display_name, avatar_initials, avatar_url')
+            .eq('id', row.user_id)
+            .maybeSingle();
+          setVoices((prev) => prev.some((v) => v.id === row.id)
+            ? prev
+            : [{ ...row, users: u ?? null }, ...prev]);
+        })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, sentiId]);
 
-    // Step 1 — all voices for this senti (blocked authors filtered out; replies
-    // left orphaned under a removed parent simply don't render).
+  // ── Delete own voice (confirm → optimistic remove incl. replies → DB) ──
+  const handleDeleteVoice = (voice) => {
+    if (!myId || voice.user_id !== myId) return;
+    Alert.alert(
+      'Delete this voice?',
+      voice.parent_id ? 'This removes your reply.' : 'This removes your voice and any replies to it.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            const prev = voices;
+            setVoices((cur) => cur.filter((v) => v.id !== voice.id && v.parent_id !== voice.id));
+            const { error } = await supabase
+              .from('voices')
+              .delete()
+              .eq('id', voice.id)
+              .eq('user_id', myId);
+            if (error) {
+              console.error('handleDeleteVoice error', error);
+              setVoices(prev);
+              Alert.alert('Could not delete', 'Please try again.');
+            } else {
+              onVoicePosted?.();   // re-syncs the senti's voice count from senti_counts
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  // One page of voices from the given offset (blocked authors filtered out;
+  // replies left orphaned under an unloaded/removed parent simply don't render).
+  const fetchVoicePage = async (offset) => {
     let query = supabase
       .from('voices')
-      .select('id, body, created_at, parent_id, like_count, dislike_count, net_score, is_pinned, users(username, display_name, avatar_initials, avatar_url)')
+      .select('id, user_id, body, created_at, parent_id, like_count, dislike_count, net_score, is_pinned, users(username, display_name, avatar_initials, avatar_url)')
       .eq('senti_id', sentiId)
       .order('is_pinned', { ascending: false })
       .order(sortMode === 'top' ? 'net_score' : 'created_at', { ascending: false })
-      .limit(100);
+      .range(offset, offset + VOICE_PAGE - 1);
     if (hiddenIds.length) {
       query = query.not('user_id', 'in', `(${hiddenIds.map((id) => `"${id}"`).join(',')})`);
     }
-    const { data: voicesData } = await query;
-    const rows = voicesData ?? [];
-    setVoices(rows);
+    const { data } = await query;
+    return data ?? [];
+  };
 
-    // Step 2 — which of these have I liked / disliked?
-    if (myId && rows.length) {
-      const ids = rows.map((v) => v.id);
-      const [{ data: likeData }, { data: dislikeData }] = await Promise.all([
-        supabase.from('voice_likes').select('voice_id').eq('user_id', myId).in('voice_id', ids),
-        supabase.from('voice_dislikes').select('voice_id').eq('user_id', myId).in('voice_id', ids),
-      ]);
-      setVoiceLikes(new Set(likeData?.map((l) => l.voice_id) ?? []));
-      setVoiceDislikes(new Set(dislikeData?.map((d) => d.voice_id) ?? []));
-    } else {
-      setVoiceLikes(new Set());
-      setVoiceDislikes(new Set());
+  // My like/dislike state for a batch of voice ids — merged into the sets.
+  const fetchMyStates = async (ids, { merge } = {}) => {
+    if (!myId || !ids.length) {
+      if (!merge) { setVoiceLikes(new Set()); setVoiceDislikes(new Set()); }
+      return;
     }
+    const [{ data: likeData }, { data: dislikeData }] = await Promise.all([
+      supabase.from('voice_likes').select('voice_id').eq('user_id', myId).in('voice_id', ids),
+      supabase.from('voice_dislikes').select('voice_id').eq('user_id', myId).in('voice_id', ids),
+    ]);
+    const likes    = likeData?.map((l) => l.voice_id) ?? [];
+    const dislikes = dislikeData?.map((d) => d.voice_id) ?? [];
+    setVoiceLikes((prev) => new Set(merge ? [...prev, ...likes] : likes));
+    setVoiceDislikes((prev) => new Set(merge ? [...prev, ...dislikes] : dislikes));
+  };
 
+  const fetchVoices = async () => {
+    setLoading(true);
+    const rows = await fetchVoicePage(0);
+    fetchedCountRef.current = rows.length;
+    setHasMore(rows.length === VOICE_PAGE);
+    setVoices(rows);
+    await fetchMyStates(rows.map((v) => v.id));
     setLoading(false);
+  };
+
+  // ── Load the next page (appended, deduped) ──
+  const loadMoreVoices = async () => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    try {
+      const rows = await fetchVoicePage(fetchedCountRef.current);
+      fetchedCountRef.current += rows.length;
+      setHasMore(rows.length === VOICE_PAGE);
+      setVoices((prev) => {
+        const seen = new Set(prev.map((v) => v.id));
+        return [...prev, ...rows.filter((r) => !seen.has(r.id))];
+      });
+      await fetchMyStates(rows.map((v) => v.id), { merge: true });
+    } catch (err) {
+      console.error('loadMoreVoices error', err);
+    } finally {
+      setLoadingMore(false);
+    }
   };
 
   // Group flat rows into top-level + replies map (replies oldest-first).
@@ -252,6 +346,7 @@ export default function VoiceSheet({ visible, onClose, sentiId, session, onVoice
     const tempId     = `temp-${Date.now()}`;
     const optimistic = {
       id: tempId,
+      user_id: myId,
       body,
       created_at: new Date().toISOString(),
       parent_id:  parentId,
@@ -369,6 +464,16 @@ export default function VoiceSheet({ visible, onClose, sentiId, session, onVoice
                 color={voiceDislikes.has(v.id) ? C.nahText : C.iconMuted}
               />
             </TouchableOpacity>
+            {/* Delete — own voices only */}
+            {myId && v.user_id === myId && (
+              <TouchableOpacity
+                onPress={() => handleDeleteVoice(v)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                activeOpacity={0.7}
+              >
+                <Icon name="ti-trash" size={fs(14)} color={C.iconMuted} />
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </View>
@@ -460,6 +565,13 @@ export default function VoiceSheet({ visible, onClose, sentiId, session, onVoice
                 keyboardShouldPersistTaps="handled"
               >
                 {topLevel.map(renderVoice)}
+                {hasMore && (
+                  <TouchableOpacity style={st.loadMoreBtn} onPress={loadMoreVoices} disabled={loadingMore} activeOpacity={0.7}>
+                    {loadingMore
+                      ? <ActivityIndicator color={C.accent} size="small" />
+                      : <Text style={st.loadMoreText}>Load more voices</Text>}
+                  </TouchableOpacity>
+                )}
               </ScrollView>
             )}
 
@@ -579,6 +691,8 @@ const makeStyles = (C) => StyleSheet.create({
 
   repliesWrap: { marginLeft: ms(34), marginTop: vs(2) },
   showMore:    { fontSize: fs(12), fontFamily: F.bold, color: C.accent, marginTop: vs(8) },
+  loadMoreBtn: { alignItems: 'center', paddingVertical: vs(12) },
+  loadMoreText: { fontSize: fs(13), fontFamily: F.bold, color: C.accent },
 
   replyStrip: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',

@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { PeoliaFonts as F , getPeoliaColors } from '../constants/peoliaTheme';
 import { usePeoliaScheme } from '../context/ThemeContext';
+import { captureError } from '../lib/crash';
 
 import { fs, ms, vs } from '../utils/peoliaScale';
 
@@ -45,6 +46,7 @@ export default class ErrorBoundary extends React.Component {
 
   componentDidCatch(error, info) {
     console.error('ErrorBoundary caught', error, info?.componentStack);
+    captureError(error, { componentStack: info?.componentStack });
   }
 
   handleRetry = () => this.setState({ error: null });

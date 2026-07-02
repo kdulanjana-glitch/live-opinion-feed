@@ -58,7 +58,8 @@
       "expo-image-picker",
       "expo-web-browser",
       "expo-sharing",
-      "expo-font"
+      "expo-font",
+      "@sentry/react-native"
     ],
     "experiments": {
       "typedRoutes": true,

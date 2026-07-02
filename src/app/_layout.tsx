@@ -17,6 +17,10 @@ import { NotificationProvider } from '../context/NotificationContext';
 import { BlockProvider } from '../context/BlockContext';
 import { WavePrefsProvider } from '../context/WavePrefsContext';
 import { supabase } from '../lib/supabase';
+import { initCrashReporting } from '../lib/crash';
+
+// Crash reporting — dormant until a DSN is set in src/lib/crash.js.
+initCrashReporting();
 
 // Silence a deprecation warning fired from inside react-native-country-picker-modal
 // (v2.0.0 imports the old SafeAreaView). Not our code; harmless. Dev-only noise.

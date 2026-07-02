@@ -41,41 +41,11 @@ import ShareCard   from '../components/ShareCard';
 import EmptyState  from '../components/EmptyState';
 import { FeedSkeleton } from '../components/Skeletons';
 
+// Wave-preference feed shaping — pure logic lives in utils/feedShaping (tested).
+import { applyWavePreferences, FETCH_POOL, TARGET } from '../utils/feedShaping';
+
 // ── Constants ─────────────────────────────────
 const PREFETCH_AT = 3;  // prefetch when this many cards remain
-
-// Wave-preference feed shaping. We fetch a larger pool, then select TARGET
-// sentis weighted by each wave's Low/Mid/High level (excluded waves dropped).
-const FETCH_POOL    = 90;
-const TARGET        = 30;
-const LEVEL_WEIGHTS = { high: 100, mid: 50, low: 20 };
-
-// Pure: take the raw (normalised) pool, return a TARGET-sized weighted selection.
-// No DB calls. Excluded waves are dropped; remaining waves get slots proportional
-// to their level weight; pools and final order are shuffled.
-const applyWavePreferences = (sentis, wavePrefs) => {
-  const filtered = sentis.filter((s) => !wavePrefs[s.wave]?.excluded);
-
-  const byWave = {};
-  filtered.forEach((s) => { (byWave[s.wave] ??= []).push(s); });
-
-  const waves = Object.keys(byWave);
-  const totalWeight = waves.reduce(
-    (sum, wave) => sum + LEVEL_WEIGHTS[wavePrefs[wave]?.level ?? 'high'],
-    0,
-  );
-  if (totalWeight === 0) return filtered.slice(0, TARGET);
-
-  const selected = [];
-  waves.forEach((wave) => {
-    const weight = LEVEL_WEIGHTS[wavePrefs[wave]?.level ?? 'high'];
-    const slots  = Math.max(1, Math.round((weight / totalWeight) * TARGET));
-    const pool   = [...byWave[wave]].sort(() => Math.random() - 0.5);
-    selected.push(...pool.slice(0, Math.min(slots, pool.length)));
-  });
-
-  return selected.sort(() => Math.random() - 0.5).slice(0, TARGET);
-};
 
 // Apply a "creator is not blocked" filter to a sentarium_feed query.
 // PostgREST not-in list — quote each uuid so any value form is accepted.
