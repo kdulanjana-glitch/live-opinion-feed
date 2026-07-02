@@ -19,11 +19,12 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
 } from 'react-native';
+import { PeoliaFonts as F , getPeoliaColors } from '../../constants/peoliaTheme';
 import { usePeoliaScheme } from '../../context/ThemeContext';
 import { Picker } from '@react-native-picker/picker';
 import CountryPicker from 'react-native-country-picker-modal';
 import { supabase } from '../../lib/supabase';
-import { getPeoliaColors } from '../../constants/peoliaTheme';
+
 import { fs, ms, vs, s } from '../../utils/peoliaScale';
 
 const MONTHS = [
@@ -268,31 +269,31 @@ export default function PhoneDOBGenderScreen({ onDone, userId }) {
 const makeStyles = (C) => StyleSheet.create({
   screen:  { flex: 1, backgroundColor: C.bg },
   content: { paddingHorizontal: ms(24), paddingTop: vs(56), paddingBottom: vs(32) },
-  step:     { fontSize: fs(10), color: C.textMuted },
-  title:    { fontSize: fs(22), fontWeight: '800', color: C.textPrimary, marginTop: vs(8) },
-  subtitle: { fontSize: fs(12), color: C.textSecondary, marginTop: vs(4) },
-  label:       { fontSize: fs(10), fontWeight: '700', color: C.textSecondary, marginTop: vs(20), marginBottom: vs(6) },
+  step:     { fontFamily: F.regular, fontSize: fs(10), color: C.textMuted },
+  title:    { letterSpacing: -0.2, fontSize: fs(22), fontFamily: F.extraBold, color: C.textPrimary, marginTop: vs(8) },
+  subtitle: { fontFamily: F.regular, fontSize: fs(12), color: C.textSecondary, marginTop: vs(4) },
+  label:       { fontSize: fs(10), fontFamily: F.bold, color: C.textSecondary, marginTop: vs(20), marginBottom: vs(6) },
   labelSpaced: { marginTop: vs(24) },
-  helper:   { fontSize: fs(9), color: C.textMuted, marginTop: vs(-2), marginBottom: vs(6) },
-  permanentNote: { fontSize: fs(9), fontWeight: '600', color: C.nahChosen, marginTop: vs(6) },
+  helper:   { fontFamily: F.regular, fontSize: fs(9), color: C.textMuted, marginTop: vs(-2), marginBottom: vs(6) },
+  permanentNote: { fontSize: fs(9), fontFamily: F.semiBold, color: C.nahChosen, marginTop: vs(6) },
   phoneRow: { flexDirection: 'row', gap: ms(8), alignItems: 'center' },
   countryBox: {
     flexDirection: 'row', alignItems: 'center', gap: ms(4),
     backgroundColor: C.surface, borderWidth: 1, borderColor: C.border,
     borderRadius: s(10), paddingHorizontal: ms(10), paddingVertical: vs(9),
   },
-  callingCode: { fontSize: fs(13), fontWeight: '600', color: C.textPrimary },
+  callingCode: { fontSize: fs(13), fontFamily: F.semiBold, color: C.textPrimary },
   phoneInput: {
-    flex: 1, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border,
+    fontFamily: F.regular, flex: 1, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border,
     borderRadius: s(10), paddingHorizontal: ms(12), paddingVertical: vs(11),
     fontSize: fs(13), color: C.textPrimary,
   },
   recoveryInput: {
-    backgroundColor: C.surface, borderWidth: 1, borderColor: C.border,
+    fontFamily: F.regular, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border,
     borderRadius: s(10), paddingHorizontal: ms(12), paddingVertical: vs(11),
     fontSize: fs(13), color: C.textPrimary,
   },
-  errorText: { fontSize: fs(9), fontWeight: '600', color: C.nahChosen, marginTop: vs(5) },
+  errorText: { fontSize: fs(9), fontFamily: F.semiBold, color: C.nahChosen, marginTop: vs(5) },
   dobRow: { flexDirection: 'row', gap: ms(8) },
   pickerBox: {
     flex: 1, borderWidth: 1, borderColor: C.border, borderRadius: s(10),
@@ -306,7 +307,7 @@ const makeStyles = (C) => StyleSheet.create({
   },
   genderPillActive:   { backgroundColor: C.accent },
   genderPillInactive: { backgroundColor: C.surfaceAlt, borderWidth: 0.5, borderColor: C.border },
-  genderText:         { fontSize: fs(11), fontWeight: '700' },
+  genderText:         { fontSize: fs(11), fontFamily: F.bold },
   genderTextActive:   { color: '#FFFFFF' },
   genderTextInactive: { color: C.textSecondary },
   continueBtn: {
@@ -314,5 +315,5 @@ const makeStyles = (C) => StyleSheet.create({
     alignItems: 'center', marginTop: vs(28),
   },
   continueDisabled: { opacity: 0.5 },
-  continueText: { fontSize: fs(13), fontWeight: '800', color: '#FFFFFF' },
+  continueText: { letterSpacing: -0.2, fontSize: fs(13), fontFamily: F.extraBold, color: '#FFFFFF' },
 });

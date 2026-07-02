@@ -15,8 +15,9 @@ import {
   TouchableOpacity,
   StyleSheet,
 } from 'react-native';
+import { PeoliaFonts as F , getPeoliaColors } from '../../constants/peoliaTheme';
 import { usePeoliaScheme } from '../../context/ThemeContext';
-import { getPeoliaColors } from '../../constants/peoliaTheme';
+
 import { fs, ms, vs, s } from '../../utils/peoliaScale';
 
 const SLIDES = [
@@ -103,7 +104,7 @@ const makeStyles = (C) => StyleSheet.create({
   },
   skip: {
     fontSize: fs(11),
-    fontWeight: '600',
+    fontFamily: F.semiBold,
     color: C.textMuted,
   },
   center: {
@@ -112,17 +113,17 @@ const makeStyles = (C) => StyleSheet.create({
     justifyContent: 'center',
   },
   emoji: {
-    fontSize: fs(56),
+    fontFamily: F.regular, fontSize: fs(56),
   },
   title: {
-    fontSize: fs(22),
-    fontWeight: '800',
+    letterSpacing: -0.2, fontSize: fs(22),
+    fontFamily: F.extraBold,
     color: C.textPrimary,
     marginTop: vs(16),
     textAlign: 'center',
   },
   body: {
-    fontSize: fs(13),
+    fontFamily: F.regular, fontSize: fs(13),
     color: C.textSecondary,
     textAlign: 'center',
     lineHeight: fs(20),
@@ -159,8 +160,8 @@ const makeStyles = (C) => StyleSheet.create({
     alignItems: 'center',
   },
   nextText: {
-    fontSize: fs(14),
-    fontWeight: '800',
+    letterSpacing: -0.2, fontSize: fs(14),
+    fontFamily: F.extraBold,
     color: '#FFFFFF',
   },
 });

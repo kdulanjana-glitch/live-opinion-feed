@@ -11,9 +11,10 @@ import {
   StyleSheet,
   Modal,
 } from 'react-native';
+import { PeoliaFonts as F , getPeoliaColors } from '../constants/peoliaTheme';
 import { usePeoliaScheme } from '../context/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { getPeoliaColors } from '../constants/peoliaTheme';
+
 import { fs, ms, vs } from '../utils/peoliaScale';
 
 export default function ViewReactsSheet({ visible, onCancel, onConfirm }) {
@@ -82,13 +83,13 @@ const makeStyles = (C) => StyleSheet.create({
     alignSelf: 'center',
     marginBottom: vs(14),
   },
-  title:       { fontSize: fs(18), fontWeight: '700', color: C.textPrimary, marginBottom: vs(8) },
-  body:        { fontSize: fs(15), lineHeight: fs(23), color: C.textSecondary, marginBottom: vs(16) },
+  title:       { fontSize: fs(18), fontFamily: F.bold, color: C.textPrimary, marginBottom: vs(8) },
+  body:        { fontFamily: F.regular, fontSize: fs(15), lineHeight: fs(23), color: C.textSecondary, marginBottom: vs(16) },
   btnRow:      { flexDirection: 'row', gap: ms(10) },
   btn:         { flex: 1, paddingVertical: vs(14), paddingHorizontal: ms(4), borderRadius: ms(14), alignItems: 'center' },
   cancelBtn:   { backgroundColor: C.cancelBg },
   confirmBtn:  { backgroundColor: C.accent },
-  btnText:     { fontSize: fs(16), fontWeight: '700' },
+  btnText:     { fontSize: fs(16), fontFamily: F.bold },
   cancelText:  { color: C.textPrimary },
   confirmText: { color: '#FFFFFF' },
 });

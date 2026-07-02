@@ -20,11 +20,12 @@ import {
   StatusBar,
   Image,
 } from 'react-native';
+import { PeoliaFonts as F , getPeoliaColors } from '../constants/peoliaTheme';
 import { usePeoliaScheme } from '../context/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../lib/supabase';
 import Icon from '../components/Icon';
-import { getPeoliaColors } from '../constants/peoliaTheme';
+
 import { fs, ms, vs, s } from '../utils/peoliaScale';
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -166,7 +167,7 @@ const makeStyles = (C) => StyleSheet.create({
     paddingHorizontal: ms(14), paddingTop: vs(10), paddingBottom: vs(8),
   },
   backBtn:  { flexDirection: 'row', alignItems: 'center', gap: ms(4) },
-  headerTitle: { fontSize: fs(18), fontWeight: '800', color: C.textPrimary },
+  headerTitle: { letterSpacing: -0.2, fontSize: fs(18), fontFamily: F.extraBold, color: C.textPrimary },
 
   avatarBlock: { paddingHorizontal: ms(14), paddingTop: vs(8), paddingBottom: vs(14), alignItems: 'center' },
   avatar: {
@@ -174,10 +175,10 @@ const makeStyles = (C) => StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
   },
   avatarImg:  { width: '100%', height: '100%' },
-  avatarText: { fontSize: fs(26), fontWeight: '800', color: '#FFFFFF' },
+  avatarText: { letterSpacing: -0.2, fontSize: fs(26), fontFamily: F.extraBold, color: '#FFFFFF' },
   nameBlock:  { alignItems: 'center', marginTop: vs(8) },
-  displayName: { fontSize: fs(18), fontWeight: '800', color: C.textPrimary },
-  username:    { fontSize: fs(13), color: C.textMuted, marginTop: vs(2) },
+  displayName: { letterSpacing: -0.2, fontSize: fs(18), fontFamily: F.extraBold, color: C.textPrimary },
+  username:    { fontFamily: F.regular, fontSize: fs(13), color: C.textMuted, marginTop: vs(2) },
 
   divider: { height: 0.5, backgroundColor: C.border, marginHorizontal: ms(14) },
 
@@ -188,11 +189,11 @@ const makeStyles = (C) => StyleSheet.create({
   },
   infoRowLast: { borderBottomWidth: 0 },
   infoLeft:  { flexDirection: 'row', alignItems: 'center', gap: ms(6) },
-  infoLabel: { fontSize: fs(14), fontWeight: '600', color: C.textSecondary },
-  infoValue: { fontSize: fs(14), fontWeight: '700', color: C.textPrimary },
+  infoLabel: { fontSize: fs(14), fontFamily: F.semiBold, color: C.textSecondary },
+  infoValue: { fontSize: fs(14), fontFamily: F.bold, color: C.textPrimary },
   accountPill: {
     backgroundColor: C.accentLight, borderRadius: ms(10),
     paddingVertical: vs(3), paddingHorizontal: ms(10),
   },
-  accountPillText: { fontSize: fs(13), fontWeight: '700', color: C.accentDark },
+  accountPillText: { fontSize: fs(13), fontFamily: F.bold, color: C.accentDark },
 });

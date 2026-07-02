@@ -15,9 +15,10 @@ import {
   StyleSheet,
   Modal,
 } from 'react-native';
+import { PeoliaFonts as F , getPeoliaColors } from '../constants/peoliaTheme';
 import { usePeoliaScheme } from '../context/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { getPeoliaColors } from '../constants/peoliaTheme';
+
 import { fs, ms, vs } from '../utils/peoliaScale';
 
 const REASONS = [
@@ -98,19 +99,19 @@ const makeStyles = (C) => StyleSheet.create({
     width: ms(36), height: vs(4), borderRadius: ms(2),
     backgroundColor: C.border, alignSelf: 'center', marginBottom: vs(14),
   },
-  title:    { fontSize: fs(18), fontWeight: '700', color: C.textPrimary },
-  subtitle: { fontSize: fs(14), color: C.textSecondary, marginTop: vs(4), marginBottom: vs(12) },
+  title:    { fontSize: fs(18), fontFamily: F.bold, color: C.textPrimary },
+  subtitle: { fontFamily: F.regular, fontSize: fs(14), color: C.textSecondary, marginTop: vs(4), marginBottom: vs(12) },
   list:     { gap: vs(2) },
   row: {
     flexDirection: 'row', alignItems: 'center', gap: ms(12),
     paddingVertical: vs(12), paddingHorizontal: ms(4),
   },
-  rowIcon:    { fontSize: fs(18), width: ms(24), textAlign: 'center' },
-  rowLabel:   { flex: 1, fontSize: fs(16), fontWeight: '600', color: C.textPrimary },
-  rowChevron: { fontSize: fs(22), fontWeight: '700', color: C.textMuted },
+  rowIcon:    { fontFamily: F.regular, fontSize: fs(18), width: ms(24), textAlign: 'center' },
+  rowLabel:   { flex: 1, fontSize: fs(16), fontFamily: F.semiBold, color: C.textPrimary },
+  rowChevron: { fontSize: fs(22), fontFamily: F.bold, color: C.textMuted },
   cancelBtn: {
     marginTop: vs(12), paddingVertical: vs(13), borderRadius: ms(14),
     backgroundColor: C.cancelBg, alignItems: 'center',
   },
-  cancelText: { fontSize: fs(16), fontWeight: '700', color: C.textPrimary },
+  cancelText: { fontSize: fs(16), fontFamily: F.bold, color: C.textPrimary },
 });

@@ -12,16 +12,17 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, AppState } from 'react-native';
+import { PeoliaFonts as F , getPeoliaColors } from '../constants/peoliaTheme';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { usePeoliaScheme } from '../context/ThemeContext';
+
+import { fs, ms, vs } from '../utils/peoliaScale';
 
 // Optional native module — absent in Expo Go / dev builds made before it was
 // added. Guard the require so the app still boots; app-lock just stays
 // unavailable until a build that includes the module is installed.
 let LocalAuthentication = null;
 try { LocalAuthentication = require('expo-local-authentication'); } catch {}
-import { usePeoliaScheme } from '../context/ThemeContext';
-import { getPeoliaColors } from '../constants/peoliaTheme';
-import { fs, ms, vs } from '../utils/peoliaScale';
 
 const KEY = 'peolia_app_lock';
 
@@ -114,12 +115,12 @@ const makeStyles = (C) => StyleSheet.create({
     paddingHorizontal: ms(32),
     zIndex: 999,
   },
-  icon:     { fontSize: fs(44), marginBottom: vs(14) },
-  title:    { fontSize: fs(20), fontWeight: '800', color: C.textPrimary, marginBottom: vs(8) },
-  subtitle: { fontSize: fs(14), color: C.textSecondary, textAlign: 'center', lineHeight: fs(21), marginBottom: vs(22) },
+  icon:     { fontFamily: F.regular, fontSize: fs(44), marginBottom: vs(14) },
+  title:    { letterSpacing: -0.2, fontSize: fs(20), fontFamily: F.extraBold, color: C.textPrimary, marginBottom: vs(8) },
+  subtitle: { fontFamily: F.regular, fontSize: fs(14), color: C.textSecondary, textAlign: 'center', lineHeight: fs(21), marginBottom: vs(22) },
   btn: {
     paddingVertical: vs(11), paddingHorizontal: ms(32),
     borderRadius: ms(22), backgroundColor: C.accent,
   },
-  btnText: { fontSize: fs(15), fontWeight: '700', color: '#FFFFFF' },
+  btnText: { fontSize: fs(15), fontFamily: F.bold, color: '#FFFFFF' },
 });

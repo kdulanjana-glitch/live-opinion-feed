@@ -16,8 +16,9 @@ import {
   Image,
   StyleSheet,
 } from 'react-native';
+import { PeoliaFonts as F , getPeoliaColors } from '../constants/peoliaTheme';
 import { usePeoliaScheme } from '../context/ThemeContext';
-import { getPeoliaColors } from '../constants/peoliaTheme';
+
 import { fs, vs } from '../utils/peoliaScale';
 
 export default function PersonTile({ person, width, onPress }) {
@@ -52,7 +53,7 @@ const makeStyles = (C) => StyleSheet.create({
   tile:      { alignItems: 'center', gap: vs(4), paddingVertical: vs(8) },
   avatar:    { backgroundColor: C.accent, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   avatarImg: { width: '100%', height: '100%' },
-  letter:    { fontWeight: '800', color: '#FFFFFF' },
-  name:      { fontSize: fs(12), fontWeight: '700', color: C.textPrimary, maxWidth: '98%' },
-  handle:    { fontSize: fs(10.5), color: C.textMuted, maxWidth: '98%' },
+  letter:    { fontFamily: F.extraBold, color: '#FFFFFF' },
+  name:      { fontSize: fs(12), fontFamily: F.bold, color: C.textPrimary, maxWidth: '98%' },
+  handle:    { fontFamily: F.regular, fontSize: fs(10.5), color: C.textMuted, maxWidth: '98%' },
 });

@@ -27,6 +27,7 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
+import { PeoliaFonts as F , getPeoliaColors } from '../constants/peoliaTheme';
 import * as ImagePicker from 'expo-image-picker';
 import { decode } from 'base64-arraybuffer';
 import { usePeoliaScheme } from '../context/ThemeContext';
@@ -34,7 +35,7 @@ import { useBlocks } from '../context/BlockContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../components/Icon';
 import { supabase } from '../lib/supabase';
-import { getPeoliaColors } from '../constants/peoliaTheme';
+
 import { fs, ms, vs, s, SCREEN_WIDTH } from '../utils/peoliaScale';
 import { clockTime } from '../utils/timeUtils';
 import {
@@ -743,13 +744,13 @@ const makeStyles = (C) => StyleSheet.create({
     width: s(36), height: s(36), borderRadius: s(18), backgroundColor: OTHER_AVATAR_BG,
     alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
   },
-  headerAvatarText: { fontSize: fs(15), fontWeight: '800', color: '#FFFFFF' },
+  headerAvatarText: { letterSpacing: -0.2, fontSize: fs(15), fontFamily: F.extraBold, color: '#FFFFFF' },
   avatarFill: { width: '100%', height: '100%' },
   skelTone:    { backgroundColor: C.surfaceAlt },
   skelNameBar: { width: ms(130), height: vs(15), borderRadius: ms(6), backgroundColor: C.surfaceAlt },
   headerNames: { flex: 1 },
   headerNameRow: { flexDirection: 'row', alignItems: 'center', gap: ms(6) },
-  headerName:   { fontSize: fs(16), fontWeight: '800', color: C.textPrimary, flexShrink: 1 },
+  headerName:   { letterSpacing: -0.2, fontSize: fs(16), fontFamily: F.extraBold, color: C.textPrimary, flexShrink: 1 },
 
   // Header ⋮ dropdown menu
   menuBackdrop: { flex: 1 },
@@ -759,7 +760,7 @@ const makeStyles = (C) => StyleSheet.create({
     paddingVertical: vs(5),
   },
   menuItem:    { flexDirection: 'row', alignItems: 'center', gap: ms(10), paddingVertical: vs(12), paddingHorizontal: ms(14) },
-  menuLabel:   { fontSize: fs(14), fontWeight: '600', color: C.textPrimary },
+  menuLabel:   { fontSize: fs(14), fontFamily: F.semiBold, color: C.textPrimary },
   menuDivider: { height: 0.5, backgroundColor: C.border, marginVertical: vs(3), marginHorizontal: ms(8) },
 
   // Loading skeleton
@@ -771,7 +772,7 @@ const makeStyles = (C) => StyleSheet.create({
   // List
   listContent: { padding: ms(10), gap: vs(8), flexGrow: 1 },
   emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: vs(60) },
-  emptyText: { fontSize: fs(15), fontWeight: '600', color: C.textMuted },
+  emptyText: { fontSize: fs(15), fontFamily: F.semiBold, color: C.textMuted },
 
   // Message row
   msgRow:   { flexDirection: 'row', alignItems: 'flex-end', gap: ms(6), maxWidth: '100%' },
@@ -781,7 +782,7 @@ const makeStyles = (C) => StyleSheet.create({
     width: s(18), height: s(18), borderRadius: s(9), backgroundColor: OTHER_AVATAR_BG,
     alignItems: 'center', justifyContent: 'center', marginBottom: vs(16), overflow: 'hidden',
   },
-  smallAvatarText: { fontSize: fs(8), fontWeight: '800', color: '#FFFFFF' },
+  smallAvatarText: { fontSize: fs(8), fontFamily: F.extraBold, color: '#FFFFFF' },
   bubbleCol: { maxWidth: '78%' },
 
   bubble: { paddingVertical: vs(8), paddingHorizontal: ms(12) },
@@ -796,8 +797,8 @@ const makeStyles = (C) => StyleSheet.create({
     borderBottomLeftRadius: ms(3), borderBottomRightRadius: ms(12),
   },
   bubbleDeleted: { backgroundColor: C.surfaceAlt },
-  deletedText: { fontSize: fs(13), fontStyle: 'italic', color: C.textMuted },
-  msgText:      { fontSize: fs(14), lineHeight: fs(20) },
+  deletedText: { fontFamily: F.regular, fontSize: fs(13), fontStyle: 'italic', color: C.textMuted },
+  msgText:      { fontFamily: F.regular, fontSize: fs(14), lineHeight: fs(20) },
   msgTextMe:    { color: '#FFFFFF' },
   msgTextOther: { color: C.textPrimary },
   msgImage: {
@@ -818,9 +819,9 @@ const makeStyles = (C) => StyleSheet.create({
   },
   sentiThumb: { width: '100%', height: vs(90) },
   sentiBody:  { padding: ms(10) },
-  sentiWave:  { fontSize: fs(10), fontWeight: '700', color: C.textSecondary, marginBottom: vs(3) },
-  sentiQuestion: { fontSize: fs(13), fontWeight: '700', color: C.textPrimary, lineHeight: fs(18) },
-  sentiOpen:  { fontSize: fs(11), fontWeight: '700', color: C.accent, marginTop: vs(6) },
+  sentiWave:  { fontSize: fs(10), fontFamily: F.bold, color: C.textSecondary, marginBottom: vs(3) },
+  sentiQuestion: { fontSize: fs(13), fontFamily: F.bold, color: C.textPrimary, lineHeight: fs(18) },
+  sentiOpen:  { fontSize: fs(11), fontFamily: F.bold, color: C.accent, marginTop: vs(6) },
 
   // Reactions on a bubble
   reactionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: ms(4), marginTop: vs(3) },
@@ -832,16 +833,16 @@ const makeStyles = (C) => StyleSheet.create({
   },
   reactionPillMine:  { backgroundColor: C.accentLight, borderColor: C.accentMid },
   reactionPillOther: { backgroundColor: C.surface, borderColor: C.border },
-  reactionEmoji: { fontSize: fs(11) },
-  reactionCount: { fontSize: fs(10), fontWeight: '700', color: C.textSecondary },
+  reactionEmoji: { fontFamily: F.regular, fontSize: fs(11) },
+  reactionCount: { fontSize: fs(10), fontFamily: F.bold, color: C.textSecondary },
 
   // Meta (timestamp + seen)
   metaRow:  { flexDirection: 'row', alignItems: 'center', gap: ms(5), marginTop: vs(2) },
   metaRight: { justifyContent: 'flex-end' },
   metaLeft:  { justifyContent: 'flex-start' },
-  timestamp: { fontSize: fs(9), color: C.textMuted },
+  timestamp: { fontFamily: F.regular, fontSize: fs(9), color: C.textMuted },
   seenRow: { flexDirection: 'row', alignItems: 'center' },
-  seenText: { fontSize: fs(9), color: C.accent, fontWeight: '600', marginRight: ms(2) },
+  seenText: { fontSize: fs(9), color: C.accent, fontFamily: F.semiBold, marginRight: ms(2) },
   seenCheck2: { marginLeft: -ms(6) },   // overlap the two checks → ✓✓
 
   // Input bar
@@ -852,7 +853,7 @@ const makeStyles = (C) => StyleSheet.create({
   },
   inputIconBtn: { width: s(36), height: s(36), alignItems: 'center', justifyContent: 'center' },
   input: {
-    flex: 1, maxHeight: vs(120),
+    fontFamily: F.regular, flex: 1, maxHeight: vs(120),
     backgroundColor: C.surfaceAlt, borderWidth: 0.5, borderColor: C.border, borderRadius: ms(20),
     paddingHorizontal: ms(14), paddingVertical: vs(8), fontSize: fs(14), color: C.textPrimary,
   },
@@ -869,10 +870,10 @@ const makeStyles = (C) => StyleSheet.create({
   reactionPicker: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', marginBottom: vs(10) },
   reactionPick: { padding: ms(6), borderRadius: ms(20), borderWidth: 1.5, borderColor: 'transparent' },
   reactionPickActive: { borderColor: C.accent, backgroundColor: C.accentLight },
-  reactionPickEmoji: { fontSize: fs(26) },
+  reactionPickEmoji: { fontFamily: F.regular, fontSize: fs(26) },
   sheetDivider: { height: 0.5, backgroundColor: C.border, marginBottom: vs(6) },
   sheetRow: { flexDirection: 'row', alignItems: 'center', gap: ms(12), paddingVertical: vs(13) },
-  sheetRowText: { fontSize: fs(15), fontWeight: '600', color: C.textPrimary },
+  sheetRowText: { fontSize: fs(15), fontFamily: F.semiBold, color: C.textPrimary },
 
   // Full-screen image viewer
   viewerBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.93)', alignItems: 'center', justifyContent: 'center' },

@@ -18,9 +18,10 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
+import { PeoliaFonts as F , getPeoliaColors } from '../../constants/peoliaTheme';
 import { usePeoliaScheme } from '../../context/ThemeContext';
 import { supabase } from '../../lib/supabase';
-import { getPeoliaColors } from '../../constants/peoliaTheme';
+
 import { fs, ms, vs, s } from '../../utils/peoliaScale';
 
 const DISPLAY_MAX = 40;
@@ -185,30 +186,30 @@ export default function UsernameDisplayNameScreen({ onDone, userId }) {
 const makeStyles = (C) => StyleSheet.create({
   screen:  { flex: 1, backgroundColor: C.bg },
   content: { paddingHorizontal: ms(24), paddingTop: vs(56), paddingBottom: vs(32) },
-  step:     { fontSize: fs(10), color: C.textMuted },
-  title:    { fontSize: fs(22), fontWeight: '800', color: C.textPrimary, marginTop: vs(8) },
-  subtitle: { fontSize: fs(12), color: C.textSecondary, marginTop: vs(4) },
-  label:       { fontSize: fs(10), fontWeight: '700', color: C.textSecondary, marginTop: vs(20) },
+  step:     { fontFamily: F.regular, fontSize: fs(10), color: C.textMuted },
+  title:    { letterSpacing: -0.2, fontSize: fs(22), fontFamily: F.extraBold, color: C.textPrimary, marginTop: vs(8) },
+  subtitle: { fontFamily: F.regular, fontSize: fs(12), color: C.textSecondary, marginTop: vs(4) },
+  label:       { fontSize: fs(10), fontFamily: F.bold, color: C.textSecondary, marginTop: vs(20) },
   labelSpaced: { marginTop: vs(24) },
-  helper:   { fontSize: fs(9), color: C.textMuted, marginBottom: vs(6) },
+  helper:   { fontFamily: F.regular, fontSize: fs(9), color: C.textMuted, marginBottom: vs(6) },
   inputRow: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: C.surface, borderWidth: 1, borderColor: C.border,
     borderRadius: s(10), paddingHorizontal: ms(12),
   },
-  prefix: { fontSize: fs(13), color: C.textMuted, marginRight: ms(4) },
-  input:  { flex: 1, paddingVertical: vs(11), fontSize: fs(13), color: C.textPrimary },
+  prefix: { fontFamily: F.regular, fontSize: fs(13), color: C.textMuted, marginRight: ms(4) },
+  input:  { fontFamily: F.regular, flex: 1, paddingVertical: vs(11), fontSize: fs(13), color: C.textPrimary },
   inputBox: {
     backgroundColor: C.surface, borderWidth: 1, borderColor: C.border,
     borderRadius: s(10), paddingHorizontal: ms(12),
   },
-  status:   { fontSize: fs(9), fontWeight: '600', marginTop: vs(5) },
-  cooldownNote: { fontSize: fs(9), color: C.textMuted, marginTop: vs(5) },
-  charCount: { fontSize: fs(8), color: C.textMuted, textAlign: 'right', marginTop: vs(4) },
+  status:   { fontSize: fs(9), fontFamily: F.semiBold, marginTop: vs(5) },
+  cooldownNote: { fontFamily: F.regular, fontSize: fs(9), color: C.textMuted, marginTop: vs(5) },
+  charCount: { fontFamily: F.regular, fontSize: fs(8), color: C.textMuted, textAlign: 'right', marginTop: vs(4) },
   continueBtn: {
     backgroundColor: C.accent, paddingVertical: vs(14), borderRadius: s(30),
     alignItems: 'center', marginTop: vs(28),
   },
   continueDisabled: { opacity: 0.5 },
-  continueText: { fontSize: fs(13), fontWeight: '800', color: '#FFFFFF' },
+  continueText: { letterSpacing: -0.2, fontSize: fs(13), fontFamily: F.extraBold, color: '#FFFFFF' },
 });

@@ -14,9 +14,10 @@ import {
   TouchableOpacity,
   StyleSheet,
 } from 'react-native';
+import { PeoliaFonts as F , getPeoliaColors } from '../constants/peoliaTheme';
 import { usePeoliaScheme } from '../context/ThemeContext';
 import * as Haptics from 'expo-haptics';
-import { getPeoliaColors } from '../constants/peoliaTheme';
+
 import { fs, ms, vs } from '../utils/peoliaScale';
 
 const VOTES = [
@@ -82,5 +83,5 @@ const makeStyles = (C) => StyleSheet.create({
   fadedBtn: {
     opacity: 0.32,
   },
-  emoji: { fontSize: fs(30), lineHeight: fs(36) },
+  emoji: { fontFamily: F.regular, fontSize: fs(30), lineHeight: fs(36) },
 });

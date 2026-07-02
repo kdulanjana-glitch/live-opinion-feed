@@ -49,3 +49,6 @@ example
 
 # supabase CLI temp
 supabase/.temp/
+
+# Local tunnel binary (downloaded per-machine, not part of the app)
+cloudflared.exe

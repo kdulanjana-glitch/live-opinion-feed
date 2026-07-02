@@ -28,11 +28,16 @@ import {
   ActivityIndicator,
   Keyboard,
 } from 'react-native';
+import { PeoliaFonts as F , getPeoliaColors } from '../constants/peoliaTheme';
 import { usePeoliaScheme, useThemePref } from '../context/ThemeContext';
 import { useWavePrefs, ALL_WAVES, DEFAULT_PREF } from '../context/WavePrefsContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
+import Icon from '../components/Icon';
+import EditProfileSheet from '../components/EditProfileSheet';
+
+import { fs, ms, vs, s } from '../utils/peoliaScale';
 
 // Optional native modules — absent in Expo Go / older dev builds. Guard the
 // requires so Settings still loads; the haptic preview and biometric lock just
@@ -41,10 +46,6 @@ let Haptics = null;
 try { Haptics = require('expo-haptics'); } catch {}
 let LocalAuthentication = null;
 try { LocalAuthentication = require('expo-local-authentication'); } catch {}
-import Icon from '../components/Icon';
-import EditProfileSheet from '../components/EditProfileSheet';
-import { getPeoliaColors } from '../constants/peoliaTheme';
-import { fs, ms, vs, s } from '../utils/peoliaScale';
 
 // Documented hardcoded-color exception: danger red for the Danger Zone + delete.
 const DANGER       = '#DC2626';
@@ -636,7 +637,7 @@ const makeStyles = (C) => StyleSheet.create({
   },
   header: { paddingHorizontal: ms(12), paddingTop: vs(8), paddingBottom: vs(4) },
   backBtn: { flexDirection: 'row', alignItems: 'center', gap: ms(4) },
-  headerTitle: { fontSize: fs(20), fontWeight: '800', color: C.textPrimary },
+  headerTitle: { letterSpacing: -0.2, fontSize: fs(20), fontFamily: F.extraBold, color: C.textPrimary },
 
   // Tabs (same visual pattern as VoiceSheet New/Top) — horizontal scroll
   tabScroll: { flexGrow: 0 },
@@ -644,7 +645,7 @@ const makeStyles = (C) => StyleSheet.create({
   tabPill: { paddingVertical: vs(7), paddingHorizontal: ms(16), borderRadius: ms(20) },
   tabPillActive:   { backgroundColor: C.accent },
   tabPillInactive: { backgroundColor: C.surfaceAlt, borderWidth: 0.5, borderColor: C.border },
-  tabText:         { fontSize: fs(13), fontWeight: '700' },
+  tabText:         { fontSize: fs(13), fontFamily: F.bold },
   tabTextActive:   { color: '#FFFFFF' },
   tabTextInactive: { color: C.textMuted },
 
@@ -661,7 +662,7 @@ const makeStyles = (C) => StyleSheet.create({
     marginTop: vs(12),
   },
   sectionTitle: {
-    fontSize: fs(11), fontWeight: '800', letterSpacing: 0.6,
+    fontSize: fs(11), fontFamily: F.extraBold, letterSpacing: 0.6,
     color: C.textMuted, marginTop: vs(10), marginBottom: vs(4),
   },
   row: {
@@ -669,7 +670,7 @@ const makeStyles = (C) => StyleSheet.create({
     paddingVertical: vs(12),
   },
   rowLeft:  { flexDirection: 'row', alignItems: 'center', gap: ms(12), flexShrink: 1 },
-  rowLabel: { fontSize: fs(15), fontWeight: '600', color: C.textPrimary },
+  rowLabel: { fontSize: fs(15), fontFamily: F.semiBold, color: C.textPrimary },
   divider:  { height: 0.5, backgroundColor: C.border },
 
   // Danger zone
@@ -686,11 +687,11 @@ const makeStyles = (C) => StyleSheet.create({
   },
   handle: { width: ms(36), height: vs(4), borderRadius: ms(2), backgroundColor: C.border, alignSelf: 'center', marginBottom: vs(14) },
   warnIconWrap: { alignItems: 'center', marginBottom: vs(8) },
-  deleteTitle: { fontSize: fs(18), fontWeight: '800', color: C.textPrimary, textAlign: 'center', marginBottom: vs(6) },
-  deleteBody:  { fontSize: fs(14), lineHeight: fs(21), color: C.textSecondary, textAlign: 'center', marginBottom: vs(14) },
-  deleteLabel: { fontSize: fs(11), fontWeight: '800', letterSpacing: 0.6, color: C.textMuted, marginTop: vs(10), marginBottom: vs(5) },
+  deleteTitle: { letterSpacing: -0.2, fontSize: fs(18), fontFamily: F.extraBold, color: C.textPrimary, textAlign: 'center', marginBottom: vs(6) },
+  deleteBody:  { fontFamily: F.regular, fontSize: fs(14), lineHeight: fs(21), color: C.textSecondary, textAlign: 'center', marginBottom: vs(14) },
+  deleteLabel: { fontSize: fs(11), fontFamily: F.extraBold, letterSpacing: 0.6, color: C.textMuted, marginTop: vs(10), marginBottom: vs(5) },
   input: {
-    backgroundColor: C.surfaceAlt, borderWidth: 1, borderColor: C.border,
+    fontFamily: F.regular, backgroundColor: C.surfaceAlt, borderWidth: 1, borderColor: C.border,
     borderRadius: ms(12), paddingHorizontal: ms(12), paddingVertical: vs(9),
     fontSize: fs(14), color: C.textPrimary,
   },
@@ -699,22 +700,22 @@ const makeStyles = (C) => StyleSheet.create({
   cancelBtn: { backgroundColor: C.cancelBg },
   confirmDeleteBtn: { backgroundColor: DANGER },
   deleteBtnDisabled: { opacity: 0.5 },
-  deleteBtnText: { fontSize: fs(15), fontWeight: '700' },
+  deleteBtnText: { fontSize: fs(15), fontFamily: F.bold },
 
   // ── Personalize tab ──
-  subtitle: { fontSize: fs(13), fontWeight: '500', color: C.textMuted, marginBottom: vs(10), lineHeight: fs(19) },
+  subtitle: { fontSize: fs(13), fontFamily: F.semiBold, color: C.textMuted, marginBottom: vs(10), lineHeight: fs(19) },
 
   // Wave Mix rows
   waveList: { paddingBottom: vs(4) },
   waveRow:  { paddingVertical: vs(11) },
   waveTopLine: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  waveName: { fontSize: fs(15), fontWeight: '700', color: C.textPrimary, flexShrink: 1 },
+  waveName: { fontSize: fs(15), fontFamily: F.bold, color: C.textPrimary, flexShrink: 1 },
   waveBottomLine: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: ms(12), marginTop: vs(10),
   },
   waveBottomLineOff: { opacity: 0.4 },
-  lvlLabel:    { fontSize: fs(12), fontWeight: '600' },
+  lvlLabel:    { fontSize: fs(12), fontFamily: F.semiBold },
   lvlLabelOn:  { color: C.accent },
   lvlLabelOff: { color: C.textMuted },
 
@@ -738,22 +739,22 @@ const makeStyles = (C) => StyleSheet.create({
   dnaChip: { paddingVertical: vs(9), paddingHorizontal: ms(13), borderRadius: ms(20) },
   dnaChipOn:  { backgroundColor: C.accent },
   dnaChipOff: { backgroundColor: C.surfaceAlt, borderWidth: 0.5, borderColor: C.border },
-  dnaChipText:    { fontSize: fs(13) },
-  dnaChipTextOn:  { color: '#FFFFFF', fontWeight: '700' },
-  dnaChipTextOff: { color: C.textMuted, fontWeight: '600' },
+  dnaChipText:    { fontFamily: F.regular, fontSize: fs(13) },
+  dnaChipTextOn:  { color: '#FFFFFF', fontFamily: F.bold },
+  dnaChipTextOff: { color: C.textMuted, fontFamily: F.semiBold },
 
   // DNA visibility segmented control
   dnaVisRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     marginTop: vs(16), paddingVertical: vs(10),
   },
-  dnaVisLabel: { fontSize: fs(15), fontWeight: '600', color: C.textPrimary, flexShrink: 1 },
+  dnaVisLabel: { fontSize: fs(15), fontFamily: F.semiBold, color: C.textPrimary, flexShrink: 1 },
   segment:    { flexDirection: 'row', gap: ms(8) },
   segmentBtn: {
     paddingVertical: vs(9), paddingHorizontal: ms(16), borderRadius: ms(12),
     borderWidth: 0.5, borderColor: C.border, backgroundColor: C.surfaceAlt,
   },
   segmentBtnActive: { backgroundColor: C.accent, borderColor: C.accent },
-  segmentText:       { fontSize: fs(13), fontWeight: '700', color: C.textMuted },
+  segmentText:       { fontSize: fs(13), fontFamily: F.bold, color: C.textMuted },
   segmentTextActive: { color: '#FFFFFF' },
 });

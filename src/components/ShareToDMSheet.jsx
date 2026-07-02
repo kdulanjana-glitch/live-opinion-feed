@@ -21,11 +21,13 @@ import {
   Modal,
   ActivityIndicator,
 } from 'react-native';
+import { PeoliaFonts as F , getPeoliaColors } from '../constants/peoliaTheme';
 import { usePeoliaScheme } from '../context/ThemeContext';
+import { useBlocks } from '../context/BlockContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from './Icon';
 import { supabase } from '../lib/supabase';
-import { getPeoliaColors } from '../constants/peoliaTheme';
+
 import { fs, ms, vs, s } from '../utils/peoliaScale';
 import { getOrCreateDMConversation, sendSentiToDM, dmInitials } from '../lib/dmUtils';
 
@@ -42,6 +44,7 @@ export default function ShareToDMSheet({ visible, sentiId, onClose, onShared }) 
   const C  = getPeoliaColors(scheme);
   const st = makeStyles(C);
   const insets = useSafeAreaInsets();
+  const { hiddenIds } = useBlocks();
 
   const [currentUserId, setCurrentUserId] = useState(null);
   const [query,   setQuery]   = useState('');
@@ -60,17 +63,17 @@ export default function ShareToDMSheet({ visible, sentiId, onClose, onShared }) 
       if (!ids.length) { setResults([]); setLoading(false); return; }
       const { data: users } = await supabase
         .from('users').select('id, display_name, username, avatar_initials, avatar_url').in('id', ids);
-      setResults(users ?? []);
+      setResults((users ?? []).filter((u) => !hiddenIds.includes(u.id)));
     } else {
       const { data } = await supabase
         .from('users')
         .select('id, display_name, username, avatar_initials, avatar_url')
         .or(`username.ilike.%${q}%,display_name.ilike.%${q}%`)
         .limit(20);
-      setResults((data ?? []).filter((u) => u.id !== uid));
+      setResults((data ?? []).filter((u) => u.id !== uid && !hiddenIds.includes(u.id)));
     }
     setLoading(false);
-  }, []);
+  }, [hiddenIds]);
 
   // On open: resolve user + load suggested
   useEffect(() => {
@@ -116,7 +119,7 @@ export default function ShareToDMSheet({ visible, sentiId, onClose, onShared }) 
         </View>
         <View style={st.mid}>
           <Text style={st.name} numberOfLines={1}>{name}</Text>
-          <Text style={st.handle} numberOfLines={1}>@{item.username}</Text>
+          <Text style={st.userHandle} numberOfLines={1}>@{item.username}</Text>
         </View>
         {sendingId === item.id
           ? <ActivityIndicator color={C.accent} size="small" />
@@ -184,26 +187,26 @@ const makeStyles = (C) => StyleSheet.create({
   },
   handle: { width: ms(36), height: vs(4), borderRadius: ms(2), backgroundColor: C.border, alignSelf: 'center', marginBottom: vs(12) },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: vs(10) },
-  title: { fontSize: fs(16), fontWeight: '800', color: C.textPrimary },
+  title: { letterSpacing: -0.2, fontSize: fs(16), fontFamily: F.extraBold, color: C.textPrimary },
 
   searchWrap: {
     flexDirection: 'row', alignItems: 'center', gap: ms(8),
     backgroundColor: C.surfaceAlt, borderWidth: 0.5, borderColor: C.border,
     borderRadius: ms(12), paddingHorizontal: ms(12), paddingVertical: vs(9),
   },
-  searchInput: { flex: 1, fontSize: fs(14), color: C.textPrimary, padding: 0 },
-  sectionLabel: { fontSize: fs(11), fontWeight: '800', letterSpacing: 0.6, color: C.textMuted, marginTop: vs(12), marginBottom: vs(4) },
+  searchInput: { fontFamily: F.regular, flex: 1, fontSize: fs(14), color: C.textPrimary, padding: 0 },
+  sectionLabel: { fontSize: fs(11), fontFamily: F.extraBold, letterSpacing: 0.6, color: C.textMuted, marginTop: vs(12), marginBottom: vs(4) },
   loader: { paddingVertical: vs(28), alignItems: 'center' },
   list: { marginTop: vs(4) },
-  empty: { fontSize: fs(13), color: C.textMuted, textAlign: 'center', marginTop: vs(20) },
+  empty: { fontFamily: F.regular, fontSize: fs(13), color: C.textMuted, textAlign: 'center', marginTop: vs(20) },
 
   row: { flexDirection: 'row', alignItems: 'center', gap: ms(10), paddingVertical: vs(9) },
   avatar: { width: s(40), height: s(40), borderRadius: s(20), alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   avatarFill: { width: '100%', height: '100%' },
-  avatarText: { fontSize: fs(16), fontWeight: '800', color: '#FFFFFF' },
+  avatarText: { letterSpacing: -0.2, fontSize: fs(16), fontFamily: F.extraBold, color: '#FFFFFF' },
   mid: { flex: 1 },
-  name: { fontSize: fs(14), fontWeight: '700', color: C.textPrimary },
-  handle: { fontSize: fs(12), color: C.textMuted, marginTop: vs(1) },
+  name: { fontSize: fs(14), fontFamily: F.bold, color: C.textPrimary },
+  userHandle: { fontFamily: F.regular, fontSize: fs(12), color: C.textMuted, marginTop: vs(1) },
   sendPill: { paddingVertical: vs(6), paddingHorizontal: ms(16), borderRadius: ms(20), backgroundColor: C.accent },
-  sendPillText: { fontSize: fs(13), fontWeight: '700', color: '#FFFFFF' },
+  sendPillText: { fontSize: fs(13), fontFamily: F.bold, color: '#FFFFFF' },
 });

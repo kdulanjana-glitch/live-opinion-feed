@@ -16,8 +16,9 @@ import {
   StyleSheet,
   Dimensions,
 } from 'react-native';
+import { PeoliaFonts as F , getPeoliaColors } from '../../constants/peoliaTheme';
 import { usePeoliaScheme } from '../../context/ThemeContext';
-import { getPeoliaColors } from '../../constants/peoliaTheme';
+
 import { fs, ms, vs, s } from '../../utils/peoliaScale';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -71,17 +72,17 @@ const makeStyles = (C) => StyleSheet.create({
     justifyContent: 'center',
   },
   logo: {
-    fontSize: fs(64),
+    fontFamily: F.regular, fontSize: fs(64),
     marginBottom: vs(10),
   },
   name: {
     fontSize: fs(32),
-    fontWeight: '800',
+    fontFamily: F.extraBold,
     color: C.textPrimary,
     letterSpacing: 0.5,
   },
   tagline: {
-    fontSize: fs(13),
+    fontFamily: F.regular, fontSize: fs(13),
     color: C.textMuted,
     marginTop: vs(8),
   },

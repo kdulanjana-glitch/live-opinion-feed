@@ -9,8 +9,9 @@ import {
   Text,
   StyleSheet,
 } from 'react-native';
+import { PeoliaFonts as F , getPeoliaColors } from '../constants/peoliaTheme';
 import { usePeoliaScheme } from '../context/ThemeContext';
-import { getPeoliaColors } from '../constants/peoliaTheme';
+
 import { fs, ms, vs } from '../utils/peoliaScale';
 
 const WAVE_EMOJIS = {
@@ -51,6 +52,6 @@ const styles = StyleSheet.create({
     borderRadius: ms(20),
     alignSelf: 'flex-start',
   },
-  emoji: { fontSize: fs(15) },
-  label: { fontSize: fs(18), fontWeight: '700', letterSpacing: 0.4 },  // was fs(14) → ×1.25
+  emoji: { fontFamily: F.regular, fontSize: fs(15) },
+  label: { fontSize: fs(18), fontFamily: F.bold, letterSpacing: 0.4 },  // was fs(14) → ×1.25
 });

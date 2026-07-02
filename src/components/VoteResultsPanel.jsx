@@ -17,8 +17,8 @@ import {
   Animated,
   StyleSheet,
 } from 'react-native';
+import { PeoliaFonts as F , getPeoliaColors } from '../constants/peoliaTheme';
 import { usePeoliaScheme } from '../context/ThemeContext';
-import { getPeoliaColors } from '../constants/peoliaTheme';
 import { fs, ms, vs, s } from '../utils/peoliaScale';
 
 const VOTES = ['yes', 'hmm', 'nah'];
@@ -87,7 +87,7 @@ const makeStyles = (C) => StyleSheet.create({
     alignItems: 'center',
     gap: vs(2),
   },
-  pct:   { fontSize: fs(16), fontWeight: '800', color: C.textPrimary },
+  pct:   { letterSpacing: -0.2, fontSize: fs(16), fontFamily: F.extraBold, color: C.textPrimary },
   track: {
     height: MAX_BAR,
     width: '100%',
@@ -95,5 +95,5 @@ const makeStyles = (C) => StyleSheet.create({
     alignItems: 'center',
   },
   bar:   { width: '64%', borderRadius: ms(6) },
-  count: { fontSize: fs(12), fontWeight: '600', color: C.textMuted },
+  count: { fontSize: fs(12), fontFamily: F.semiBold, color: C.textMuted },
 });

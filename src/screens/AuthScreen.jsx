@@ -22,12 +22,13 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
 } from 'react-native';
+import { PeoliaFonts as F , getPeoliaColors } from '../constants/peoliaTheme';
 import { usePeoliaScheme } from '../context/ThemeContext';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
 import CountryPicker from 'react-native-country-picker-modal';
 import { supabase } from '../lib/supabase';
-import { getPeoliaColors } from '../constants/peoliaTheme';
+
 import { fs, ms, vs, s } from '../utils/peoliaScale';
 
 // MUST match the phone-signup Edge Function transform EXACTLY: digits only + domain.
@@ -453,18 +454,18 @@ const makeStyles = (C) => StyleSheet.create({
     marginBottom: vs(28),
   },
   brandLogo: {
-    fontSize: fs(44),
+    fontFamily: F.regular, fontSize: fs(44),
     marginBottom: vs(6),
   },
   brandName: {
     fontSize: fs(26),
-    fontWeight: '800',
+    fontFamily: F.extraBold,
     color: C.textPrimary,
     letterSpacing: 0.5,
   },
   brandTagline: {
     fontSize: fs(11),
-    fontWeight: '500',
+    fontFamily: F.semiBold,
     marginTop: vs(4),
   },
   toggle: {
@@ -482,7 +483,7 @@ const makeStyles = (C) => StyleSheet.create({
   },
   toggleText: {
     fontSize: fs(12),
-    fontWeight: '700',
+    fontFamily: F.bold,
   },
   notice: {
     borderRadius: s(10),
@@ -493,14 +494,14 @@ const makeStyles = (C) => StyleSheet.create({
   },
   noticeText: {
     fontSize: fs(10),
-    fontWeight: '600',
+    fontFamily: F.semiBold,
     lineHeight: fs(15),
   },
   form: {
     gap: vs(10),
   },
   input: {
-    borderWidth: 1,
+    fontFamily: F.regular, borderWidth: 1,
     borderRadius: s(12),
     paddingHorizontal: ms(14),
     paddingVertical: vs(12),
@@ -508,7 +509,7 @@ const makeStyles = (C) => StyleSheet.create({
   },
   availText: {
     fontSize: fs(11),
-    fontWeight: '600',
+    fontFamily: F.semiBold,
     marginTop: vs(-4),
     marginBottom: vs(2),
     marginLeft: ms(2),
@@ -528,7 +529,7 @@ const makeStyles = (C) => StyleSheet.create({
   },
   methodText: {
     fontSize: fs(11),
-    fontWeight: '700',
+    fontFamily: F.bold,
   },
   phoneRow: {
     flexDirection: 'row',
@@ -545,7 +546,7 @@ const makeStyles = (C) => StyleSheet.create({
   },
   callingCode: {
     fontSize: fs(13),
-    fontWeight: '600',
+    fontFamily: F.semiBold,
   },
   phoneInput: {
     flex: 1,
@@ -557,8 +558,8 @@ const makeStyles = (C) => StyleSheet.create({
     marginTop: vs(4),
   },
   primaryBtnText: {
-    fontSize: fs(13),
-    fontWeight: '800',
+    letterSpacing: -0.2, fontSize: fs(13),
+    fontFamily: F.extraBold,
     color: '#FFFFFF',
   },
   disabled: {
@@ -576,7 +577,7 @@ const makeStyles = (C) => StyleSheet.create({
   },
   dividerText: {
     fontSize: fs(10),
-    fontWeight: '600',
+    fontFamily: F.semiBold,
   },
   googleBtn: {
     flexDirection: 'row',
@@ -588,13 +589,13 @@ const makeStyles = (C) => StyleSheet.create({
     gap: ms(8),
   },
   googleG: {
-    fontSize: fs(14),
-    fontWeight: '800',
+    letterSpacing: -0.2, fontSize: fs(14),
+    fontFamily: F.extraBold,
     color: '#4285F4',
   },
   googleText: {
     fontSize: fs(12),
-    fontWeight: '700',
+    fontFamily: F.bold,
   },
   guestBtn: {
     alignItems: 'center',
@@ -602,7 +603,7 @@ const makeStyles = (C) => StyleSheet.create({
   },
   guestText: {
     fontSize: fs(11),
-    fontWeight: '600',
+    fontFamily: F.semiBold,
     textDecorationLine: 'underline',
   },
 });

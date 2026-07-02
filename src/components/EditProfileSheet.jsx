@@ -23,6 +23,7 @@ import {
   Alert,
   Image,
 } from 'react-native';
+import { PeoliaFonts as F , getPeoliaColors } from '../constants/peoliaTheme';
 import { usePeoliaScheme } from '../context/ThemeContext';
 import * as ImagePicker from 'expo-image-picker';
 import { Picker } from '@react-native-picker/picker';
@@ -31,7 +32,7 @@ import Icon from './Icon';
 import { decode } from 'base64-arraybuffer';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../lib/supabase';
-import { getPeoliaColors } from '../constants/peoliaTheme';
+
 import { fs, ms, vs, s, SCREEN_HEIGHT } from '../utils/peoliaScale';
 import { passwordStrength } from '../utils/passwordStrength';
 
@@ -702,7 +703,7 @@ const makeStyles = (C) => StyleSheet.create({
     alignItems: 'center',
   },
   segmentBtnActive: { backgroundColor: C.accent, borderColor: C.accent },
-  segmentText: { fontSize: fs(13), fontWeight: '700', color: C.textMuted },
+  segmentText: { fontSize: fs(13), fontFamily: F.bold, color: C.textMuted },
   segmentTextActive: { color: '#FFFFFF' },
   page: {
     flex: 1, backgroundColor: C.bg,
@@ -710,14 +711,14 @@ const makeStyles = (C) => StyleSheet.create({
   },
   pageHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: ms(14), paddingTop: vs(10), paddingBottom: vs(8) },
   pageBackBtn: { flexDirection: 'row', alignItems: 'center', gap: ms(4) },
-  pageTitle: { fontSize: fs(18), fontWeight: '800', color: C.textPrimary },
+  pageTitle: { letterSpacing: -0.2, fontSize: fs(18), fontFamily: F.extraBold, color: C.textPrimary },
   handle: {
     width: ms(36), height: vs(4), borderRadius: ms(2),
     backgroundColor: C.border, alignSelf: 'center', marginBottom: vs(12),
   },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: vs(10) },
-  title:    { fontSize: fs(17), fontWeight: '700', color: C.textPrimary },
-  closeBtn: { fontSize: fs(18), color: C.textSecondary, padding: ms(4) },
+  title:    { fontSize: fs(17), fontFamily: F.bold, color: C.textPrimary },
+  closeBtn: { fontFamily: F.regular, fontSize: fs(18), color: C.textSecondary, padding: ms(4) },
   avatarRow:   { alignItems: 'center', gap: vs(6), marginBottom: vs(6) },
   avatarWrap:  { position: 'relative', width: s(76), height: s(76) },
   avatarCircle: {
@@ -725,31 +726,31 @@ const makeStyles = (C) => StyleSheet.create({
     backgroundColor: C.accent, alignItems: 'center', justifyContent: 'center',
   },
   avatarFill:   { width: '100%', height: '100%' },
-  avatarLetter: { fontSize: fs(30), fontWeight: '800', color: '#FFFFFF' },
+  avatarLetter: { letterSpacing: -0.2, fontSize: fs(30), fontFamily: F.extraBold, color: '#FFFFFF' },
   avatarEdit: {
     position: 'absolute', bottom: 0, right: 0,
     width: s(26), height: s(26), borderRadius: s(13),
     backgroundColor: C.sheetBg, borderWidth: 1.5, borderColor: C.sheetBg,
     alignItems: 'center', justifyContent: 'center',
   },
-  avatarEditIcon: { fontSize: fs(13) },
-  avatarChange:   { fontSize: fs(13), fontWeight: '700', color: C.accent },
+  avatarEditIcon: { fontFamily: F.regular, fontSize: fs(13) },
+  avatarChange:   { fontSize: fs(13), fontFamily: F.bold, color: C.accent },
   labelRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  label:    { fontSize: fs(13), fontWeight: '700', color: C.textSecondary, marginTop: vs(10), marginBottom: vs(5) },
+  label:    { fontSize: fs(13), fontFamily: F.bold, color: C.textSecondary, marginTop: vs(10), marginBottom: vs(5) },
   sectionHead: {
-    fontSize: fs(12), fontWeight: '800', color: C.textMuted, letterSpacing: 0.6,
+    fontSize: fs(12), fontFamily: F.extraBold, color: C.textMuted, letterSpacing: 0.6,
     textTransform: 'uppercase', marginTop: vs(18), paddingTop: vs(12),
     borderTopWidth: 0.5, borderTopColor: C.border,
   },
-  sectionNote: { fontSize: fs(11), color: C.textMuted, marginTop: vs(2) },
-  helper:      { fontSize: fs(11), color: C.textMuted, marginTop: vs(4) },
-  charCount: { fontSize: fs(12), fontWeight: '600', color: C.textMuted, marginTop: vs(10) },
+  sectionNote: { fontFamily: F.regular, fontSize: fs(11), color: C.textMuted, marginTop: vs(2) },
+  helper:      { fontFamily: F.regular, fontSize: fs(11), color: C.textMuted, marginTop: vs(4) },
+  charCount: { fontSize: fs(12), fontFamily: F.semiBold, color: C.textMuted, marginTop: vs(10) },
   input: {
-    backgroundColor: C.surfaceAlt, borderWidth: 1, borderColor: C.border, borderRadius: ms(12),
+    fontFamily: F.regular, backgroundColor: C.surfaceAlt, borderWidth: 1, borderColor: C.border, borderRadius: ms(12),
     paddingHorizontal: ms(12), paddingVertical: vs(9), fontSize: fs(14), color: C.textPrimary,
   },
   inputDisabled: { backgroundColor: C.border, justifyContent: 'center' },
-  disabledText:  { fontSize: fs(14), color: C.textMuted },
+  disabledText:  { fontFamily: F.regular, fontSize: fs(14), color: C.textMuted },
   inputBio: { minHeight: vs(70) },
   // Phone: country box + national number, matching onboarding
   phoneRow: { flexDirection: 'row', gap: ms(8), alignItems: 'center' },
@@ -758,9 +759,9 @@ const makeStyles = (C) => StyleSheet.create({
     backgroundColor: C.surfaceAlt, borderWidth: 1, borderColor: C.border,
     borderRadius: ms(12), paddingHorizontal: ms(10), paddingVertical: vs(9),
   },
-  callingCode: { fontSize: fs(14), fontWeight: '600', color: C.textPrimary },
+  callingCode: { fontSize: fs(14), fontFamily: F.semiBold, color: C.textPrimary },
   phoneInput: {
-    flex: 1, backgroundColor: C.surfaceAlt, borderWidth: 1, borderColor: C.border,
+    fontFamily: F.regular, flex: 1, backgroundColor: C.surfaceAlt, borderWidth: 1, borderColor: C.border,
     borderRadius: ms(12), paddingHorizontal: ms(12), paddingVertical: vs(9),
     fontSize: fs(14), color: C.textPrimary,
   },
@@ -778,25 +779,25 @@ const makeStyles = (C) => StyleSheet.create({
   },
   visTogglePublic:  { backgroundColor: C.accent, borderColor: C.accent },
   visTogglePrivate: { backgroundColor: 'transparent', borderColor: C.border },
-  visText:        { fontSize: fs(11), fontWeight: '700' },
+  visText:        { fontSize: fs(11), fontFamily: F.bold },
   visTextPublic:  { color: '#FFFFFF' },
   visTextPrivate: { color: C.textMuted },
 
   // Change-phone link + sub-form
-  linkAction: { fontSize: fs(13), fontWeight: '700', color: C.accent, marginTop: vs(6) },
+  linkAction: { fontSize: fs(13), fontFamily: F.bold, color: C.accent, marginTop: vs(6) },
   subForm:    { marginTop: vs(6) },
   subFormRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: ms(14), marginTop: vs(10) },
-  subFormCancel:  { fontSize: fs(13), fontWeight: '600', color: C.textMuted },
+  subFormCancel:  { fontSize: fs(13), fontFamily: F.semiBold, color: C.textMuted },
   subFormBtn:     { paddingVertical: vs(8), paddingHorizontal: ms(16), borderRadius: ms(12), backgroundColor: C.accent },
-  subFormBtnText: { fontSize: fs(13), fontWeight: '700', color: '#FFFFFF' },
+  subFormBtnText: { fontSize: fs(13), fontFamily: F.bold, color: '#FFFFFF' },
 
   // Password strength meter
   meterRow:   { flexDirection: 'row', alignItems: 'center', gap: ms(8), marginTop: vs(8) },
   meterTrack: { flex: 1, flexDirection: 'row', gap: ms(4) },
   meterSeg:   { flex: 1, height: vs(5), borderRadius: ms(3), backgroundColor: C.border },
-  meterLabel: { fontSize: fs(11), fontWeight: '700', minWidth: ms(56), textAlign: 'right' },
-  error: { fontSize: fs(13), fontWeight: '600', color: C.nahText, marginTop: vs(10), textAlign: 'center' },
+  meterLabel: { fontSize: fs(11), fontFamily: F.bold, minWidth: ms(56), textAlign: 'right' },
+  error: { fontSize: fs(13), fontFamily: F.semiBold, color: C.nahText, marginTop: vs(10), textAlign: 'center' },
   saveBtn: { marginTop: vs(16), paddingVertical: vs(12), borderRadius: ms(14), backgroundColor: C.accent, alignItems: 'center' },
   saveBtnDisabled: { opacity: 0.6 },
-  saveText: { fontSize: fs(15), fontWeight: '700', color: '#FFFFFF' },
+  saveText: { fontSize: fs(15), fontFamily: F.bold, color: '#FFFFFF' },
 });

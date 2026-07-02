@@ -14,8 +14,9 @@ import {
   TouchableOpacity,
   StyleSheet,
 } from 'react-native';
+import { PeoliaFonts as F , getPeoliaColors } from '../constants/peoliaTheme';
 import { usePeoliaScheme } from '../context/ThemeContext';
-import { getPeoliaColors } from '../constants/peoliaTheme';
+
 import { fs, ms, vs } from '../utils/peoliaScale';
 
 function ErrorFallback({ message, onRetry }) {
@@ -69,15 +70,15 @@ const makeStyles = (C) => StyleSheet.create({
     backgroundColor: C.bg,
     paddingHorizontal: ms(32),
   },
-  icon:    { fontSize: fs(44), marginBottom: vs(14) },
-  title:   { fontSize: fs(18), fontWeight: '800', color: C.textPrimary, marginBottom: vs(8) },
+  icon:    { fontFamily: F.regular, fontSize: fs(44), marginBottom: vs(14) },
+  title:   { letterSpacing: -0.2, fontSize: fs(18), fontFamily: F.extraBold, color: C.textPrimary, marginBottom: vs(8) },
   message: {
-    fontSize: fs(14), fontWeight: '500', color: C.textSecondary,
+    fontSize: fs(14), fontFamily: F.semiBold, color: C.textSecondary,
     textAlign: 'center', lineHeight: fs(21), marginBottom: vs(20),
   },
   retryBtn: {
     paddingVertical: vs(10), paddingHorizontal: ms(28),
     borderRadius: ms(20), backgroundColor: C.accent,
   },
-  retryText: { fontSize: fs(15), fontWeight: '700', color: '#FFFFFF' },
+  retryText: { fontSize: fs(15), fontFamily: F.bold, color: '#FFFFFF' },
 });

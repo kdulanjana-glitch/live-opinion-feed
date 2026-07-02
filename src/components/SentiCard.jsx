@@ -11,8 +11,9 @@ import {
   StyleSheet,
   Image,
 } from 'react-native';
+import { PeoliaFonts as F , getPeoliaColors } from '../constants/peoliaTheme';
 import { usePeoliaScheme } from '../context/ThemeContext';
-import { getPeoliaColors } from '../constants/peoliaTheme';
+
 import { fs, ms, s, vs } from '../utils/peoliaScale';
 import WavePill from './WavePill';
 import VoteBar from './VoteBar';
@@ -191,7 +192,7 @@ const makeStyles = (C) => StyleSheet.create({
     overflow: 'hidden',
   },
   avatarImg:    { width: '100%', height: '100%' },   // fill parent (matches working preset tiles)
-  avatarText:   { fontSize: fs(17), fontWeight: '800', color: '#FFFFFF' },
+  avatarText:   { letterSpacing: -0.2, fontSize: fs(17), fontFamily: F.extraBold, color: '#FFFFFF' },
   imageOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.48)',   // matches FloatScreen preview overlay
@@ -210,23 +211,23 @@ const makeStyles = (C) => StyleSheet.create({
     overflow: 'hidden',
   },
   question: {
-    fontSize: fs(26),        // was fs(21) → ×1.25
-    fontWeight: '800',
+    letterSpacing: -0.2, fontSize: fs(26),        // was fs(21) → ×1.25
+    fontFamily: F.extraBold,
     lineHeight: fs(28),
     color: C.textPrimary,
     marginBottom: vs(8),
   },
-  questionSmall:   { fontSize: fs(21) },  // was fs(17) → ×1.25
+  questionSmall:   { fontFamily: F.regular, fontSize: fs(21) },  // was fs(17) → ×1.25
   questionOnImage: { color: '#FFFFFF' },
   description: {
-    fontSize: fs(19),        // was fs(15) → ×1.25
+    fontFamily: F.regular, fontSize: fs(19),        // was fs(15) → ×1.25
     lineHeight: fs(23),
     color: C.textSecondary,
   },
   descriptionOnImage: { color: 'rgba(255,255,255,0.72)' },  // matches preview
   seeMore: {
     fontSize: fs(19),        // was fs(15) → ×1.25
-    fontWeight: '700',
+    fontFamily: F.bold,
     color: C.accentText,
   },
   seeMoreOnImage: { color: '#C7D2FE' },
@@ -238,5 +239,5 @@ const makeStyles = (C) => StyleSheet.create({
     paddingHorizontal: ms(14),
     alignSelf: 'flex-start',
   },
-  swellText:  { fontSize: fs(14), fontWeight: '600', color: C.badgeText },
+  swellText:  { fontSize: fs(14), fontFamily: F.semiBold, color: C.badgeText },
 });

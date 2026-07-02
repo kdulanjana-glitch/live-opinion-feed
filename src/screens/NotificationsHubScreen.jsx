@@ -26,13 +26,14 @@ import {
   PanResponder,
   Pressable,
 } from 'react-native';
+import { PeoliaFonts as F , getPeoliaColors } from '../constants/peoliaTheme';
 import { usePeoliaScheme } from '../context/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNotifications } from '../context/NotificationContext';
 import { useBlocks } from '../context/BlockContext';
 import Icon from '../components/Icon';
 import { supabase } from '../lib/supabase';
-import { getPeoliaColors } from '../constants/peoliaTheme';
+
 import { fs, ms, vs, s } from '../utils/peoliaScale';
 import { relativeTime } from '../utils/timeUtils';
 import { getLastMessagePreview, getMyUnreadCount, dmInitials, setConversationPref, isMuted } from '../lib/dmUtils';
@@ -88,7 +89,7 @@ function SwipeRow({ children, onSwipe, label, bg, rowBg }) {
 const swipeStyles = StyleSheet.create({
   container: { position: 'relative' },
   bg: { ...StyleSheet.absoluteFillObject, alignItems: 'flex-end', justifyContent: 'center', paddingRight: ms(24) },
-  label: { fontSize: fs(13), fontWeight: '800', color: '#FFFFFF' },
+  label: { letterSpacing: -0.2, fontSize: fs(13), fontFamily: F.extraBold, color: '#FFFFFF' },
 });
 
 export default function NotificationsHubScreen({ onBack, onOpenList, onOpenDM, onOpenNotificationSettings }) {
@@ -552,7 +553,7 @@ const makeStyles = (C) => StyleSheet.create({
     paddingHorizontal: ms(14), paddingTop: vs(10), paddingBottom: vs(8),
   },
   backBtn:  { flexDirection: 'row', alignItems: 'center', gap: ms(4) },
-  headerTitle: { fontSize: fs(18), fontWeight: '800', color: C.textPrimary },
+  headerTitle: { letterSpacing: -0.2, fontSize: fs(18), fontFamily: F.extraBold, color: C.textPrimary },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: ms(8) },
   composeBtn: {
     width: s(36), height: s(36), borderRadius: s(18),
@@ -569,19 +570,19 @@ const makeStyles = (C) => StyleSheet.create({
   cardAccent: { borderWidth: 0.5, borderColor: C.accent },
   iconCircle: { width: s(38), height: s(38), borderRadius: s(19), alignItems: 'center', justifyContent: 'center' },
   cardMid:    { flex: 1 },
-  cardTitle:  { fontSize: fs(15), fontWeight: '800', color: C.textPrimary },
-  cardSub:    { fontSize: fs(12), color: C.textSecondary, marginTop: vs(2) },
+  cardTitle:  { letterSpacing: -0.2, fontSize: fs(15), fontFamily: F.extraBold, color: C.textPrimary },
+  cardSub:    { fontFamily: F.regular, fontSize: fs(12), color: C.textSecondary, marginTop: vs(2) },
   cardRight:  { flexDirection: 'row', alignItems: 'center', gap: ms(6) },
   badge:      { backgroundColor: C.accent, borderRadius: ms(12), paddingVertical: vs(2), paddingHorizontal: ms(7) },
-  badgeText:  { fontSize: fs(11), color: '#FFFFFF', fontWeight: '800' },
+  badgeText:  { fontSize: fs(11), color: '#FFFFFF', fontFamily: F.extraBold },
 
   sectionLabel: {
-    fontSize: fs(11), fontWeight: '800', letterSpacing: 0.6, color: C.textMuted,
+    fontSize: fs(11), fontFamily: F.extraBold, letterSpacing: 0.6, color: C.textMuted,
     marginHorizontal: ms(14), marginTop: vs(16), marginBottom: vs(6),
   },
   loader:   { paddingVertical: vs(28), alignItems: 'center', justifyContent: 'center' },
   emptyRow: { flexDirection: 'row', alignItems: 'center', gap: ms(8), marginHorizontal: ms(14), paddingVertical: vs(16) },
-  emptyText: { fontSize: fs(13), color: C.textMuted, fontWeight: '600' },
+  emptyText: { fontSize: fs(13), color: C.textMuted, fontFamily: F.semiBold },
 
   // Conversation row
   convRow: {
@@ -592,17 +593,17 @@ const makeStyles = (C) => StyleSheet.create({
     width: s(40), height: s(40), borderRadius: s(20),
     alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
   },
-  convAvatarText: { fontSize: fs(16), fontWeight: '800', color: '#FFFFFF' },
+  convAvatarText: { letterSpacing: -0.2, fontSize: fs(16), fontFamily: F.extraBold, color: '#FFFFFF' },
   avatarFill: { width: '100%', height: '100%' },
   convMid:  { flex: 1 },
   convNameRow: { flexDirection: 'row', alignItems: 'center', gap: ms(4) },
-  convName: { fontSize: fs(14), fontWeight: '700', color: C.textPrimary, flexShrink: 1 },
-  convPreview: { fontSize: fs(12), color: C.textMuted, marginTop: vs(1) },
-  convPreviewUnread: { color: C.accent, fontWeight: '600' },
+  convName: { fontSize: fs(14), fontFamily: F.bold, color: C.textPrimary, flexShrink: 1 },
+  convPreview: { fontFamily: F.regular, fontSize: fs(12), color: C.textMuted, marginTop: vs(1) },
+  convPreviewUnread: { color: C.accent, fontFamily: F.semiBold },
   convRight: { alignItems: 'flex-end', gap: vs(4) },
-  convTime:  { fontSize: fs(10), color: C.textMuted },
+  convTime:  { fontFamily: F.regular, fontSize: fs(10), color: C.textMuted },
   convBadge: { minWidth: s(18), height: s(18), borderRadius: s(9), backgroundColor: C.accent, alignItems: 'center', justifyContent: 'center', paddingHorizontal: ms(4) },
-  convBadgeText: { fontSize: fs(9), color: '#FFFFFF', fontWeight: '800' },
+  convBadgeText: { fontSize: fs(9), color: '#FFFFFF', fontFamily: F.extraBold },
 
   // ⋮ dropdown menu
   menuBackdrop: { flex: 1 },
@@ -611,7 +612,7 @@ const makeStyles = (C) => StyleSheet.create({
     backgroundColor: C.sheetBg, borderRadius: ms(13), borderWidth: 0.5, borderColor: C.border, paddingVertical: vs(5),
   },
   menuItem:  { flexDirection: 'row', alignItems: 'center', gap: ms(10), paddingVertical: vs(12), paddingHorizontal: ms(14) },
-  menuLabel: { fontSize: fs(14), fontWeight: '600', color: C.textPrimary },
+  menuLabel: { fontSize: fs(14), fontFamily: F.semiBold, color: C.textPrimary },
 
   // Overlays (new message / archived / blocked)
   overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: C.bg, paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : 0 },
@@ -621,17 +622,17 @@ const makeStyles = (C) => StyleSheet.create({
     backgroundColor: C.surfaceAlt, borderWidth: 0.5, borderColor: C.border,
     borderRadius: ms(12), paddingHorizontal: ms(12), paddingVertical: vs(9),
   },
-  searchInput: { flex: 1, fontSize: fs(14), color: C.textPrimary, padding: 0 },
-  noResults: { fontSize: fs(13), color: C.textMuted, textAlign: 'center', marginTop: vs(20) },
+  searchInput: { fontFamily: F.regular, flex: 1, fontSize: fs(14), color: C.textPrimary, padding: 0 },
+  noResults: { fontFamily: F.regular, fontSize: fs(13), color: C.textMuted, textAlign: 'center', marginTop: vs(20) },
 
   // Citizen row (new message / blocked)
   citizenRow: {
     flexDirection: 'row', alignItems: 'center', gap: ms(10),
     paddingVertical: vs(10), paddingHorizontal: ms(14),
   },
-  citizenHandle: { fontSize: fs(12), color: C.textMuted, marginTop: vs(1) },
+  citizenHandle: { fontFamily: F.regular, fontSize: fs(12), color: C.textMuted, marginTop: vs(1) },
   messagePill: { paddingVertical: vs(6), paddingHorizontal: ms(14), borderRadius: ms(20), backgroundColor: C.accent },
-  messagePillText: { fontSize: fs(13), fontWeight: '700', color: '#FFFFFF' },
+  messagePillText: { fontSize: fs(13), fontFamily: F.bold, color: '#FFFFFF' },
 
   // Popup sheets (View archive / View blocked users)
   sheetBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
@@ -643,8 +644,8 @@ const makeStyles = (C) => StyleSheet.create({
   },
   sheetHandle: { width: ms(36), height: vs(4), borderRadius: ms(2), backgroundColor: C.border, alignSelf: 'center', marginBottom: vs(12) },
   sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: vs(8) },
-  sheetTitle:  { fontSize: fs(16), fontWeight: '800', color: C.textPrimary },
+  sheetTitle:  { letterSpacing: -0.2, fontSize: fs(16), fontFamily: F.extraBold, color: C.textPrimary },
   sheetRow:    { flexDirection: 'row', alignItems: 'center', gap: ms(10), paddingVertical: vs(9) },
   actionPill:  { paddingVertical: vs(6), paddingHorizontal: ms(12), borderRadius: ms(20), backgroundColor: C.surfaceAlt, borderWidth: 0.5, borderColor: C.border },
-  actionPillText: { fontSize: fs(12), fontWeight: '700', color: C.textSecondary },
+  actionPillText: { fontSize: fs(12), fontFamily: F.bold, color: C.textSecondary },
 });

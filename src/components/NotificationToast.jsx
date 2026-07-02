@@ -10,9 +10,10 @@
 
 import React, { useEffect, useRef } from 'react';
 import { Animated, Text, TouchableOpacity, View, StyleSheet } from 'react-native';
+import { PeoliaFonts as F , getPeoliaColors } from '../constants/peoliaTheme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePeoliaScheme } from '../context/ThemeContext';
-import { getPeoliaColors } from '../constants/peoliaTheme';
+
 import { fs, ms, vs, s } from '../utils/peoliaScale';
 import { getNotificationLine, getReactionColor, reactionLabel } from '../utils/notificationText';
 
@@ -74,7 +75,7 @@ export default function NotificationToast({ notification, onDismiss, onPress }) 
           <Text style={st.line} numberOfLines={2}>
             <Text>{prefix}</Text>
             {reaction && (
-              <Text style={{ color: getReactionColor(reaction, C), fontWeight: '800' }}>
+              <Text style={{ color: getReactionColor(reaction, C), fontFamily: F.extraBold }}>
                 {reactionLabel(reaction)}
               </Text>
             )}
@@ -118,8 +119,8 @@ const makeStyles = (C) => StyleSheet.create({
     width: s(30), height: s(30), borderRadius: s(15),
     alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
-  avatarText: { fontSize: fs(11), fontWeight: '800', color: C.textPrimary },
+  avatarText: { fontSize: fs(11), fontFamily: F.extraBold, color: C.textPrimary },
   content: { flex: 1, minWidth: 0 },
-  line: { fontSize: fs(9), fontWeight: '600', color: C.textPrimary, lineHeight: fs(13) },
-  preview: { fontSize: fs(7.5), color: C.textMuted, marginTop: vs(1) },
+  line: { fontSize: fs(9), fontFamily: F.semiBold, color: C.textPrimary, lineHeight: fs(13) },
+  preview: { fontFamily: F.regular, fontSize: fs(7.5), color: C.textMuted, marginTop: vs(1) },
 });

@@ -20,10 +20,11 @@ import {
   Platform,
   StatusBar,
 } from 'react-native';
+import { PeoliaFonts as F , getPeoliaColors } from '../constants/peoliaTheme';
 import { usePeoliaScheme } from '../context/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../components/Icon';
-import { getPeoliaColors } from '../constants/peoliaTheme';
+
 import { fs, ms, vs, s } from '../utils/peoliaScale';
 
 const SUPPORT_EMAIL = 'support@peolia.app';
@@ -140,9 +141,9 @@ const makeStyles = (C) => StyleSheet.create({
     paddingHorizontal: ms(14), paddingTop: vs(10), paddingBottom: vs(8),
   },
   backBtn:  { flexDirection: 'row', alignItems: 'center', gap: ms(4) },
-  headerTitle: { fontSize: fs(18), fontWeight: '800', color: C.textPrimary },
+  headerTitle: { letterSpacing: -0.2, fontSize: fs(18), fontFamily: F.extraBold, color: C.textPrimary },
   sectionHead: {
-    fontSize: fs(12), fontWeight: '800', color: C.textMuted, letterSpacing: 0.6,
+    fontSize: fs(12), fontFamily: F.extraBold, color: C.textMuted, letterSpacing: 0.6,
     textTransform: 'uppercase', marginTop: vs(18), marginBottom: vs(8),
     paddingHorizontal: ms(16),
   },
@@ -152,18 +153,18 @@ const makeStyles = (C) => StyleSheet.create({
     borderRadius: ms(12), paddingHorizontal: ms(14), paddingVertical: vs(12),
   },
   faqQRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: ms(10) },
-  faqQ: { flex: 1, fontSize: fs(14), fontWeight: '700', color: C.textPrimary },
-  faqChevron: { fontSize: fs(20), fontWeight: '700', color: C.textMuted, width: ms(18), textAlign: 'center' },
-  faqA: { fontSize: fs(13), color: C.textSecondary, lineHeight: fs(20), marginTop: vs(8) },
+  faqQ: { flex: 1, fontSize: fs(14), fontFamily: F.bold, color: C.textPrimary },
+  faqChevron: { fontSize: fs(20), fontFamily: F.bold, color: C.textMuted, width: ms(18), textAlign: 'center' },
+  faqA: { fontFamily: F.regular, fontSize: fs(13), color: C.textSecondary, lineHeight: fs(20), marginTop: vs(8) },
   contactCard: {
     marginHorizontal: ms(16), backgroundColor: C.surface, borderWidth: 1, borderColor: C.border,
     borderRadius: ms(14), padding: ms(16), alignItems: 'center',
   },
-  contactText: { fontSize: fs(13), color: C.textSecondary, lineHeight: fs(20), textAlign: 'center' },
+  contactText: { fontFamily: F.regular, fontSize: fs(13), color: C.textSecondary, lineHeight: fs(20), textAlign: 'center' },
   contactBtn: {
     marginTop: vs(14), backgroundColor: C.accent, paddingVertical: vs(12),
     paddingHorizontal: ms(24), borderRadius: ms(30), alignItems: 'center',
   },
-  contactBtnText: { fontSize: fs(14), fontWeight: '800', color: '#FFFFFF' },
-  contactEmail: { fontSize: fs(12), fontWeight: '600', color: C.textMuted, marginTop: vs(10) },
+  contactBtnText: { letterSpacing: -0.2, fontSize: fs(14), fontFamily: F.extraBold, color: '#FFFFFF' },
+  contactEmail: { fontSize: fs(12), fontFamily: F.semiBold, color: C.textMuted, marginTop: vs(10) },
 });

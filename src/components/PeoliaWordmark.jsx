@@ -16,6 +16,7 @@
 import React from 'react';
 import { View, Text } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
+import { PeoliaFonts as F } from '../constants/peoliaTheme';
 
 export default function PeoliaWordmark({ size = 28, color = '#FFFFFF' }) {
   return (
@@ -31,7 +32,7 @@ export default function PeoliaWordmark({ size = 28, color = '#FFFFFF' }) {
       </Svg>
       <Text
         style={{
-          fontWeight: '800',
+          fontFamily: F.extraBold,
           fontSize: size * 0.75,
           color,
           letterSpacing: 0.3,

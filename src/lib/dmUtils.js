@@ -34,7 +34,7 @@ export async function getOrCreateDMConversation(supabase, currentUserId, otherUs
 // Mark the OTHER party's messages read + zero my unread counter on the conversation.
 // Routed through a SECURITY DEFINER RPC — the USING-only RLS UPDATE policies reject
 // direct client writes (42501). currentUserId/isParticipant1 kept for call compat.
-export async function markConversationRead(supabase, conversationId, currentUserId, isParticipant1) {   // eslint-disable-line no-unused-vars
+export async function markConversationRead(supabase, conversationId, currentUserId, isParticipant1) {    
   if (!conversationId) return;
   const { error } = await supabase.rpc('dm_mark_conversation_read', { p_conversation_id: conversationId });
   if (error) console.error('markConversationRead error', error);
@@ -50,7 +50,7 @@ export function getMyUnreadCount(conversation, currentUserId) {
 
 // One-line preview for the conversation list.
 // (currentUserId kept in the signature for future "You: ..." prefixing.)
-export function getLastMessagePreview(lastMsg, currentUserId) {   // eslint-disable-line no-unused-vars
+export function getLastMessagePreview(lastMsg, currentUserId) {    
   if (!lastMsg) return '';
   if (lastMsg.deleted_for_all) return 'Message deleted';
   if (lastMsg.image_path && !lastMsg.body) return '📷 Photo';

@@ -18,9 +18,10 @@ import {
   Platform,
   RefreshControl,
 } from 'react-native';
+import { PeoliaFonts as F , getPeoliaColors } from '../constants/peoliaTheme';
 import { usePeoliaScheme } from '../context/ThemeContext';
 import { supabase } from '../lib/supabase';
-import { getPeoliaColors } from '../constants/peoliaTheme';
+
 import { fs, ms, vs, SCREEN_WIDTH } from '../utils/peoliaScale';
 import SentiTile from '../components/SentiTile';
 import EmptyState from '../components/EmptyState';
@@ -167,14 +168,14 @@ const makeStyles = (C) => StyleSheet.create({
     paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : 0,
   },
   header: { paddingHorizontal: ms(16), paddingTop: vs(12), paddingBottom: vs(4) },
-  title:    { fontSize: fs(22), fontWeight: '800' },
-  subtitle: { fontSize: fs(14), marginTop: vs(2) },
+  title:    { letterSpacing: -0.2, fontSize: fs(22), fontFamily: F.extraBold },
+  subtitle: { fontFamily: F.regular, fontSize: fs(14), marginTop: vs(2) },
   loader:   { flex: 1, alignItems: 'center', justifyContent: 'center' },
   empty: {
     flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: ms(32),
   },
-  emptyIcon: { fontSize: fs(44), marginBottom: vs(14) },
-  emptyText: { fontSize: fs(15), fontWeight: '500', textAlign: 'center', lineHeight: fs(24) },
+  emptyIcon: { fontFamily: F.regular, fontSize: fs(44), marginBottom: vs(14) },
+  emptyText: { fontSize: fs(15), fontFamily: F.semiBold, textAlign: 'center', lineHeight: fs(24) },
   list: { paddingHorizontal: ms(14), paddingTop: vs(12), paddingBottom: vs(24) },
 
   // Card
@@ -203,7 +204,7 @@ const makeStyles = (C) => StyleSheet.create({
     position: 'relative',
     zIndex: 1,
   },
-  wavePillText: { fontSize: fs(11), fontWeight: '700', color: '#FFFFFF', letterSpacing: 0.4 },
+  wavePillText: { fontSize: fs(11), fontFamily: F.bold, color: '#FFFFFF', letterSpacing: 0.4 },
 
   cardBody: {
     flexDirection: 'row',
@@ -213,9 +214,9 @@ const makeStyles = (C) => StyleSheet.create({
     gap: ms(10),
   },
   cardContent: { flex: 1, gap: vs(6) },
-  question:    { fontSize: fs(15), fontWeight: '700', lineHeight: fs(21) },
+  question:    { fontSize: fs(15), fontFamily: F.bold, lineHeight: fs(21) },
   countRow:    { flexDirection: 'row', gap: ms(12) },
-  countText:   { fontSize: fs(12), fontWeight: '500' },
+  countText:   { fontSize: fs(12), fontFamily: F.semiBold },
   unpinBtn:    { padding: ms(4) },
-  unpinIcon:   { fontSize: fs(20) },
+  unpinIcon:   { fontFamily: F.regular, fontSize: fs(20) },
 });

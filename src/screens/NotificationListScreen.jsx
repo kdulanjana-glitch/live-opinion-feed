@@ -19,11 +19,12 @@ import {
   Platform,
   StatusBar,
 } from 'react-native';
+import { PeoliaFonts as F , getPeoliaColors } from '../constants/peoliaTheme';
 import { usePeoliaScheme } from '../context/ThemeContext';
 import { useNotifications } from '../context/NotificationContext';
 import { supabase } from '../lib/supabase';
 import Icon from '../components/Icon';
-import { getPeoliaColors } from '../constants/peoliaTheme';
+
 import { getNotificationLine, getReactionColor, reactionLabel } from '../utils/notificationText';
 import { fs, ms, vs, s } from '../utils/peoliaScale';
 
@@ -160,13 +161,13 @@ export default function NotificationListScreen({ onBack }) {
   const renderText = (n) => {
     const unread = !n.is_read;
     const baseColor = unread ? C.textPrimary : C.textSecondary;
-    const weight = unread ? '600' : '400';
+    const weightFamily = unread ? F.semiBold : F.regular;
     const { prefix, reaction, suffix } = getNotificationLine(n);
     return (
-      <Text style={[st.lineText, { color: baseColor, fontWeight: weight }]}>
+      <Text style={[st.lineText, { color: baseColor, fontFamily: weightFamily }]}>
         {prefix}
         {reaction
-          ? <Text style={{ color: getReactionColor(reaction, C), fontWeight: '700' }}>{reactionLabel(reaction)}</Text>
+          ? <Text style={{ color: getReactionColor(reaction, C), fontFamily: F.bold }}>{reactionLabel(reaction)}</Text>
           : null}
         {suffix}
       </Text>
@@ -244,11 +245,11 @@ const makeStyles = (C) => StyleSheet.create({
     paddingHorizontal: ms(14), paddingTop: vs(10), paddingBottom: vs(8),
   },
   backBtn:  { flexDirection: 'row', alignItems: 'center', gap: ms(4) },
-  headerTitle: { fontSize: fs(18), fontWeight: '800', color: C.textPrimary },
-  markAll:  { fontSize: fs(13), fontWeight: '600', color: C.textMuted },
+  headerTitle: { letterSpacing: -0.2, fontSize: fs(18), fontFamily: F.extraBold, color: C.textPrimary },
+  markAll:  { fontSize: fs(13), fontFamily: F.semiBold, color: C.textMuted },
 
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  empty:  { fontSize: fs(14), color: C.textMuted },
+  empty:  { fontFamily: F.regular, fontSize: fs(14), color: C.textMuted },
 
   listContent: { paddingHorizontal: ms(12), paddingVertical: vs(6), gap: vs(4) },
   item: {
@@ -258,9 +259,9 @@ const makeStyles = (C) => StyleSheet.create({
   itemUnread: { backgroundColor: C.surface, borderLeftWidth: 2, borderLeftColor: C.accent, borderRadius: ms(10) },
   itemRead:   {},
   avatar: { width: s(40), height: s(40), borderRadius: s(20), alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  avatarText: { fontSize: fs(15), fontWeight: '800' },
+  avatarText: { letterSpacing: -0.2, fontSize: fs(15), fontFamily: F.extraBold },
   content: { flex: 1, minWidth: 0 },
-  lineText: { fontSize: fs(14), lineHeight: fs(19) },
-  preview:  { fontSize: fs(12.5), color: C.textMuted, marginTop: vs(2) },
-  time:     { fontSize: fs(11), color: C.textMuted, marginTop: vs(2) },
+  lineText: { fontFamily: F.regular, fontSize: fs(14), lineHeight: fs(19) },
+  preview:  { fontFamily: F.regular, fontSize: fs(12.5), color: C.textMuted, marginTop: vs(2) },
+  time:     { fontFamily: F.regular, fontSize: fs(11), color: C.textMuted, marginTop: vs(2) },
 });

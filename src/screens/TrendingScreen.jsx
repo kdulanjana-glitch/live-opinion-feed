@@ -19,10 +19,11 @@ import {
   Platform,
   RefreshControl,
 } from 'react-native';
+import { PeoliaFonts as F , getPeoliaColors } from '../constants/peoliaTheme';
 import { usePeoliaScheme } from '../context/ThemeContext';
 import { useBlocks } from '../context/BlockContext';
 import { supabase } from '../lib/supabase';
-import { getPeoliaColors } from '../constants/peoliaTheme';
+
 import { fs, ms, vs, SCREEN_WIDTH } from '../utils/peoliaScale';
 import SentiTile from '../components/SentiTile';
 import EmptyState from '../components/EmptyState';
@@ -220,17 +221,17 @@ const makeStyles = (C) => StyleSheet.create({
     alignItems: 'center', paddingHorizontal: ms(16),
     paddingTop: vs(10), paddingBottom: 0,
   },
-  title:         { fontSize: fs(17), fontWeight: '800', color: C.textPrimary },
+  title:         { letterSpacing: -0.2, fontSize: fs(17), fontFamily: F.extraBold, color: C.textPrimary },
   badge: {
     backgroundColor: C.surfaceAlt, borderRadius: ms(20),
     paddingVertical: vs(4), paddingHorizontal: ms(10),
     borderWidth: 0.5, borderColor: C.border,
   },
-  badgeText:     { fontSize: fs(12), fontWeight: '600', color: C.textMuted },
+  badgeText:     { fontSize: fs(12), fontFamily: F.semiBold, color: C.textMuted },
   filterScroll:  { marginTop: vs(10), flexGrow: 0 },
   filterContent: { paddingHorizontal: ms(16), gap: ms(6), paddingBottom: vs(4) },
   filterPill:    { paddingVertical: vs(5), paddingHorizontal: ms(13), borderRadius: ms(20) },
-  filterText:    { fontSize: fs(13), fontWeight: '700' },
+  filterText:    { fontSize: fs(13), fontFamily: F.bold },
   list:          { paddingHorizontal: ms(14), paddingTop: vs(10), gap: vs(8), paddingBottom: vs(20) },
   grid:          { paddingHorizontal: H_PAD, paddingTop: vs(10), paddingBottom: vs(20) },
   card:          { borderRadius: ms(14), borderWidth: 0.5, borderColor: C.border, overflow: 'hidden' },
@@ -242,9 +243,9 @@ const makeStyles = (C) => StyleSheet.create({
   },
   rankBadge1:    { backgroundColor: '#4F46E5' },
   rankBadgeN:    { backgroundColor: 'rgba(255,255,255,0.2)' },
-  rankText:      { fontSize: fs(13), fontWeight: '800', color: '#FFFFFF' },
+  rankText:      { letterSpacing: -0.2, fontSize: fs(13), fontFamily: F.extraBold, color: '#FFFFFF' },
   cardQuestion: {
-    fontSize: fs(14), fontWeight: '800', color: '#FFFFFF',
+    letterSpacing: -0.2, fontSize: fs(14), fontFamily: F.extraBold, color: '#FFFFFF',
     lineHeight: fs(19), position: 'relative', zIndex: 1,
   },
   cardFooter: {
@@ -253,11 +254,11 @@ const makeStyles = (C) => StyleSheet.create({
   },
   cardLeft:      { flexDirection: 'row', alignItems: 'center', gap: ms(6) },
   wavePillSmall: { paddingVertical: vs(3), paddingHorizontal: ms(8), borderRadius: ms(20) },
-  wavePillText:  { fontSize: fs(12), fontWeight: '700', color: '#4338CA' },
-  reactCount:    { fontSize: fs(12), fontWeight: '600', color: C.textMuted },
-  velocity:      { fontSize: fs(12), fontWeight: '700' },
+  wavePillText:  { fontSize: fs(12), fontFamily: F.bold, color: '#4338CA' },
+  reactCount:    { fontSize: fs(12), fontFamily: F.semiBold, color: C.textMuted },
+  velocity:      { fontSize: fs(12), fontFamily: F.bold },
   loader:        { flex: 1, alignItems: 'center', justifyContent: 'center' },
   empty:         { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: ms(32) },
-  emptyIcon:     { fontSize: fs(40), marginBottom: vs(12) },
-  emptyText:     { fontSize: fs(15), fontWeight: '600', textAlign: 'center' },
+  emptyIcon:     { fontFamily: F.regular, fontSize: fs(40), marginBottom: vs(12) },
+  emptyText:     { fontSize: fs(15), fontFamily: F.semiBold, textAlign: 'center' },
 });

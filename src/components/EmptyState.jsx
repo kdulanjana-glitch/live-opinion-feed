@@ -12,8 +12,9 @@ import {
   Text,
   StyleSheet,
 } from 'react-native';
+import { PeoliaFonts as F , getPeoliaColors } from '../constants/peoliaTheme';
 import { usePeoliaScheme } from '../context/ThemeContext';
-import { getPeoliaColors } from '../constants/peoliaTheme';
+
 import { fs, ms, vs } from '../utils/peoliaScale';
 
 export default function EmptyState({ icon, headline, subtext, style }) {
@@ -38,7 +39,7 @@ const makeStyles = (C) => StyleSheet.create({
     gap: vs(10),
     paddingHorizontal: ms(32),
   },
-  icon:     { fontSize: fs(32) },
-  headline: { fontSize: fs(13), fontWeight: '700', color: C.textPrimary, textAlign: 'center' },
-  subtext:  { fontSize: fs(10.5), color: C.textSecondary, textAlign: 'center', lineHeight: fs(16) },
+  icon:     { fontFamily: F.regular, fontSize: fs(32) },
+  headline: { fontSize: fs(13), fontFamily: F.bold, color: C.textPrimary, textAlign: 'center' },
+  subtext:  { fontFamily: F.regular, fontSize: fs(10.5), color: C.textSecondary, textAlign: 'center', lineHeight: fs(16) },
 });

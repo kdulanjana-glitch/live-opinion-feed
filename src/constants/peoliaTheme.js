@@ -86,20 +86,30 @@ export const PeoliaColors = {
   },
 };
 
-// ── Typography — ALL values go through fs() ──
+// ── Font families (Plus Jakarta Sans) ──
+// Loaded in src/app/_layout.tsx via @expo-google-fonts/plus-jakarta-sans.
+// No 500 variant is loaded — map fontWeight '500'/'600' → semiBold.
+export const PeoliaFonts = {
+  regular:   'PlusJakartaSans_400Regular',
+  semiBold:  'PlusJakartaSans_600SemiBold',
+  bold:      'PlusJakartaSans_700Bold',
+  extraBold: 'PlusJakartaSans_800ExtraBold',
+};
+
+// ── Typography — ALL values go through fs(); weights expressed as fontFamily ──
 export const PeoliaTypography = {
-  sentiQuestion:      { fontSize: fs(17), fontWeight: '800' },
-  sentiQuestionSmall: { fontSize: fs(14), fontWeight: '800' },
-  description:        { fontSize: fs(13), fontWeight: '400', lineHeight: fs(20) },
-  wavePill:           { fontSize: fs(12), fontWeight: '700', letterSpacing: 0.4 },
-  sectionLabel:       { fontSize: fs(13), fontWeight: '700' },
-  metaText:           { fontSize: fs(12), fontWeight: '600' },
-  tabLabel:           { fontSize: fs(11), fontWeight: '700' },
-  seeMore:            { fontSize: fs(13), fontWeight: '700' },
-  votePercent:        { fontSize: fs(16), fontWeight: '800' },
-  voteCount:          { fontSize: fs(12), fontWeight: '600' },
-  rankBadge:          { fontSize: fs(12), fontWeight: '800' },
-  velocityText:       { fontSize: fs(12), fontWeight: '700' },
+  sentiQuestion:      { fontSize: fs(17), fontFamily: PeoliaFonts.extraBold, letterSpacing: -0.2 },
+  sentiQuestionSmall: { fontSize: fs(14), fontFamily: PeoliaFonts.extraBold, letterSpacing: -0.2 },
+  description:        { fontSize: fs(13), fontFamily: PeoliaFonts.regular, lineHeight: fs(20) },
+  wavePill:           { fontSize: fs(12), fontFamily: PeoliaFonts.bold, letterSpacing: 0.4 },
+  sectionLabel:       { fontSize: fs(13), fontFamily: PeoliaFonts.bold },
+  metaText:           { fontSize: fs(12), fontFamily: PeoliaFonts.semiBold },
+  tabLabel:           { fontSize: fs(11), fontFamily: PeoliaFonts.bold },
+  seeMore:            { fontSize: fs(13), fontFamily: PeoliaFonts.bold },
+  votePercent:        { fontSize: fs(16), fontFamily: PeoliaFonts.extraBold, letterSpacing: -0.2 },
+  voteCount:          { fontSize: fs(12), fontFamily: PeoliaFonts.semiBold },
+  rankBadge:          { fontSize: fs(12), fontFamily: PeoliaFonts.extraBold, letterSpacing: -0.2 },
+  velocityText:       { fontSize: fs(12), fontFamily: PeoliaFonts.bold },
 };
 
 // ── Spacing — ALL values go through ms() or s() ──

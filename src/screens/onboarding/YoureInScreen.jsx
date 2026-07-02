@@ -15,9 +15,10 @@ import {
   TouchableOpacity,
   StyleSheet,
 } from 'react-native';
+import { PeoliaFonts as F , getPeoliaColors } from '../../constants/peoliaTheme';
 import { usePeoliaScheme } from '../../context/ThemeContext';
 import { supabase } from '../../lib/supabase';
-import { getPeoliaColors } from '../../constants/peoliaTheme';
+
 import { fs, ms, vs, s } from '../../utils/peoliaScale';
 
 export default function YoureInScreen({ onDone, userId }) {
@@ -59,14 +60,14 @@ const makeStyles = (C) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  step:  { fontSize: fs(10), color: C.textMuted },
-  emoji: { fontSize: fs(72), marginTop: vs(16) },
+  step:  { fontFamily: F.regular, fontSize: fs(10), color: C.textMuted },
+  emoji: { fontFamily: F.regular, fontSize: fs(72), marginTop: vs(16) },
   title: {
-    fontSize: fs(26), fontWeight: '800', color: C.textPrimary,
+    letterSpacing: -0.2, fontSize: fs(26), fontFamily: F.extraBold, color: C.textPrimary,
     marginTop: vs(16), textAlign: 'center',
   },
   body: {
-    fontSize: fs(13), color: C.textSecondary, textAlign: 'center',
+    fontFamily: F.regular, fontSize: fs(13), color: C.textSecondary, textAlign: 'center',
     lineHeight: fs(20), marginTop: vs(10), paddingHorizontal: ms(32),
   },
   enterBtn: {
@@ -78,5 +79,5 @@ const makeStyles = (C) => StyleSheet.create({
     marginTop: vs(32),
     alignItems: 'center',
   },
-  enterText: { fontSize: fs(14), fontWeight: '800', color: '#FFFFFF' },
+  enterText: { letterSpacing: -0.2, fontSize: fs(14), fontFamily: F.extraBold, color: '#FFFFFF' },
 });

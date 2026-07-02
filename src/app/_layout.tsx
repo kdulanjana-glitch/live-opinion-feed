@@ -3,6 +3,13 @@ import { Stack } from 'expo-router';
 import { useEffect } from 'react';
 import { LogBox } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import {
+  useFonts,
+  PlusJakartaSans_400Regular,
+  PlusJakartaSans_600SemiBold,
+  PlusJakartaSans_700Bold,
+  PlusJakartaSans_800ExtraBold,
+} from '@expo-google-fonts/plus-jakarta-sans';
 import ErrorBoundary from '../components/ErrorBoundary';
 import AppLockGate from '../components/AppLockGate';
 import { ThemeProvider } from '../context/ThemeContext';
@@ -18,6 +25,13 @@ LogBox.ignoreLogs(['SafeAreaView has been deprecated']);
 const processedCodes = new Set<string>();
 
 export default function Layout() {
+  const [fontsLoaded] = useFonts({
+    PlusJakartaSans_400Regular,
+    PlusJakartaSans_600SemiBold,
+    PlusJakartaSans_700Bold,
+    PlusJakartaSans_800ExtraBold,
+  });
+
   useEffect(() => {
     // Handle deep-link auth callbacks (password reset, magic link, etc.)
     // Supabase PKCE flow sends:  liveopinionfeed://auth?code=AUTHORIZATION_CODE
@@ -44,6 +58,10 @@ export default function Layout() {
 
     return () => sub.remove();
   }, []);
+
+  // Hold render until Plus Jakarta Sans is ready so text doesn't flash the
+  // system font then reflow.
+  if (!fontsLoaded) return null;
 
   return (
     <SafeAreaProvider>

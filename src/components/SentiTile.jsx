@@ -18,8 +18,9 @@ import {
   Image,
   StyleSheet,
 } from 'react-native';
+import { PeoliaFonts as F , getPeoliaColors, WaveColors } from '../constants/peoliaTheme';
 import { usePeoliaScheme } from '../context/ThemeContext';
-import { getPeoliaColors, WaveColors } from '../constants/peoliaTheme';
+
 import { fs, ms, vs } from '../utils/peoliaScale';
 
 const WAVE_EMOJIS = {
@@ -88,11 +89,11 @@ const makeStyles = (C) => StyleSheet.create({
     borderRadius: ms(20), paddingVertical: vs(4), paddingHorizontal: ms(10),
     alignSelf: 'flex-start', maxWidth: '82%',
   },
-  wavePillText: { fontSize: fs(12), fontWeight: '700', color: '#FFFFFF', letterSpacing: 0.3 },
+  wavePillText: { fontSize: fs(12), fontFamily: F.bold, color: '#FFFFFF', letterSpacing: 0.3 },
   unpinBtn: {
     width: ms(30), height: ms(30), borderRadius: ms(15),
     backgroundColor: 'rgba(0,0,0,0.40)', alignItems: 'center', justifyContent: 'center',
   },
-  unpinIcon: { fontSize: fs(15) },
-  question:  { fontSize: fs(17), fontWeight: '800', color: '#FFFFFF', lineHeight: fs(22), marginTop: vs(8) },
+  unpinIcon: { fontFamily: F.regular, fontSize: fs(15) },
+  question:  { letterSpacing: -0.2, fontSize: fs(17), fontFamily: F.extraBold, color: '#FFFFFF', lineHeight: fs(22), marginTop: vs(8) },
 });

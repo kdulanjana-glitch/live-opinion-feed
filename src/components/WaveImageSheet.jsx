@@ -23,10 +23,11 @@ import {
   Modal,
   Image,
 } from 'react-native';
+import { PeoliaFonts as F , getPeoliaColors } from '../constants/peoliaTheme';
 import { usePeoliaScheme } from '../context/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../lib/supabase';
-import { getPeoliaColors } from '../constants/peoliaTheme';
+
 import { fs, ms, vs, SCREEN_WIDTH, SCREEN_HEIGHT } from '../utils/peoliaScale';
 
 const PRESET_FOLDER = 'presets';
@@ -165,20 +166,20 @@ const makeStyles = (C) => StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     marginBottom: vs(12),
   },
-  title:   { fontSize: fs(18), fontWeight: '700', color: C.textPrimary },
-  closeX:  { fontSize: fs(18), fontWeight: '700', color: C.textMuted, paddingHorizontal: ms(4) },
+  title:   { fontSize: fs(18), fontFamily: F.bold, color: C.textPrimary },
+  closeX:  { fontSize: fs(18), fontFamily: F.bold, color: C.textMuted, paddingHorizontal: ms(4) },
   galleryBtn: {
     flexDirection: 'row', alignItems: 'center', gap: ms(10),
     backgroundColor: C.surfaceAlt, borderWidth: 0.5, borderColor: C.border,
     borderRadius: ms(14), paddingVertical: vs(13), paddingHorizontal: ms(14),
     marginBottom: vs(18),
   },
-  galleryIcon:    { fontSize: fs(20) },
-  galleryLabel:   { flex: 1, fontSize: fs(16), fontWeight: '600', color: C.textPrimary },
-  galleryChevron: { fontSize: fs(22), fontWeight: '700', color: C.textMuted },
-  sectionLabel:   { fontSize: fs(14), fontWeight: '700', color: C.textSecondary, marginBottom: vs(10) },
+  galleryIcon:    { fontFamily: F.regular, fontSize: fs(20) },
+  galleryLabel:   { flex: 1, fontSize: fs(16), fontFamily: F.semiBold, color: C.textPrimary },
+  galleryChevron: { fontSize: fs(22), fontFamily: F.bold, color: C.textMuted },
+  sectionLabel:   { fontSize: fs(14), fontFamily: F.bold, color: C.textSecondary, marginBottom: vs(10) },
   stateBox:       { paddingVertical: vs(28), alignItems: 'center', justifyContent: 'center' },
-  emptyText:      { fontSize: fs(14), lineHeight: fs(21), color: C.textMuted, textAlign: 'center' },
+  emptyText:      { fontFamily: F.regular, fontSize: fs(14), lineHeight: fs(21), color: C.textMuted, textAlign: 'center' },
   // Definite pixel cap gives the ScrollView a bounded, scrollable box so the
   // thumbnails render on-screen instead of overflowing past the device edges.
   grid:           { maxHeight: Math.round(SCREEN_HEIGHT * 0.5) },

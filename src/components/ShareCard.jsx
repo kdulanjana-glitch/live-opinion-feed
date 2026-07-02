@@ -16,7 +16,7 @@
 import React, { forwardRef } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Svg, { Defs, LinearGradient as SvgLinearGradient, Stop, Rect } from 'react-native-svg';
-import { WaveColors } from '../constants/peoliaTheme';
+import { WaveColors, PeoliaFonts as F } from '../constants/peoliaTheme';
 import PeoliaWordmark from './PeoliaWordmark';
 
 const WAVE_EMOJIS = {
@@ -96,7 +96,7 @@ const ShareCard = forwardRef(function ShareCard({ senti }, ref) {
               alignSelf: 'flex-start',
             }}
           >
-            <Text style={{ fontSize: 30, fontWeight: '700', color: '#FFFFFF', letterSpacing: 1.5 }}>
+            <Text style={{ fontSize: 30, fontFamily: F.bold, color: '#FFFFFF', letterSpacing: 1.5 }}>
               {`${WAVE_EMOJIS[wave] ?? '🌊'} ${String(wave).toUpperCase()} WAVE`}
             </Text>
           </View>
@@ -107,7 +107,8 @@ const ShareCard = forwardRef(function ShareCard({ senti }, ref) {
           <Text
             style={{
               fontSize: questionFontSize,
-              fontWeight: '800',
+              fontFamily: F.extraBold,
+              letterSpacing: -0.2,
               color: '#FFFFFF',
               lineHeight: questionFontSize * 1.2,
             }}
@@ -131,10 +132,10 @@ const ShareCard = forwardRef(function ShareCard({ senti }, ref) {
                     ...(key === winner ? { borderWidth: 6, borderColor: '#4ADE80' } : null),
                   }}
                 >
-                  <Text style={{ fontSize: 64, fontWeight: '800', color: '#FFFFFF' }}>
+                  <Text style={{ fontSize: 64, fontFamily: F.extraBold, letterSpacing: -0.2, color: '#FFFFFF' }}>
                     {results[key]?.pct ?? 0}%
                   </Text>
-                  <Text style={{ fontSize: 30, fontWeight: '600', color: 'rgba(255,255,255,0.7)' }}>
+                  <Text style={{ fontSize: 30, fontFamily: F.semiBold, color: 'rgba(255,255,255,0.7)' }}>
                     {label}
                   </Text>
                 </View>
@@ -157,7 +158,7 @@ const ShareCard = forwardRef(function ShareCard({ senti }, ref) {
 
         {/* Footer */}
         <View style={{ position: 'absolute', left: 72, right: 72, bottom: 72 }}>
-          <Text style={{ fontSize: 38, fontWeight: '700', color: '#FFFFFF', textAlign: 'center' }}>
+          <Text style={{ fontSize: 38, fontFamily: F.bold, color: '#FFFFFF', textAlign: 'center' }}>
             What do you think? Vote on Peolia
           </Text>
         </View>

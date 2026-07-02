@@ -36,6 +36,7 @@ import {
   Modal,
   Alert,
 } from 'react-native';
+import { PeoliaFonts as F , getPeoliaColors } from '../constants/peoliaTheme';
 import { usePeoliaScheme } from '../context/ThemeContext';
 import { useNotifications } from '../context/NotificationContext';
 import { useBlocks } from '../context/BlockContext';
@@ -46,7 +47,7 @@ import SentiTile from '../components/SentiTile';
 import PersonTile from '../components/PersonTile';
 import EmptyState from '../components/EmptyState';
 import { GridSkeleton } from '../components/Skeletons';
-import { getPeoliaColors } from '../constants/peoliaTheme';
+
 import { fs, ms, vs, s, SCREEN_WIDTH } from '../utils/peoliaScale';
 
 const GENDER_LABELS = {
@@ -837,7 +838,7 @@ function CitizenDNAChart({ data, color, gridColor, size }) {
       {data.map((d, i) => {
         const lp = getPoint(i, RADIUS + 15);
         return (
-          <SvgText key={i} x={lp.x} y={lp.y} textAnchor="middle" fontSize="7" fill="#6B7280" fontWeight="600">
+          <SvgText key={i} x={lp.x} y={lp.y} textAnchor="middle" fontSize="7" fill="#6B7280" fontFamily={F.semiBold}>
             {WAVE_EMOJIS[d.wave] ?? '🌊'} {d.wave}
           </SvgText>
         );
@@ -857,11 +858,11 @@ const makeStyles = (C) => StyleSheet.create({
     alignItems: 'center', paddingHorizontal: ms(16), paddingTop: vs(10), paddingBottom: 0,
   },
   backBtn:     { flexDirection: 'row', alignItems: 'center', gap: ms(6) },
-  backIcon:    { fontSize: fs(20), color: C.textPrimary },                 // was fs(18) ×1.10
-  headerTitle: { fontSize: fs(18), fontWeight: '800', color: C.textPrimary }, // was fs(16) ×1.10
+  backIcon:    { fontFamily: F.regular, fontSize: fs(20), color: C.textPrimary },                 // was fs(18) ×1.10
+  headerTitle: { letterSpacing: -0.2, fontSize: fs(18), fontFamily: F.extraBold, color: C.textPrimary }, // was fs(16) ×1.10
   infoBtn:     { padding: ms(4) },
-  infoIcon:    { fontSize: fs(22), color: C.textSecondary },
-  settingsIcon: { fontSize: fs(22) },                                       // was fs(20) ×1.10
+  infoIcon:    { fontFamily: F.regular, fontSize: fs(22), color: C.textSecondary },
+  settingsIcon: { fontFamily: F.regular, fontSize: fs(22) },                                       // was fs(20) ×1.10
   // Header right-side actions (notification icon + ⋮)
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: ms(8) },
   // ⋮ header button
@@ -871,9 +872,9 @@ const makeStyles = (C) => StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   // Own-profile avatar-row name/bio (compact)
-  ownName:   { fontSize: fs(17), fontWeight: '800', color: C.textPrimary },
-  ownHandle: { fontSize: fs(13), color: C.textMuted, marginTop: vs(1) },
-  bioInline: { fontSize: fs(13), color: C.textSecondary, marginTop: vs(3), lineHeight: fs(18) },
+  ownName:   { letterSpacing: -0.2, fontSize: fs(17), fontFamily: F.extraBold, color: C.textPrimary },
+  ownHandle: { fontFamily: F.regular, fontSize: fs(13), color: C.textMuted, marginTop: vs(1) },
+  bioInline: { fontFamily: F.regular, fontSize: fs(13), color: C.textSecondary, marginTop: vs(3), lineHeight: fs(18) },
   // Notification icon button + unread badge
   notifBtn: {
     width: s(36), height: s(36), borderRadius: s(18),
@@ -886,7 +887,7 @@ const makeStyles = (C) => StyleSheet.create({
     backgroundColor: '#EF4444', borderWidth: 1.5, borderColor: C.bg,
     alignItems: 'center', justifyContent: 'center', paddingHorizontal: ms(3),
   },
-  notifBadgeText: { fontSize: fs(9), color: '#FFFFFF', fontWeight: '800', textAlign: 'center' },
+  notifBadgeText: { fontSize: fs(9), color: '#FFFFFF', fontFamily: F.extraBold, textAlign: 'center' },
   // Standalone Citizen DNA card (between avatar row and stats)
   dnaCard: {
     marginHorizontal: ms(12), marginTop: vs(18), marginBottom: vs(10),
@@ -894,9 +895,9 @@ const makeStyles = (C) => StyleSheet.create({
     borderRadius: ms(11), paddingVertical: vs(8), paddingHorizontal: ms(10),
   },
   dnaCardHeader:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: vs(6) },
-  dnaCardTitle:   { fontSize: fs(13), fontWeight: '700', color: C.textPrimary },
+  dnaCardTitle:   { fontSize: fs(13), fontFamily: F.bold, color: C.textPrimary },
   dnaCardRight:   { flexDirection: 'row', alignItems: 'center', gap: ms(6) },
-  dnaCardPrivacy: { fontSize: fs(6.5), color: C.textMuted },
+  dnaCardPrivacy: { fontFamily: F.regular, fontSize: fs(6.5), color: C.textMuted },
   dnaToggle:  { width: ms(26), height: vs(14), borderRadius: vs(7), flexDirection: 'row', alignItems: 'center', paddingHorizontal: ms(2) },
   dnaToggleOn:  { backgroundColor: C.accent },
   dnaToggleOff: { backgroundColor: C.border },
@@ -915,34 +916,34 @@ const makeStyles = (C) => StyleSheet.create({
   avatarImg: { width: '100%', height: '100%' },   // fill parent circle
   viewerBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.93)', alignItems: 'center', justifyContent: 'center' },
   viewerImg:      { width: '92%', height: '72%' },
-  avatarText:  { fontSize: fs(22), fontWeight: '800', color: '#FFFFFF' },   // was fs(20) ×1.10
+  avatarText:  { letterSpacing: -0.2, fontSize: fs(22), fontFamily: F.extraBold, color: '#FFFFFF' },   // was fs(20) ×1.10
   nameBlock:   { flex: 1 },
-  displayName: { fontSize: fs(18), fontWeight: '800', color: C.textPrimary }, // was fs(16) ×1.10
-  username:    { fontSize: fs(14), fontWeight: '500', color: C.textMuted },   // was fs(13) ×1.10
+  displayName: { letterSpacing: -0.2, fontSize: fs(18), fontFamily: F.extraBold, color: C.textPrimary }, // was fs(16) ×1.10
+  username:    { fontSize: fs(14), fontFamily: F.semiBold, color: C.textMuted },   // was fs(13) ×1.10
   actionButtons: { flexDirection: 'column', gap: vs(6), alignItems: 'flex-end', flexShrink: 0 },
   editBtn: {
     flexDirection: 'row', alignItems: 'center', gap: ms(5),
     paddingVertical: vs(6), paddingHorizontal: ms(16), borderRadius: ms(20),
     backgroundColor: C.accent,
   },
-  editIcon:    { fontSize: fs(12) },
-  editText:    { fontSize: fs(14), fontWeight: '700', color: '#FFFFFF' },
+  editIcon:    { fontFamily: F.regular, fontSize: fs(12) },
+  editText:    { fontSize: fs(14), fontFamily: F.bold, color: '#FFFFFF' },
   logoutBtn: {
     paddingVertical: vs(6), paddingHorizontal: ms(16), borderRadius: ms(20),
     borderWidth: 1, borderColor: C.nahText, backgroundColor: 'transparent',
   },
-  logoutText:  { fontSize: fs(13), fontWeight: '700', color: C.nahText },
+  logoutText:  { fontSize: fs(13), fontFamily: F.bold, color: C.nahText },
   followBtn:   { paddingVertical: vs(5), paddingHorizontal: ms(14), borderRadius: ms(20), backgroundColor: C.accent },
   followingBtn: { backgroundColor: C.surfaceAlt, borderWidth: 0.5, borderColor: C.border },
-  followText:   { fontSize: fs(14), fontWeight: '700', color: '#FFFFFF' },      // was fs(13) ×1.10
+  followText:   { fontSize: fs(14), fontFamily: F.bold, color: '#FFFFFF' },      // was fs(13) ×1.10
   followingText: { color: C.textSecondary },
   askBtn: {
     paddingVertical: vs(4), paddingHorizontal: ms(12), borderRadius: ms(20),
     backgroundColor: C.surfaceAlt, borderWidth: 0.5, borderColor: C.border,
   },
-  askText:     { fontSize: fs(14), fontWeight: '700', color: C.textSecondary }, // was fs(13) ×1.10
+  askText:     { fontSize: fs(14), fontFamily: F.bold, color: C.textSecondary }, // was fs(13) ×1.10
   bioText: {
-    fontSize: fs(14), fontWeight: '400', color: C.textSecondary,
+    fontSize: fs(14), fontFamily: F.regular, color: C.textSecondary,
     lineHeight: fs(20), paddingHorizontal: ms(16), paddingTop: vs(8),
   },
   // Blocked-citizen notice (replaces stats/DNA/tabs on a blocked profile)
@@ -951,21 +952,21 @@ const makeStyles = (C) => StyleSheet.create({
     alignItems: 'center', paddingVertical: vs(28), paddingHorizontal: ms(20),
     backgroundColor: C.surface, borderWidth: 0.5, borderColor: C.border, borderRadius: ms(14),
   },
-  blockedTitle: { fontSize: fs(16), fontWeight: '800', color: C.textPrimary, marginTop: vs(10) },
+  blockedTitle: { letterSpacing: -0.2, fontSize: fs(16), fontFamily: F.extraBold, color: C.textPrimary, marginTop: vs(10) },
   blockedBody: {
-    fontSize: fs(13), fontWeight: '500', color: C.textMuted,
+    fontSize: fs(13), fontFamily: F.semiBold, color: C.textMuted,
     textAlign: 'center', lineHeight: fs(19), marginTop: vs(6),
   },
   unblockBtn: {
     marginTop: vs(16), paddingVertical: vs(8), paddingHorizontal: ms(24),
     borderRadius: ms(20), backgroundColor: C.surfaceAlt, borderWidth: 0.5, borderColor: C.border,
   },
-  unblockText: { fontSize: fs(14), fontWeight: '700', color: C.textSecondary },
+  unblockText: { fontSize: fs(14), fontFamily: F.bold, color: C.textSecondary },
   statsRow:    { flexDirection: 'row', paddingHorizontal: ms(16), paddingTop: vs(12) },
   statItem:    { flex: 1, alignItems: 'center', gap: vs(2) },
-  statValue:   { fontSize: fs(19), fontWeight: '800', color: C.textPrimary },   // was fs(17) ×1.10
+  statValue:   { letterSpacing: -0.2, fontSize: fs(19), fontFamily: F.extraBold, color: C.textPrimary },   // was fs(17) ×1.10
   statValueActive: { color: C.accent },
-  statLabel:   { fontSize: fs(12), fontWeight: '600', color: C.textMuted },     // was fs(11) ×1.10
+  statLabel:   { fontSize: fs(12), fontFamily: F.semiBold, color: C.textMuted },     // was fs(11) ×1.10
   statLabelActive: { color: C.accent },
   statUnderline:       { marginTop: vs(4), height: vs(2), width: ms(22), borderRadius: ms(2), backgroundColor: 'transparent' },
   statUnderlineActive: { backgroundColor: C.accent },
@@ -973,10 +974,10 @@ const makeStyles = (C) => StyleSheet.create({
   tabLoader:   { paddingVertical: vs(36), alignItems: 'center', justifyContent: 'center' },
   dnaSection:  { paddingHorizontal: ms(16), paddingTop: vs(12) },
   dnaSectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: vs(6) },
-  dnaSectionTitle:  { fontSize: fs(14), fontWeight: '700', color: C.textPrimary }, // was fs(13) ×1.10
+  dnaSectionTitle:  { fontSize: fs(14), fontFamily: F.bold, color: C.textPrimary }, // was fs(13) ×1.10
   dnaPrivacyRow:    { flexDirection: 'row', alignItems: 'center', gap: ms(4) },
-  dnaPrivacyIcon:   { fontSize: fs(13) },                                         // was fs(12) ×1.10
-  dnaPrivacyText:   { fontSize: fs(12), fontWeight: '600', color: C.textMuted },  // was fs(11) ×1.10
+  dnaPrivacyIcon:   { fontFamily: F.regular, fontSize: fs(13) },                                         // was fs(12) ×1.10
+  dnaPrivacyText:   { fontSize: fs(12), fontFamily: F.semiBold, color: C.textMuted },  // was fs(11) ×1.10
   dnaChart:         { borderRadius: ms(14), padding: ms(8), borderWidth: 0.5 },
   detailsCard: {
     marginHorizontal: ms(16), marginTop: vs(12), marginBottom: vs(4),
@@ -986,22 +987,22 @@ const makeStyles = (C) => StyleSheet.create({
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingVertical: vs(10), borderBottomWidth: 0.5, borderBottomColor: C.border,
   },
-  detailLabel:     { fontSize: fs(13), fontWeight: '600', color: C.textMuted },
+  detailLabel:     { fontSize: fs(13), fontFamily: F.semiBold, color: C.textMuted },
   detailValueWrap: { flexDirection: 'row', alignItems: 'center', gap: ms(8) },
-  detailValue:     { fontSize: fs(14), fontWeight: '600', color: C.textPrimary },
-  detailVis:       { fontSize: fs(11), fontWeight: '600', color: C.textMuted },
+  detailValue:     { fontSize: fs(14), fontFamily: F.semiBold, color: C.textPrimary },
+  detailVis:       { fontSize: fs(11), fontFamily: F.semiBold, color: C.textMuted },
   gridSection: { paddingHorizontal: ms(16), paddingTop: vs(10), paddingBottom: vs(24) },
   gridHeader:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: vs(8) },
-  gridTitle:   { fontSize: fs(14), fontWeight: '700', color: C.textPrimary },   // was fs(13) ×1.10
-  gridCount:   { fontSize: fs(13), fontWeight: '600', color: C.textMuted },     // was fs(12) ×1.10
-  gridEmpty:   { fontSize: fs(15), textAlign: 'center', paddingVertical: vs(24) }, // was fs(14) ×1.10
+  gridTitle:   { fontSize: fs(14), fontFamily: F.bold, color: C.textPrimary },   // was fs(13) ×1.10
+  gridCount:   { fontSize: fs(13), fontFamily: F.semiBold, color: C.textMuted },     // was fs(12) ×1.10
+  gridEmpty:   { fontFamily: F.regular, fontSize: fs(15), textAlign: 'center', paddingVertical: vs(24) }, // was fs(14) ×1.10
   // EmptyState defaults to flex:1; inside this ScrollView section we need a
   // content-sized block instead, so override flex and give it vertical room.
   gridEmptyState: { flex: 0, paddingVertical: vs(32) },
   grid:        { flexDirection: 'row', flexWrap: 'wrap', gap: GRID_GAP },
   // Tile: square, text centered and filling the box
   tile:        { borderRadius: ms(10), overflow: 'hidden', justifyContent: 'center', alignItems: 'center', padding: ms(6) },
-  tileText:    { fontSize: fs(10), fontWeight: '700', color: 'rgba(255,255,255,0.92)', lineHeight: fs(14), textAlign: 'center' }, // was fs(9) ×1.10
+  tileText:    { fontSize: fs(10), fontFamily: F.bold, color: 'rgba(255,255,255,0.92)', lineHeight: fs(14), textAlign: 'center' }, // was fs(9) ×1.10
   // ⋮ dropdown menu
   menuCard: {
     position: 'absolute', top: vs(58), right: ms(14), width: ms(190),
@@ -1009,6 +1010,6 @@ const makeStyles = (C) => StyleSheet.create({
     paddingVertical: vs(5),
   },
   menuItem:    { flexDirection: 'row', alignItems: 'center', gap: ms(10), paddingVertical: vs(12), paddingHorizontal: ms(14) },
-  menuLabel:   { fontSize: fs(14), fontWeight: '600', color: C.textPrimary },
+  menuLabel:   { fontSize: fs(14), fontFamily: F.semiBold, color: C.textPrimary },
   menuDivider: { height: 0.5, backgroundColor: C.border, marginVertical: vs(3), marginHorizontal: ms(8) },
 });

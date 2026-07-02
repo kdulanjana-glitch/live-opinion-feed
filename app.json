@@ -57,7 +57,8 @@
       "expo-image",
       "expo-image-picker",
       "expo-web-browser",
-      "expo-sharing"
+      "expo-sharing",
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true,

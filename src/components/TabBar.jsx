@@ -10,9 +10,10 @@ import {
   TouchableOpacity,
   StyleSheet,
 } from 'react-native';
+import { PeoliaFonts as F , getPeoliaColors } from '../constants/peoliaTheme';
 import { usePeoliaScheme } from '../context/ThemeContext';
 import { useNotifications } from '../context/NotificationContext';
-import { getPeoliaColors } from '../constants/peoliaTheme';
+
 import { fs, ms, vs, s } from '../utils/peoliaScale';
 
 const TABS = [
@@ -93,10 +94,10 @@ const makeStyles = (C) => StyleSheet.create({
     backgroundColor: '#EF4444', borderWidth: 1.5, borderColor: C.tabBg,
     alignItems: 'center', justifyContent: 'center', paddingHorizontal: ms(2),
   },
-  badgeText: { fontSize: fs(7), color: '#FFFFFF', fontWeight: '800' },
+  badgeText: { fontSize: fs(7), color: '#FFFFFF', fontFamily: F.extraBold },
   tabActive:   { backgroundColor: C.tabActive },
-  icon:        { fontSize: fs(20), color: C.tabInactive },
+  icon:        { fontFamily: F.regular, fontSize: fs(20), color: C.tabInactive },
   iconActive:  { color: '#FFFFFF' },
-  label:       { fontSize: fs(13), fontWeight: '700', color: C.tabInactive },
+  label:       { fontSize: fs(13), fontFamily: F.bold, color: C.tabInactive },
   labelActive: { color: '#FFFFFF' },
 });

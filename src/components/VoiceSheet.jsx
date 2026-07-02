@@ -27,12 +27,13 @@ import {
   KeyboardAvoidingView,
   ActivityIndicator,
 } from 'react-native';
+import { PeoliaFonts as F , getPeoliaColors } from '../constants/peoliaTheme';
 import { usePeoliaScheme } from '../context/ThemeContext';
 import { useBlocks } from '../context/BlockContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../lib/supabase';
 import Icon from './Icon';
-import { getPeoliaColors } from '../constants/peoliaTheme';
+
 import { fs, ms, vs, s, SCREEN_HEIGHT } from '../utils/peoliaScale';
 
 const MAX_LEN = 300;
@@ -520,19 +521,19 @@ const makeStyles = (C) => StyleSheet.create({
   },
   handle: { width: ms(36), height: vs(4), borderRadius: ms(2), alignSelf: 'center', marginTop: vs(10), marginBottom: vs(14) },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: vs(12) },
-  title:    { fontSize: fs(17), fontWeight: '700' },
-  closeBtn: { fontSize: fs(18), padding: ms(4) },
+  title:    { fontSize: fs(17), fontFamily: F.bold },
+  closeBtn: { fontFamily: F.regular, fontSize: fs(18), padding: ms(4) },
 
   // Sort toggle
   sortRow:  { flexDirection: 'row', gap: ms(8), marginBottom: vs(12) },
   sortPill: { paddingVertical: vs(6), paddingHorizontal: ms(16), borderRadius: ms(20) },
   sortPillActive:   { backgroundColor: C.accent },
   sortPillInactive: { backgroundColor: C.surfaceAlt, borderWidth: 0.5, borderColor: C.border },
-  sortText:         { fontSize: fs(12), fontWeight: '700' },
+  sortText:         { fontSize: fs(12), fontFamily: F.bold },
   sortTextActive:   { color: '#FFFFFF' },
   sortTextInactive: { color: C.textMuted },
 
-  empty: { textAlign: 'center', fontSize: fs(14), paddingVertical: vs(24) },
+  empty: { fontFamily: F.regular, textAlign: 'center', fontSize: fs(14), paddingVertical: vs(24) },
   list:  { maxHeight: SCREEN_HEIGHT * 0.46 },
 
   voiceBlock: { marginBottom: vs(14) },
@@ -545,8 +546,8 @@ const makeStyles = (C) => StyleSheet.create({
   avatarSmall:     { width: s(26), height: s(26), borderRadius: s(13) },
   avatarImg:       { width: s(34), height: s(34), borderRadius: s(17) },
   avatarImgSmall:  { width: s(26), height: s(26), borderRadius: s(13) },
-  avatarText:      { fontSize: fs(13), fontWeight: '700' },
-  avatarTextSmall: { fontSize: fs(11), fontWeight: '700' },
+  avatarText:      { fontSize: fs(13), fontFamily: F.bold },
+  avatarTextSmall: { fontSize: fs(11), fontFamily: F.bold },
   rowBody:   { flex: 1 },
 
   pinnedPill: {
@@ -554,40 +555,40 @@ const makeStyles = (C) => StyleSheet.create({
     backgroundColor: C.accent, borderRadius: ms(10), paddingVertical: vs(2), paddingHorizontal: ms(7),
     marginBottom: vs(4),
   },
-  pinnedPillText: { fontSize: fs(9), fontWeight: '800', color: '#FFFFFF' },
+  pinnedPillText: { fontSize: fs(9), fontFamily: F.extraBold, color: '#FFFFFF' },
 
   nameRow:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: ms(8) },
-  displayName: { flex: 1, fontSize: fs(13), fontWeight: '800', color: C.textPrimary },
-  time:        { fontSize: fs(10), color: C.textMuted },
-  handle2:     { fontSize: fs(11), color: C.textMuted, marginTop: vs(1) },
-  voiceText:   { fontSize: fs(14), lineHeight: fs(20), color: C.textPrimary, marginTop: vs(3) },
+  displayName: { letterSpacing: -0.2, flex: 1, fontSize: fs(13), fontFamily: F.extraBold, color: C.textPrimary },
+  time:        { fontFamily: F.regular, fontSize: fs(10), color: C.textMuted },
+  handle2:     { fontFamily: F.regular, fontSize: fs(11), color: C.textMuted, marginTop: vs(1) },
+  voiceText:   { fontFamily: F.regular, fontSize: fs(14), lineHeight: fs(20), color: C.textPrimary, marginTop: vs(3) },
 
   actionRow: { flexDirection: 'row', alignItems: 'center', gap: ms(12), marginTop: vs(6) },
-  replyBtn:  { fontSize: fs(12), fontWeight: '700', color: C.textMuted },
+  replyBtn:  { fontSize: fs(12), fontFamily: F.bold, color: C.textMuted },
   likeBtn:   { flexDirection: 'row', alignItems: 'center', gap: ms(4) },
   dislikeBtn: { flexDirection: 'row', alignItems: 'center', gap: ms(3) },
   heartFilled: {},   // Feather heart is outline; color conveys liked state
-  likeCount: { fontSize: fs(12), fontWeight: '600', color: C.textMuted },
+  likeCount: { fontSize: fs(12), fontFamily: F.semiBold, color: C.textMuted },
 
   // Collapsed placeholder for heavily-disliked voices/replies
   collapsedRow: {
     paddingVertical: vs(8), paddingHorizontal: ms(10),
     backgroundColor: C.surfaceAlt, borderRadius: ms(10), marginBottom: vs(8),
   },
-  collapsedText: { fontSize: fs(9), color: C.textMuted, fontWeight: '600' },
+  collapsedText: { fontSize: fs(9), color: C.textMuted, fontFamily: F.semiBold },
 
   repliesWrap: { marginLeft: ms(34), marginTop: vs(2) },
-  showMore:    { fontSize: fs(12), fontWeight: '700', color: C.accent, marginTop: vs(8) },
+  showMore:    { fontSize: fs(12), fontFamily: F.bold, color: C.accent, marginTop: vs(8) },
 
   replyStrip: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     backgroundColor: C.surfaceAlt, borderRadius: ms(10),
     paddingVertical: vs(7), paddingHorizontal: ms(12), marginBottom: vs(8),
   },
-  replyStripText: { flex: 1, fontSize: fs(12), color: C.textMuted, marginRight: ms(8) },
+  replyStripText: { fontFamily: F.regular, flex: 1, fontSize: fs(12), color: C.textMuted, marginRight: ms(8) },
 
   inputRow: { flexDirection: 'row', gap: ms(10), borderTopWidth: 0.5, paddingTop: vs(12), marginTop: vs(8), alignItems: 'center' },
-  input: { borderWidth: 1, borderRadius: ms(22), paddingHorizontal: ms(16), paddingVertical: vs(10), fontSize: fs(14) },
-  counter: { position: 'absolute', right: ms(14), bottom: vs(-14), fontSize: fs(9), color: C.textMuted },
+  input: { fontFamily: F.regular, borderWidth: 1, borderRadius: ms(22), paddingHorizontal: ms(16), paddingVertical: vs(10), fontSize: fs(14) },
+  counter: { fontFamily: F.regular, position: 'absolute', right: ms(14), bottom: vs(-14), fontSize: fs(9), color: C.textMuted },
   sendBtn: { width: s(42), height: s(42), borderRadius: s(21), alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
 });

@@ -24,12 +24,13 @@ import {
   Platform,
   Image,
 } from 'react-native';
+import { PeoliaFonts as F , getPeoliaColors } from '../constants/peoliaTheme';
 import { usePeoliaScheme } from '../context/ThemeContext';
 import * as ImagePicker from 'expo-image-picker';
 import { decode } from 'base64-arraybuffer';
 import { supabase } from '../lib/supabase';
 import WaveImageSheet from '../components/WaveImageSheet';
-import { getPeoliaColors } from '../constants/peoliaTheme';
+
 import { fs as fsBase, ms, vs } from '../utils/peoliaScale';
 
 // FloatScreen text + icons run 50% larger than the rest of the app (user request).
@@ -391,28 +392,28 @@ const makeStyles = (C) => StyleSheet.create({
     alignItems: 'center', paddingHorizontal: ms(16), paddingTop: vs(10), paddingBottom: vs(6),
   },
   backBtn:  { flexDirection: 'row', alignItems: 'center', gap: ms(6) },
-  backIcon: { fontSize: fs(20), color: C.textPrimary },                 // was fs(18) ×1.10
-  headerTitle: { fontSize: fs(17), fontWeight: '700', color: C.textPrimary }, // was fs(15) ×1.10
+  backIcon: { fontFamily: F.regular, fontSize: fs(20), color: C.textPrimary },                 // was fs(18) ×1.10
+  headerTitle: { fontSize: fs(17), fontFamily: F.bold, color: C.textPrimary }, // was fs(15) ×1.10
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: ms(6) },
   previewBtn: {
     paddingVertical: vs(5), paddingHorizontal: ms(12), borderRadius: ms(20),
     backgroundColor: C.surfaceAlt, borderWidth: 0.5, borderColor: C.border,
   },
-  previewText: { fontSize: fs(14), fontWeight: '700', color: C.textSecondary }, // was fs(13) ×1.10
+  previewText: { fontSize: fs(14), fontFamily: F.bold, color: C.textSecondary }, // was fs(13) ×1.10
   floatBtn: { paddingVertical: vs(6), paddingHorizontal: ms(16), borderRadius: ms(20), backgroundColor: C.accent },
   floatBtnDisabled: { opacity: 0.5 },
-  floatBtnText: { fontSize: fs(14), fontWeight: '700', color: '#FFFFFF' },      // was fs(13) ×1.10
+  floatBtnText: { fontSize: fs(14), fontFamily: F.bold, color: '#FFFFFF' },      // was fs(13) ×1.10
   scroll: { flex: 1 },
   field: { paddingHorizontal: ms(16), paddingTop: vs(12), gap: vs(4) },
   fieldHeader: {
     flexDirection: 'row', justifyContent: 'space-between',
     alignItems: 'center', marginBottom: vs(4),
   },
-  fieldLabel:    { fontSize: fs(14), fontWeight: '700', color: C.textSecondary }, // was fs(13) ×1.10
-  charCount:     { fontSize: fs(13), fontWeight: '600', color: C.textMuted },     // was fs(12) ×1.10
+  fieldLabel:    { fontSize: fs(14), fontFamily: F.bold, color: C.textSecondary }, // was fs(13) ×1.10
+  charCount:     { fontSize: fs(13), fontFamily: F.semiBold, color: C.textMuted },     // was fs(12) ×1.10
   charCountWarn: { color: '#DC2626' },
   input: {
-    backgroundColor: C.surface, borderWidth: 1, borderColor: C.border,
+    fontFamily: F.regular, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border,
     borderRadius: ms(12), paddingHorizontal: ms(12), paddingVertical: vs(10),
     fontSize: fs(15), lineHeight: fs(21), color: C.textPrimary, textAlignVertical: 'top', // was fs(14) ×1.10
   },
@@ -424,7 +425,7 @@ const makeStyles = (C) => StyleSheet.create({
   waveContent:  { gap: ms(8), paddingBottom: vs(4) },
   // Wave pills ~15% smaller
   wavePill:     { paddingVertical: vs(5), paddingHorizontal: ms(14), borderRadius: ms(18) },
-  wavePillText: { fontSize: fs(12), fontWeight: '700' },
+  wavePillText: { fontSize: fs(12), fontFamily: F.bold },
   mediaRow: {
     flexDirection: 'row', gap: ms(12),
     paddingHorizontal: ms(16), paddingTop: vs(12), paddingBottom: vs(24),
@@ -435,8 +436,8 @@ const makeStyles = (C) => StyleSheet.create({
     paddingVertical: vs(9), paddingHorizontal: ms(14),
     borderRadius: ms(11), borderWidth: 0.5,
   },
-  mediaBtnIcon:  { fontSize: fs(22) },
-  mediaBtnLabel: { fontSize: fs(12), fontWeight: '600' },
+  mediaBtnIcon:  { fontFamily: F.regular, fontSize: fs(22) },
+  mediaBtnLabel: { fontSize: fs(12), fontFamily: F.semiBold },
   imageThumbWrap: { position: 'relative' },
   imageThumb: {
     width: ms(72), height: ms(128),                               // 9:16, matches crop aspect
@@ -448,7 +449,7 @@ const makeStyles = (C) => StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.72)',
     alignItems: 'center', justifyContent: 'center',
   },
-  imageRemoveText: { fontSize: fs(12), fontWeight: '700', color: '#FFFFFF' },
+  imageRemoveText: { fontSize: fs(12), fontFamily: F.bold, color: '#FFFFFF' },
   // Preview
   previewCard: { flex: 1, position: 'relative', padding: ms(16), justifyContent: 'center' },
   previewOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.48)' },
@@ -457,10 +458,10 @@ const makeStyles = (C) => StyleSheet.create({
     paddingVertical: vs(4), paddingHorizontal: ms(14), alignSelf: 'flex-start',
     marginBottom: vs(12), position: 'relative', zIndex: 1,
   },
-  previewWaveText:  { fontSize: fs(14), fontWeight: '700', color: '#FFFFFF', letterSpacing: 0.4 }, // was fs(13) ×1.10
-  previewQuestion:  { fontSize: fs(22), fontWeight: '800', color: '#FFFFFF', lineHeight: fs(27), marginBottom: vs(10), position: 'relative', zIndex: 1 }, // was fs(20) ×1.10
-  previewDesc:      { fontSize: fs(15), lineHeight: fs(21), color: 'rgba(255,255,255,0.72)', position: 'relative', zIndex: 1 }, // was fs(14) ×1.10
+  previewWaveText:  { fontSize: fs(14), fontFamily: F.bold, color: '#FFFFFF', letterSpacing: 0.4 }, // was fs(13) ×1.10
+  previewQuestion:  { letterSpacing: -0.2, fontSize: fs(22), fontFamily: F.extraBold, color: '#FFFFFF', lineHeight: fs(27), marginBottom: vs(10), position: 'relative', zIndex: 1 }, // was fs(20) ×1.10
+  previewDesc:      { fontFamily: F.regular, fontSize: fs(15), lineHeight: fs(21), color: 'rgba(255,255,255,0.72)', position: 'relative', zIndex: 1 }, // was fs(14) ×1.10
   previewVoteBar:   { flexDirection: 'row', gap: ms(6), marginTop: vs(24), position: 'relative', zIndex: 1 },
   previewVoteBtn:   { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: vs(12), borderRadius: ms(14), backgroundColor: 'rgba(255,255,255,0.15)' },
-  previewVoteEmoji: { fontSize: fs(33) },  // was fs(30) ×1.10
+  previewVoteEmoji: { fontFamily: F.regular, fontSize: fs(33) },  // was fs(30) ×1.10
 });

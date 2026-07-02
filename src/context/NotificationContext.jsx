@@ -33,14 +33,29 @@ export function NotificationProvider({ children }) {
   };
 
   // Sum my unread DM counts across all conversations (which column depends on
-  // whether I'm participant 1 or 2 in each).
+  // whether I'm participant 1 or 2 in each). Conversations the citizen muted
+  // (dm_conversation_prefs.muted_until in the future) don't count toward the badge.
   const fetchDMUnread = async (userId) => {
     if (!userId) { setDmUnreadTotal(0); return; }
-    const { data } = await supabase
-      .from('dm_conversations')
-      .select('participant_1_id, unread_p1, unread_p2')
-      .or(`participant_1_id.eq.${userId},participant_2_id.eq.${userId}`);
+    const [{ data }, prefsRes] = await Promise.all([
+      supabase
+        .from('dm_conversations')
+        .select('id, participant_1_id, unread_p1, unread_p2')
+        .or(`participant_1_id.eq.${userId},participant_2_id.eq.${userId}`),
+      supabase
+        .from('dm_conversation_prefs')
+        .select('conversation_id, muted_until')
+        .eq('user_id', userId)
+        .not('muted_until', 'is', null),
+    ]);
+    const now = Date.now();
+    const mutedIds = new Set(
+      (prefsRes.data ?? [])
+        .filter((p) => new Date(p.muted_until).getTime() > now)
+        .map((p) => p.conversation_id)
+    );
     const total = (data || []).reduce((sum, conv) => {
+      if (mutedIds.has(conv.id)) return sum;
       const mine = conv.participant_1_id === userId ? conv.unread_p1 : conv.unread_p2;
       return sum + (mine || 0);
     }, 0);

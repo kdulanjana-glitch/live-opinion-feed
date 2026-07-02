@@ -10,8 +10,9 @@ import {
   TouchableOpacity,
   StyleSheet,
 } from 'react-native';
+import { PeoliaFonts as F , getPeoliaColors } from '../constants/peoliaTheme';
 import { usePeoliaScheme } from '../context/ThemeContext';
-import { getPeoliaColors } from '../constants/peoliaTheme';
+
 import { fs, ms, s, vs } from '../utils/peoliaScale';
 
 const formatCount = (n) => {
@@ -142,7 +143,7 @@ const makeStyles = (C) => StyleSheet.create({
   },
   count: {
     fontSize: fs(18),      // was fs(14), now ×1.25
-    fontWeight: '600',
+    fontFamily: F.semiBold,
     color: C.textMuted,
   },
   countOnImage: { color: 'rgba(255,255,255,0.85)' },

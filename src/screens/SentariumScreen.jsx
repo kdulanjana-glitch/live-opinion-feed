@@ -24,11 +24,12 @@ import {
   TouchableOpacity,
   Alert,
 } from 'react-native';
+import { PeoliaFonts as F , getPeoliaColors } from '../constants/peoliaTheme';
 import { usePeoliaScheme } from '../context/ThemeContext';
 import { useBlocks } from '../context/BlockContext';
 import { useWavePrefs } from '../context/WavePrefsContext';
 import { supabase } from '../lib/supabase';
-import { getPeoliaColors } from '../constants/peoliaTheme';
+
 import { SCREEN_HEIGHT, ms, vs, fs } from '../utils/peoliaScale';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
@@ -436,7 +437,7 @@ export default function SentariumScreen({
   useEffect(() => {
     if (!sentisRef.current?.length || !Object.keys(wavePrefs).length) return;
     setSentis(applyWavePreferences(sentisRef.current, wavePrefs));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [wavePrefs]);
 
   // ── Feed-wide realtime: drop auto-hidden sentis live ──────────────────────
@@ -941,7 +942,7 @@ const makeStyles = (C) => StyleSheet.create({
   },
   loader: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: C.bg },
   empty:  { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: C.bg, paddingHorizontal: ms(32) },
-  emptyText: { fontSize: fs(16), fontWeight: '600', color: C.textMuted, textAlign: 'center', lineHeight: fs(24) },
+  emptyText: { fontSize: fs(16), fontFamily: F.semiBold, color: C.textMuted, textAlign: 'center', lineHeight: fs(24) },
   retryBtn:  { marginTop: vs(16), paddingVertical: vs(10), paddingHorizontal: ms(28), borderRadius: ms(20), backgroundColor: C.accent },
-  retryText: { fontSize: fs(15), fontWeight: '700', color: '#FFFFFF' },
+  retryText: { fontSize: fs(15), fontFamily: F.bold, color: '#FFFFFF' },
 });
