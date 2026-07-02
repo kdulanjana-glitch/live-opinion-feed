@@ -1,29 +1,35 @@
 # Peolia — Session Handoff
 
-**Last updated: 2026-06-25.** App is working end-to-end on device (Android; dev build via
+**Last updated: 2026-07-02.** App is working end-to-end on device (Android; dev build via
 `expo-dev-client`). Votes, likes, pins, voices, follow, share, profile edit, view-reacts lock,
-theming, settings, in-app notifications, block-user, voice dislikes all function.
+theming, settings, in-app notifications, block-user, voice dislikes, wave preferences
+(Personalize), direct messages (threads, images, reactions, senti-sharing, pin/mute/archive),
+and Plus Jakarta Sans typography all function.
 
-### ⚠️ SESSION PICKUP STATE (2026-06-25)
-- **Uncommitted? No — all work is committed on branch `feat/ugc-block-dislike-and-metro-fix`**
-  (4 commits ahead of `main`, NOT yet merged). Merge when satisfied:
-  `git checkout main && git merge feat/ugc-block-dislike-and-metro-fix`.
-- **A NATIVE REBUILD IS OWED.** The share-card feature added native modules
-  (`react-native-view-shot`, `expo-sharing`) and is **not yet tested on device**. Run:
-  `eas build --profile development -p android` → reinstall → `set EXPO_PACKAGER_PROXY_URL=` +
-  `adb reverse tcp:8081 tcp:8081` + `npx expo start --dev-client --clear`. JS-only changes
-  (auth lock, sizing, block, dislike) load on Metro reload; the share card needs the rebuild.
+### ⚠️ SESSION PICKUP STATE (2026-07-02)
+- **Everything is committed on `main`** (through the P1 batch: feed pull-to-refresh + pool
+  pagination, DM scroll-back, Android back-button unwind, dead-code removal). `main` is ~35+
+  commits ahead of `origin/main` — push when ready.
+- **A NATIVE REBUILD IS STILL OWED.** The share card (`react-native-view-shot`, `expo-sharing`)
+  is not yet device-verified. Run `eas build --profile development -p android` → reinstall.
+  All other recent work is JS-only and loads on Metro reload.
 - **Build profiles:** `development` = dev-client, needs Metro (live JS). `preview` = standalone
   APK with JS baked in, no Metro. A `development` build launched WITHOUT Metro crashes with
-  "Unable to load script" — that's expected, connect it to `expo start --dev-client`.
-- **SQL to confirm applied:** `sprint7-block-user.sql` (block — user said done) and the
-  **Block B SQL for voice dislikes** (`voice_dislikes` table + `dislike_count`/`net_score`
-  columns + mutual-exclusivity triggers on voices). Dislike UI errors until that's applied.
+  "Unable to load script" — connect it to `expo start --dev-client`.
+- **Wireless dev:** cloudflared tunnel → `cloudflared tunnel --url http://127.0.0.1:8081`
+  (IPv4, NOT localhost), then `set EXPO_PACKAGER_PROXY_URL=https://<id>.trycloudflare.com`
+  (own line, no trailing space) → `npx expo start --dev-client` → "Enter URL manually" on
+  the phone. USB path: clear the proxy var + `adb reverse tcp:8081 tcp:8081`.
+- **DB schema source of truth is the LIVE Supabase project.** `supabase/
+  sprint8-dm-and-wave-preferences.sql` reproduces the sprint-8 objects for a FRESH db (do not
+  re-run whole file on prod). All sprint-8 SQL confirmed applied live, including the
+  reaction_update policy + dm_pair_blocked block enforcement (2026-07-02).
 - **If you see `Invalid Refresh Token: Already Used`:** the `processLock` fix is in; just sign
   out/in once on the device to clear the stale token.
 
 **App-wide providers (in `src/app/_layout.tsx`):**
-`SafeAreaProvider → ThemeProvider → NotificationProvider → BlockProvider → ErrorBoundary → AppLockGate → Stack`.
+`SafeAreaProvider → ThemeProvider → NotificationProvider → BlockProvider → WavePrefsProvider → ErrorBoundary → AppLockGate → Stack`
+(+ `useFonts` for Plus Jakarta Sans gates first render).
 
 **THEMING:** never import `useColorScheme` from react-native. Use
 `const scheme = usePeoliaScheme()` from `src/context/ThemeContext`. It honors the citizen's

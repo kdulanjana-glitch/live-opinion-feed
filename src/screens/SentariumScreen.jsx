@@ -23,6 +23,7 @@ import {
   Platform,
   TouchableOpacity,
   Alert,
+  RefreshControl,
 } from 'react-native';
 import { PeoliaFonts as F , getPeoliaColors } from '../constants/peoliaTheme';
 import { usePeoliaScheme } from '../context/ThemeContext';
@@ -41,7 +42,6 @@ import EmptyState  from '../components/EmptyState';
 import { FeedSkeleton } from '../components/Skeletons';
 
 // ── Constants ─────────────────────────────────
-const PAGE_SIZE   = 10;
 const PREFETCH_AT = 3;  // prefetch when this many cards remain
 
 // Wave-preference feed shaping. We fetch a larger pool, then select TARGET
@@ -149,6 +149,7 @@ export default function SentariumScreen({
   const [loading,       setLoading]       = useState(true);
   const [loadError,     setLoadError]     = useState(false);
   const [loadingMore,   setLoadingMore]   = useState(false);
+  const [refreshing,    setRefreshing]    = useState(false);
   const [listHeight,    setListHeight]    = useState(0);
   const [userVotes,     setUserVotes]     = useState({}); // { sentiId: 'yes'|'hmm'|'nah' }
   const [userViewLocks, setUserViewLocks] = useState({}); // { sentiId: true }
@@ -316,11 +317,12 @@ export default function SentariumScreen({
 
   // ── Fetch the feed ────────────────────────────
   // Pulls a larger pool (FETCH_POOL), then applyWavePreferences selects TARGET
-  // sentis weighted by the citizen's wave levels (excluded waves dropped). This
-  // is a one-shot shaped feed — cursor pagination is intentionally disabled so
-  // the weighted selection isn't disturbed by appended pages.
-  const fetchSentis = useCallback(async () => {
-    setLoading(true);
+  // sentis weighted by the citizen's wave levels (excluded waves dropped).
+  // Pagination works on the RAW pool: cursorRef tracks the oldest created_at of
+  // the fetched pool (not the shaped list), so fetchMore pulls the next pool
+  // page and shapes it independently — infinite scroll + wave shaping coexist.
+  const fetchSentis = useCallback(async (isRefresh = false) => {
+    if (!isRefresh) setLoading(true);   // pull-to-refresh keeps the list visible
     setLoadError(false);
     try {
       const { data, error } = await applyBlockFilter(
@@ -370,9 +372,10 @@ export default function SentariumScreen({
       }
 
       setSentis(items);
-      // Shaped feed is one-shot — disable pagination so fetchMore is a no-op.
-      cursorRef.current  = null;
-      hasMoreRef.current = false;
+      // Advance the POOL cursor (raw rows, not the shaped selection) so fetchMore
+      // pulls the next, older pool page.
+      cursorRef.current  = (data ?? []).at(-1)?.created_at ?? null;
+      hasMoreRef.current = (data?.length ?? 0) === FETCH_POOL;
 
       // Batch-fetch reaction state for all selected cards (fire-and-forget)
       batchFetchStates(items.map((i) => i.id));
@@ -384,7 +387,7 @@ export default function SentariumScreen({
     }
   }, [batchFetchStates]);
 
-  // ── Fetch next page (cursor pagination) ───────
+  // ── Fetch next pool page (cursor over the RAW pool, shaped before appending) ──
   const fetchMore = useCallback(async () => {
     if (loadingMoreRef.current || !hasMoreRef.current || !cursorRef.current) return;
     loadingMoreRef.current = true;
@@ -396,21 +399,28 @@ export default function SentariumScreen({
           .select('*')
           .order('created_at', { ascending: false })
           .lt('created_at', cursorRef.current)
-          .limit(PAGE_SIZE),
+          .limit(FETCH_POOL),
         hiddenIdsRef.current,
       );
 
       if (error) throw error;
 
-      const items = (data ?? []).map(normalise);
+      const normalised = (data ?? []).map(normalise);
+      const prefs = wavePrefsRef.current;
+      const items = Object.keys(prefs).length > 0
+        ? applyWavePreferences(normalised, prefs)
+        : normalised.slice(0, TARGET);
+
       // Dedupe — a scroll-target senti fetched individually can reappear in its natural page
       setSentis((prev) => {
         const seen = new Set(prev.map((p) => p.id));
         const fresh = items.filter((i) => !seen.has(i.id));
         return fresh.length ? [...prev, ...fresh] : prev;
       });
-      if (items.length > 0) cursorRef.current = items.at(-1)?.created_at;
-      hasMoreRef.current = (data?.length ?? 0) === PAGE_SIZE;
+      // Cursor advances by the RAW pool (shaping drops rows; using shaped items
+      // would re-fetch the same window forever).
+      cursorRef.current  = (data ?? []).at(-1)?.created_at ?? cursorRef.current;
+      hasMoreRef.current = (data?.length ?? 0) === FETCH_POOL;
 
       // Batch-fetch reaction state for the new page (fire-and-forget)
       batchFetchStates(items.map((i) => i.id));
@@ -421,6 +431,13 @@ export default function SentariumScreen({
       setLoadingMore(false);
     }
   }, [batchFetchStates]);
+
+  // ── Pull-to-refresh — refetch + reshape without swapping in the skeleton ──
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchSentis(true);
+    setRefreshing(false);
+  }, [fetchSentis]);
 
   // ── Mount / unmount ───────────────────────────
   useEffect(() => {
@@ -860,6 +877,9 @@ export default function SentariumScreen({
         keyExtractor={(item) => item.id}
         pagingEnabled
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={C.accent} colors={[C.accent]} />
+        }
         onViewableItemsChanged={onViewableItemsChanged}
         viewabilityConfig={viewabilityConfig}
         getItemLayout={(data, index) => ({ length: itemHeight, offset: itemHeight * index, index })}

@@ -51,6 +51,7 @@ import {
 
 const REACTIONS = ['❤️', '👍', '😂', '😮', '😢', '🔥'];
 const OTHER_AVATAR_BG = '#059669';   // matches the other-citizen avatar elsewhere in the app
+const MSG_PAGE = 50;                 // messages per page (initial load + scroll-back)
 
 const WAVE_EMOJIS = {
   'Tech': '💻', 'Love': '❤️', 'Money': '💰', 'Life': '🌱',
@@ -74,6 +75,7 @@ export default function DMConversationScreen({ otherUserId, onBack, onOpenSenti,
   const [isParticipant1,  setIsParticipant1]  = useState(false);
   const [inputText,       setInputText]       = useState('');
   const [loadingConv,     setLoadingConv]     = useState(true);
+  const [loadingOlder,    setLoadingOlder]    = useState(false);  // scroll-back page fetch
   const [sendingImage,    setSendingImage]    = useState(false);
   const [selectedMessage, setSelectedMessage] = useState(null);
   const [showActionSheet, setShowActionSheet] = useState(false);
@@ -86,6 +88,10 @@ export default function DMConversationScreen({ otherUserId, onBack, onOpenSenti,
   const currentUserRef  = useRef(null);
   const isP1Ref         = useRef(false);
   const messagesRef     = useRef([]);
+  // Scroll-back pagination guards
+  const hasOlderRef          = useRef(false);
+  const loadingOlderRef      = useRef(false);
+  const initialScrollDoneRef = useRef(false);
   useEffect(() => { messagesRef.current = messages; }, [messages]);
 
   const scrollToEnd = (animated) =>
@@ -98,18 +104,8 @@ export default function DMConversationScreen({ otherUserId, onBack, onOpenSenti,
     return { ...msg, imageUrl };
   }, []);
 
-  // ── Load the last 50 messages ──
-  const loadMessages = useCallback(async (convId) => {
-    const { data, error } = await supabase
-      .from('dm_messages')
-      .select('*, dm_message_reactions(id, emoji, user_id)')
-      .eq('conversation_id', convId)
-      .order('created_at', { ascending: true })
-      .limit(50);
-    if (error) { console.error('loadMessages error', error); return; }
-
-    const rows = data ?? [];
-    // Attach shared-senti previews
+  // ── Enrich a batch of message rows (senti previews + signed image URLs) ──
+  const enrichRows = useCallback(async (rows) => {
     const sentiIds = [...new Set(rows.filter((m) => m.senti_id).map((m) => m.senti_id))];
     const sentiMap = {};
     if (sentiIds.length) {
@@ -117,14 +113,67 @@ export default function DMConversationScreen({ otherUserId, onBack, onOpenSenti,
         .from('sentis').select('id, question, wave, image_url').in('id', sentiIds);
       (sentis ?? []).forEach((sn) => { sentiMap[sn.id] = sn; });
     }
-
-    const enriched = await Promise.all(rows.map(async (m) => ({
+    return Promise.all(rows.map(async (m) => ({
       ...(await withSignedUrl(m)),
       senti: m.senti_id ? (sentiMap[m.senti_id] ?? null) : null,
     })));
+  }, [withSignedUrl]);
+
+  // ── Load the NEWEST page of messages ──
+  // Fetch descending (newest first) then reverse for display — ascending+limit
+  // would return the OLDEST page and hide new messages past MSG_PAGE.
+  const loadMessages = useCallback(async (convId) => {
+    const { data, error } = await supabase
+      .from('dm_messages')
+      .select('*, dm_message_reactions(id, emoji, user_id)')
+      .eq('conversation_id', convId)
+      .order('created_at', { ascending: false })
+      .limit(MSG_PAGE);
+    if (error) { console.error('loadMessages error', error); return; }
+
+    const rows = (data ?? []).reverse();
+    hasOlderRef.current = (data?.length ?? 0) === MSG_PAGE;
+    const enriched = await enrichRows(rows);
     setMessages(enriched);
     scrollToEnd(false);
-  }, [withSignedUrl]);
+    // Let the initial scroll settle before onStartReached may fire
+    setTimeout(() => { initialScrollDoneRef.current = true; }, 600);
+  }, [enrichRows]);
+
+  // ── Scroll-back: load the page BEFORE the oldest loaded message ──
+  const loadOlder = useCallback(async () => {
+    if (loadingOlderRef.current || !hasOlderRef.current || !initialScrollDoneRef.current) return;
+    const oldest = messagesRef.current[0]?.created_at;
+    const convId = conversationRef.current;
+    if (!oldest || !convId) return;
+    loadingOlderRef.current = true;
+    setLoadingOlder(true);
+    try {
+      const { data, error } = await supabase
+        .from('dm_messages')
+        .select('*, dm_message_reactions(id, emoji, user_id)')
+        .eq('conversation_id', convId)
+        .lt('created_at', oldest)
+        .order('created_at', { ascending: false })
+        .limit(MSG_PAGE);
+      if (error) throw error;
+
+      hasOlderRef.current = (data?.length ?? 0) === MSG_PAGE;
+      const rows = (data ?? []).reverse();
+      if (rows.length) {
+        const enriched = await enrichRows(rows);
+        setMessages((prev) => {
+          const seen = new Set(prev.map((m) => m.id));
+          return [...enriched.filter((m) => !seen.has(m.id)), ...prev];
+        });
+      }
+    } catch (err) {
+      console.error('loadOlder error', err);
+    } finally {
+      loadingOlderRef.current = false;
+      setLoadingOlder(false);
+    }
+  }, [enrichRows]);
 
   // ── Mount: resolve user + conversation, load, subscribe ──
   useEffect(() => {
@@ -622,6 +671,14 @@ export default function DMConversationScreen({ otherUserId, onBack, onOpenSenti,
             renderItem={renderMessage}
             contentContainerStyle={st.listContent}
             onLayout={() => scrollToEnd(false)}
+            onStartReached={loadOlder}
+            onStartReachedThreshold={0.2}
+            maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+            ListHeaderComponent={
+              loadingOlder
+                ? <View style={st.olderLoader}><ActivityIndicator color={C.accent} size="small" /></View>
+                : null
+            }
             ListEmptyComponent={
               <View style={st.emptyWrap}>
                 <Text style={st.emptyText}>Say hi 👋</Text>
@@ -771,6 +828,7 @@ const makeStyles = (C) => StyleSheet.create({
 
   // List
   listContent: { padding: ms(10), gap: vs(8), flexGrow: 1 },
+  olderLoader: { paddingVertical: vs(10), alignItems: 'center' },
   emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: vs(60) },
   emptyText: { fontSize: fs(15), fontFamily: F.semiBold, color: C.textMuted },
 
