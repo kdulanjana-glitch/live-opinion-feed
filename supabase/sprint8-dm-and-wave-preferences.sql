@@ -166,11 +166,24 @@ DROP POLICY IF EXISTS conv_select ON public.dm_conversations;
 CREATE POLICY conv_select ON public.dm_conversations FOR SELECT
   USING (participant_1_id = auth.uid() OR participant_2_id = auth.uid());
 
+-- Block check helper — SECURITY DEFINER because user_blocks RLS only shows a
+-- user their own blocks; the "they blocked me" direction needs elevated read.
+CREATE OR REPLACE FUNCTION public.dm_pair_blocked(a UUID, b UUID)
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.user_blocks
+    WHERE (blocker_id = a AND blocked_id = b)
+       OR (blocker_id = b AND blocked_id = a)
+  );
+$$;
+GRANT EXECUTE ON FUNCTION public.dm_pair_blocked(UUID, UUID) TO authenticated;
+
 DROP POLICY IF EXISTS conv_insert ON public.dm_conversations;
 CREATE POLICY conv_insert ON public.dm_conversations FOR INSERT
   WITH CHECK (
     (participant_1_id = auth.uid() OR participant_2_id = auth.uid())
     AND participant_1_id < participant_2_id
+    AND NOT public.dm_pair_blocked(participant_1_id, participant_2_id)
   );
 
 DROP POLICY IF EXISTS conv_update ON public.dm_conversations;
@@ -193,8 +206,9 @@ CREATE POLICY msg_insert ON public.dm_messages FOR INSERT
   WITH CHECK (
     sender_id = auth.uid()
     AND conversation_id IN (
-      SELECT id FROM public.dm_conversations
-      WHERE participant_1_id = auth.uid() OR participant_2_id = auth.uid()
+      SELECT c.id FROM public.dm_conversations c
+      WHERE (c.participant_1_id = auth.uid() OR c.participant_2_id = auth.uid())
+        AND NOT public.dm_pair_blocked(c.participant_1_id, c.participant_2_id)
     )
   );
 
