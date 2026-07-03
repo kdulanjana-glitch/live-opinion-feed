@@ -75,6 +75,7 @@ export default function DMConversationScreen({ otherUserId, onBack, onOpenSenti,
   const [isParticipant1,  setIsParticipant1]  = useState(false);
   const [inputText,       setInputText]       = useState('');
   const [loadingConv,     setLoadingConv]     = useState(true);
+  const [convBlocked,     setConvBlocked]     = useState(false);  // can't open (RLS block) — show notice
   const [loadingOlder,    setLoadingOlder]    = useState(false);  // scroll-back page fetch
   const [sendingImage,    setSendingImage]    = useState(false);
   const [selectedMessage, setSelectedMessage] = useState(null);
@@ -205,7 +206,8 @@ export default function DMConversationScreen({ otherUserId, onBack, onOpenSenti,
         convId = await getOrCreateDMConversation(supabase, uid, otherUserId);
       } catch (err) {
         console.error('getOrCreateDMConversation error', err);
-        if (!cancelled) setLoadingConv(false);
+        // 42501 = RLS conv_insert rejected → a block exists between the pair.
+        if (!cancelled) { setConvBlocked(err?.code === '42501'); setLoadingConv(false); }
         return;
       }
       if (cancelled) return;
@@ -651,7 +653,15 @@ export default function DMConversationScreen({ otherUserId, onBack, onOpenSenti,
         style={st.flex}
         keyboardVerticalOffset={Platform.OS === 'android' ? vs(60) : 0}
       >
-        {loadingConv ? (
+        {convBlocked ? (
+          <View style={st.blockedWrap}>
+            <Icon name="ti-ban" size={fs(34)} color={C.textMuted} />
+            <Text style={st.blockedTitle}>You can&apos;t message this citizen</Text>
+            <Text style={st.blockedBody}>
+              Either you&apos;ve blocked each other, or they&apos;re not accepting messages from you.
+            </Text>
+          </View>
+        ) : loadingConv ? (
           <View style={st.skeletonWrap}>
             {[0, 1, 2, 3, 4, 5].map((i) => {
               const mine = i % 2 === 1;
@@ -687,7 +697,8 @@ export default function DMConversationScreen({ otherUserId, onBack, onOpenSenti,
           />
         )}
 
-        {/* Input bar */}
+        {/* Input bar — hidden when the pair can't message */}
+        {!convBlocked && (
         <View style={[st.inputBar, { paddingBottom: vs(8) + insets.bottom }]}>
           <TouchableOpacity onPress={sendImage} disabled={sendingImage} style={st.inputIconBtn} activeOpacity={0.7}>
             {sendingImage
@@ -706,6 +717,7 @@ export default function DMConversationScreen({ otherUserId, onBack, onOpenSenti,
             <Icon name="ti-send" size={fs(22)} color={inputText.trim() ? C.accent : C.textMuted} />
           </TouchableOpacity>
         </View>
+        )}
       </KeyboardAvoidingView>
 
       {/* Full-screen image viewer */}
@@ -831,6 +843,9 @@ const makeStyles = (C) => StyleSheet.create({
   olderLoader: { paddingVertical: vs(10), alignItems: 'center' },
   emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: vs(60) },
   emptyText: { fontSize: fs(15), fontFamily: F.semiBold, color: C.textMuted },
+  blockedWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: ms(40) },
+  blockedTitle: { fontSize: fs(16), fontFamily: F.extraBold, letterSpacing: -0.2, color: C.textPrimary, marginTop: vs(12), textAlign: 'center' },
+  blockedBody: { fontSize: fs(13), fontFamily: F.regular, color: C.textMuted, textAlign: 'center', lineHeight: fs(19), marginTop: vs(6) },
 
   // Message row
   msgRow:   { flexDirection: 'row', alignItems: 'flex-end', gap: ms(6), maxWidth: '100%' },

@@ -150,15 +150,16 @@ export default function Index() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (event === 'SIGNED_IN') {
-          setSession(session);
           setIsGuest(false);
           if (session?.user?.id) {
-            // Covers OAuth + deep-link sign-ins too (AuthScreen's own gate only
-            // sees the password path).
+            // Check the ban BEFORE registering the session — covers OAuth +
+            // deep-link sign-ins, and keeps the app from rendering (no flash)
+            // before the SuspendedScreen takes over.
             const banned = await checkBanned(session.user.id);
-            if (banned) return;
+            if (banned) return;   // checkBanned set isBanned → SuspendedScreen
             checkOnboarding(session.user.id);
           }
+          setSession(session);
           if (activeTabRef.current === 'auth') {
             goToTab(prevTabRef.current || 'sentarium');
           }

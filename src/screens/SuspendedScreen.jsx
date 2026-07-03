@@ -19,6 +19,8 @@ import {
   StatusBar,
   Platform,
   ActivityIndicator,
+  Linking,
+  Alert,
 } from 'react-native';
 import { PeoliaFonts as F, getPeoliaColors } from '../constants/peoliaTheme';
 import { usePeoliaScheme } from '../context/ThemeContext';
@@ -28,6 +30,7 @@ import { fs, ms, vs } from '../utils/peoliaScale';
 
 // Documented hardcoded-color exception: danger red.
 const DANGER = '#DC2626';
+const SUPPORT_EMAIL = 'support@peolia.app';   // matches FAQScreen
 
 export default function SuspendedScreen({ onSignOut }) {
   const scheme = usePeoliaScheme();
@@ -47,6 +50,17 @@ export default function SuspendedScreen({ onSignOut }) {
     setSigningOut(false);
   };
 
+  // Reachable from the suspension block (Settings is not, while suspended).
+  const handleContactSupport = async () => {
+    const url = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Account suspension appeal')}`;
+    try {
+      if (await Linking.canOpenURL(url)) { await Linking.openURL(url); return; }
+      throw new Error('no mail app');
+    } catch {
+      Alert.alert('Contact support', `Email us at ${SUPPORT_EMAIL}`);
+    }
+  };
+
   return (
     <View style={st.screen}>
       <StatusBar barStyle={scheme === 'dark' ? 'light-content' : 'dark-content'} backgroundColor={C.bg} />
@@ -58,8 +72,13 @@ export default function SuspendedScreen({ onSignOut }) {
       <Text style={st.body}>Your account has been suspended.</Text>
 
       <Text style={st.hint}>
-        If you believe this is a mistake, please contact us via the support form in Settings.
+        If you believe this is a mistake, contact our support team.
       </Text>
+
+      <TouchableOpacity style={st.contactBtn} onPress={handleContactSupport} activeOpacity={0.85}>
+        <Icon name="ti-mail" size={fs(15)} color="#FFFFFF" />
+        <Text style={st.contactText}>Contact support</Text>
+      </TouchableOpacity>
 
       <TouchableOpacity style={st.signOutBtn} onPress={handleSignOut} disabled={signingOut} activeOpacity={0.7}>
         {signingOut
@@ -91,8 +110,15 @@ const makeStyles = (C) => StyleSheet.create({
     fontSize: fs(11), fontFamily: F.regular, color: C.textMuted,
     textAlign: 'center', maxWidth: ms(260), marginTop: vs(8), lineHeight: fs(16),
   },
+  contactBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: ms(8),
+    marginTop: vs(36),
+    paddingVertical: vs(12), paddingHorizontal: ms(28),
+    borderRadius: ms(24), backgroundColor: C.accent,
+  },
+  contactText: { fontSize: fs(14), fontFamily: F.bold, color: '#FFFFFF' },
   signOutBtn: {
-    marginTop: vs(40),
+    marginTop: vs(14),
     paddingVertical: vs(10), paddingHorizontal: ms(28),
     borderRadius: ms(20),
     backgroundColor: C.surfaceAlt, borderWidth: 0.5, borderColor: C.border,
