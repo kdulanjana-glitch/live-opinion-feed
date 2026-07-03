@@ -85,3 +85,16 @@ public.sentis, public.senti_reactions, public.senti_counts,
 public.senti_likes, public.senti_pins, public.senti_view_locks,
 public.voices, public.follows, public.user_stats,
 public.user_wave_stats, public.users, public.senti_reports, public.user_private
+
+## GIT WORKFLOW
+- Active working branch is always `dev`. All commits and pushes during normal sessions
+  go to `dev` — never to `main`.
+- Never push to `main` under any circumstance unless the user explicitly says so in
+  that exact message (e.g. "push this to main" or "merge to main").
+- When asked to commit at the end of a session: run `git add -A`, then
+  `git commit -m "<message>"` with a message that summarizes what actually changed
+  this session (not "wip", "update", or "changes") — then `git push` (pushes to dev,
+  already tracked via `-u`).
+- Never commit `.env`, any file containing a Supabase service role key, or
+  `peolia-admin.html` — confirm these are in `.gitignore` before the first commit
+  under this rule; if `.gitignore` is missing entries for them, add the entries first.
