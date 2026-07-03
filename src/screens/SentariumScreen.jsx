@@ -427,11 +427,11 @@ export default function SentariumScreen({
      
   }, [wavePrefs]);
 
-  // ── Feed-wide realtime: drop auto-hidden sentis live ──────────────────────
-  // When enough reports trip the DB trigger, a senti's status flips to
-  // 'under_review'. Every citizen viewing the feed (not just the reporter, who
-  // already gets an optimistic local removal in submitReport) sees it vanish
-  // without refreshing. One channel for the whole screen, removed on unmount.
+  // ── Feed-wide realtime: drop non-approved sentis live ─────────────────────
+  // Any status change away from 'approved' (under_review from the report trigger,
+  // or hidden / banned / removed from admin moderation) makes the senti vanish
+  // from every viewer's feed without a restart. One channel for the whole screen,
+  // removed on unmount.
   useEffect(() => {
     const channel = supabase
       .channel('sentis-status-feed')
@@ -440,10 +440,7 @@ export default function SentariumScreen({
         schema: 'public',
         table:  'sentis',
       }, (payload) => {
-        if (
-          payload.new?.status === 'under_review' &&
-          payload.old?.status !== 'under_review'
-        ) {
+        if (payload.new?.status && payload.new.status !== 'approved') {
           setSentis((prev) => prev.filter((s) => s.id !== payload.new.id));
         }
       })
