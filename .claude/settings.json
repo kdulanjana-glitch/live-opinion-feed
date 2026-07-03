@@ -14,7 +14,13 @@
     "deny": [
       "Bash(git push origin main)",
       "Bash(git push --force:*)",
-      "Bash(git push -f:*)"
+      "Bash(git push -f:*)",
+      "Write(peolia-admin.html)",
+      "Write(**/peolia-admin.html)",
+      "Edit(peolia-admin.html)",
+      "Edit(**/peolia-admin.html)",
+      "Read(.env)",
+      "Read(**/.env)"
     ]
   }
 }
