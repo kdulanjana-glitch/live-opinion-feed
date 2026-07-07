@@ -15,6 +15,7 @@ import AppLockGate from '../components/AppLockGate';
 import { ThemeProvider } from '../context/ThemeContext';
 import { NotificationProvider } from '../context/NotificationContext';
 import { BlockProvider } from '../context/BlockContext';
+import { PinsProvider } from '../context/PinsContext';
 import { WavePrefsProvider } from '../context/WavePrefsContext';
 import { supabase } from '../lib/supabase';
 import { initCrashReporting } from '../lib/crash';
@@ -72,13 +73,15 @@ export default function Layout() {
       <ThemeProvider>
         <NotificationProvider>
           <BlockProvider>
-            <WavePrefsProvider>
-              <ErrorBoundary>
-                <AppLockGate>
-                  <Stack screenOptions={{ headerShown: false }} />
-                </AppLockGate>
-              </ErrorBoundary>
-            </WavePrefsProvider>
+            <PinsProvider>
+              <WavePrefsProvider>
+                <ErrorBoundary>
+                  <AppLockGate>
+                    <Stack screenOptions={{ headerShown: false }} />
+                  </AppLockGate>
+                </ErrorBoundary>
+              </WavePrefsProvider>
+            </PinsProvider>
           </BlockProvider>
         </NotificationProvider>
       </ThemeProvider>

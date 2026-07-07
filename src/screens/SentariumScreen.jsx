@@ -28,6 +28,7 @@ import {
 import { PeoliaFonts as F , getPeoliaColors } from '../constants/peoliaTheme';
 import { usePeoliaScheme } from '../context/ThemeContext';
 import { useBlocks } from '../context/BlockContext';
+import { usePins } from '../context/PinsContext';
 import { useWavePrefs } from '../context/WavePrefsContext';
 import { supabase } from '../lib/supabase';
 
@@ -113,6 +114,7 @@ export default function SentariumScreen({
   const C      = getPeoliaColors(scheme);
   const st     = makeStyles(C);
   const { hiddenIds } = useBlocks();
+  const { isPinned, pin, unpin } = usePins();   // pin membership from shared context
   const { wavePrefs } = useWavePrefs();   // shared — changes re-shape the feed live
 
   const [sentis,        setSentis]        = useState([]);
@@ -124,7 +126,6 @@ export default function SentariumScreen({
   const [userVotes,     setUserVotes]     = useState({}); // { sentiId: 'yes'|'hmm'|'nah' }
   const [userViewLocks, setUserViewLocks] = useState({}); // { sentiId: true }
   const [likedSentis,   setLikedSentis]   = useState({}); // { sentiId: true/false }
-  const [pinnedSentis,  setPinnedSentis]  = useState({}); // { sentiId: true/false }
   const [voiceSentiId,  setVoiceSentiId]  = useState(null); // sentiId for open VoiceSheet
   const [reportSentiId, setReportSentiId] = useState(null); // sentiId for open ReportSheet
   const [reportBusy,    setReportBusy]    = useState(false);
@@ -145,7 +146,6 @@ export default function SentariumScreen({
   // Mirrors updated BOTH via useEffect (catches batchFetchStates updates)
   // AND synchronously in handlers (catches rapid double-taps before effect fires).
   const likedSentisRef    = useRef({});
-  const pinnedSentisRef   = useRef({});
   // Mirror blocked-user ids so the stable fetch callbacks read the latest set
   const hiddenIdsRef      = useRef([]);
   // Mirror wave prefs so the stable fetchSentis callback reads the latest set
@@ -159,7 +159,6 @@ export default function SentariumScreen({
   useEffect(() => { onScrolledRef.current = onScrolled; }, [onScrolled]);
   // Sync refs from state so batchFetchStates results are visible to handlers
   useEffect(() => { likedSentisRef.current  = likedSentis;  }, [likedSentis]);
-  useEffect(() => { pinnedSentisRef.current = pinnedSentis; }, [pinnedSentis]);
   useEffect(() => { wavePrefsRef.current    = wavePrefs;    }, [wavePrefs]);
 
   // ── Blocked users: keep ref in sync + drop any already-loaded blocked cards ──
@@ -222,9 +221,7 @@ export default function SentariumScreen({
         .eq('user_id', uid).in('senti_id', sentiIds),
       supabase.from('senti_likes').select('senti_id')
         .eq('user_id', uid).in('senti_id', sentiIds),
-      supabase.from('senti_pins').select('senti_id')
-        .eq('user_id', uid).in('senti_id', sentiIds),
-    ]).then(([reactRes, lockRes, likeRes, pinRes]) => {
+    ]).then(([reactRes, lockRes, likeRes]) => {
       const votes = {};
       (reactRes.data ?? []).forEach((r) => { votes[r.senti_id] = r.reaction; });
       if (Object.keys(votes).length) setUserVotes((prev) => ({ ...prev, ...votes }));
@@ -238,13 +235,6 @@ export default function SentariumScreen({
       if (Object.keys(likes).length) {
         setLikedSentis((prev) => ({ ...prev, ...likes }));
         likedSentisRef.current = { ...likedSentisRef.current, ...likes };
-      }
-
-      const pins = {};
-      (pinRes.data ?? []).forEach((p) => { pins[p.senti_id] = true; });
-      if (Object.keys(pins).length) {
-        setPinnedSentis((prev) => ({ ...prev, ...pins }));
-        pinnedSentisRef.current = { ...pinnedSentisRef.current, ...pins };
       }
 
       // Unblock all cards
@@ -561,12 +551,13 @@ export default function SentariumScreen({
     }));
 
     // Step 3 — write to DB in background
-    const { error } = await supabase
+    const { data: upsertData, error } = await supabase
       .from('senti_reactions')
       .upsert(
         { senti_id: sentiId, user_id: uid, reaction: choice },
         { onConflict: 'senti_id,user_id', ignoreDuplicates: true }
-      );
+      )
+      .select();
 
     // Step 4 — if write fails, rollback
     if (error) {
@@ -597,6 +588,32 @@ export default function SentariumScreen({
             ));
           }
         });
+    } else if (!upsertData || upsertData.length === 0) {
+      // Silent no-op: ignoreDuplicates skipped the write because a reaction
+      // already existed (e.g. batchFetchStates missed it due to a network
+      // hiccup). The optimistic choice may not match DB truth — reconcile
+      // silently, no user-facing message.
+      const [{ data: realVote }, { data: realCounts }] = await Promise.all([
+        supabase.from('senti_reactions').select('reaction')
+          .eq('user_id', uid).eq('senti_id', sentiId).maybeSingle(),
+        supabase.from('senti_counts').select('yes_count, hmm_count, nah_count, likes, voices, pins')
+          .eq('senti_id', sentiId).maybeSingle(),
+      ]);
+      if (realVote?.reaction) {
+        setUserVotes((prev) => ({ ...prev, [sentiId]: realVote.reaction }));
+      }
+      if (realCounts) {
+        setSentis((prev) => prev.map((item) =>
+          item.id !== sentiId ? item : {
+            ...item,
+            likes:  realCounts.likes  ?? item.likes,
+            voices: realCounts.voices ?? item.voices,
+            pins:   realCounts.pins   ?? item.pins,
+            rawCounts: { yes: realCounts.yes_count ?? 0, hmm: realCounts.hmm_count ?? 0, nah: realCounts.nah_count ?? 0 },
+            results: buildResults(realCounts.yes_count, realCounts.hmm_count, realCounts.nah_count),
+          }
+        ));
+      }
     }
     // Step 5 — senti_counts realtime will arrive and sync server values automatically
   }, [userVotes, onRequireAuth]);
@@ -755,32 +772,19 @@ export default function SentariumScreen({
   // ── Pin — in-flight guard, optimistic update, rollback on failure ──────────
   const handlePin = useCallback(async (sentiId) => {
     if (!sessionRef.current?.user?.id) { onRequireAuth?.(); return; }
-    const wasPinned = !!pinnedSentisRef.current[sentiId];
+    const wasPinned = isPinned(sentiId);
     if (perSentiPinInFlight.current[sentiId]) return;
     perSentiPinInFlight.current[sentiId] = true;
 
     const nowPinned = !wasPinned;
     const delta     = nowPinned ? 1 : -1;
-    pinnedSentisRef.current = { ...pinnedSentisRef.current, [sentiId]: nowPinned };
-    setPinnedSentis((prev) => ({ ...prev, [sentiId]: nowPinned }));
     setSentis((prev) => prev.map((item) =>
       item.id !== sentiId ? item : { ...item, pins: Math.max(0, item.pins + delta) }
     ));
 
-    const uid = sessionRef.current.user.id;
     try {
-      let error;
-      if (nowPinned) {
-        ({ error } = await supabase.from('senti_pins')
-          .insert({ senti_id: sentiId, user_id: uid }));
-      } else {
-        ({ error } = await supabase.from('senti_pins').delete()
-          .eq('user_id', uid).eq('senti_id', sentiId));
-      }
-      if (error) {
-        console.error('handlePin error', error);
-        pinnedSentisRef.current = { ...pinnedSentisRef.current, [sentiId]: wasPinned };
-        setPinnedSentis((prev) => ({ ...prev, [sentiId]: wasPinned }));
+      const ok = nowPinned ? await pin(sentiId) : await unpin(sentiId);
+      if (!ok) {
         setSentis((prev) => prev.map((item) =>
           item.id !== sentiId ? item : { ...item, pins: Math.max(0, item.pins - delta) }
         ));
@@ -788,7 +792,7 @@ export default function SentariumScreen({
     } finally {
       perSentiPinInFlight.current[sentiId] = false;
     }
-  }, [onRequireAuth]);
+  }, [onRequireAuth, isPinned, pin, unpin]);
 
   // ── View lock ─────────────────────────────────
   const handleViewLocked = useCallback(async (sentiId) => {
@@ -883,7 +887,7 @@ export default function SentariumScreen({
               }
               onViewLocked={() => handleViewLocked(item.id)}
               liked={likedSentis[item.id]  ?? false}
-              pinned={pinnedSentis[item.id] ?? false}
+              pinned={isPinned(item.id)}
               userVote={userVotes[item.id] ?? null}
               userViewedReacts={userViewLocks[item.id] ?? false}
             />

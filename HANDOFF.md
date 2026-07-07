@@ -334,7 +334,7 @@ UGC compliance. Filtering now covers feed, trending, profile **and voices**.
 
 | Priority | Issue | Notes |
 |---|---|---|
-| 🟡 | "View reacts" lock is cosmetic | `sentarium_feed` returns counts to all clients; lock only hides them in UI. Server-side enforcement needed if the rule must be hard. |
+| 🟢 | "View reacts" lock is a soft UX gate, not enforced server-side | Decided 2026-07-07: vote percentages are non-sensitive aggregate data: not worth the architecture cost (RLS + RPC + fixing 2 other direct senti_counts reads) to fully close. Intentional, not a bug. |
 | 🟡 | Vote can silently no-op | If `batchFetchStates` fails, user may "vote" on an already-voted senti — `ignoreDuplicates` returns no error; UI shows new choice, DB keeps old. Consider `.select()` on upsert + reconcile. |
 | 🟡 | Pin state not synced across screens | Unpin in PinScreen doesn't update SentariumScreen state until refetch. |
 | 🟡 | `handleViewLocked` has no rollback | Minor violation of optimistic+rollback rule. |

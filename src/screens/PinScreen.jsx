@@ -20,6 +20,7 @@ import {
 } from 'react-native';
 import { PeoliaFonts as F , getPeoliaColors } from '../constants/peoliaTheme';
 import { usePeoliaScheme } from '../context/ThemeContext';
+import { usePins } from '../context/PinsContext';
 import { supabase } from '../lib/supabase';
 
 import { fs, ms, vs, SCREEN_WIDTH } from '../utils/peoliaScale';
@@ -38,6 +39,8 @@ export default function PinScreen({ session, onOpenSenti }) {
   const C = getPeoliaColors(scheme);
   const st = makeStyles(C);
 
+  const { pinnedIds, unpin } = usePins();
+
   const [pins,       setPins]       = useState([]);
   const [loading,    setLoading]    = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -48,33 +51,23 @@ export default function PinScreen({ session, onOpenSenti }) {
   const fetchPins = useCallback(async () => {
     if (!uid) return;
     try {
+      if (!pinnedIds.length) { setPins([]); return; }
       const { data, error } = await supabase
-        .from('senti_pins')
-        .select(`
-          senti_id,
-          sentis!inner(
-            id, question, wave, image_url, status, created_at
-          )
-        `)
-        .eq('user_id', uid)
-        .eq('sentis.status', 'approved')
-        .order('created_at', { referencedTable: 'sentis', ascending: false });
+        .from('sentis')
+        .select('id, question, wave, image_url, created_at')
+        .in('id', pinnedIds)
+        .eq('status', 'approved')
+        .order('created_at', { ascending: false });
 
       if (error) throw error;
 
-      // Flatten join into a flat pin shape
       setPins(
-        (data ?? [])
-          .filter((row) => row.sentis)
-          .map((row) => {
-            const senti = row.sentis;
-            return {
-              id:       senti.id,
-              question: senti.question,
-              wave:     senti.wave ?? 'Tech',
-              imageUrl: senti.image_url ?? null,
-            };
-          })
+        (data ?? []).map((senti) => ({
+          id:       senti.id,
+          question: senti.question,
+          wave:     senti.wave ?? 'Tech',
+          imageUrl: senti.image_url ?? null,
+        }))
       );
     } catch (err) {
       console.error('PinScreen fetchPins error', err);
@@ -82,8 +75,9 @@ export default function PinScreen({ session, onOpenSenti }) {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [uid]);
+  }, [uid, pinnedIds]);
 
+  // Re-fetch on mount AND whenever the pinned set changes (pin/unpin elsewhere).
   useEffect(() => { fetchPins(); }, [fetchPins]);
 
   const handleRefresh = () => { setRefreshing(true); fetchPins(); };
@@ -95,18 +89,12 @@ export default function PinScreen({ session, onOpenSenti }) {
     // Optimistic remove
     setPins((prev) => prev.filter((p) => p.id !== sentiId));
 
-    const { error } = await supabase
-      .from('senti_pins')
-      .delete()
-      .eq('user_id', uid)
-      .eq('senti_id', sentiId);
-
-    if (error) {
-      console.error('handleUnpin error', error);
+    const ok = await unpin(sentiId);
+    if (!ok) {
       // Restore on failure
       fetchPins();
     }
-  }, [uid, fetchPins]);
+  }, [uid, unpin, fetchPins]);
 
   // ── Render tile (9:16, image or wave colour) — tap opens, 📌 unpins ──
   const renderItem = ({ item }) => (
