@@ -48,16 +48,19 @@ export default function NotificationToast({ notification, onDismiss, onPress }) 
   const { prefix, reaction, suffix } = getNotificationLine(notification);
   const actor = notification.actor;
   const initials =
-    (actor?.avatar_initials && actor.avatar_initials !== '??'
-      ? actor.avatar_initials
-      : actor?.display_name?.[0] ?? actor?.username?.[0] ?? '?'
-    ).toUpperCase();
+    notification.type === 'warning'
+      ? '!'   // no actor for warnings — actor_id is null
+      : (actor?.avatar_initials && actor.avatar_initials !== '??'
+          ? actor.avatar_initials
+          : actor?.display_name?.[0] ?? actor?.username?.[0] ?? '?'
+        ).toUpperCase();
 
   const AVATAR_BG = {
-    react:  C.accentLight,
-    voice:  C.yesBg,
-    reply:  C.nahBg,
-    follow: C.yesBg,
+    react:   C.accentLight,
+    voice:   C.yesBg,
+    reply:   C.nahBg,
+    follow:  C.yesBg,
+    warning: C.nahBg,
   };
   const avatarBg = AVATAR_BG[notification.type] ?? C.accentLight;
   const showPreview = notification.sentiQuestion && notification.type !== 'follow';

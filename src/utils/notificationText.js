@@ -27,6 +27,8 @@ export const getNotificationLine = (notification) => {
       return { prefix: `${name} replied to your voice`, reaction: null, suffix: '' };
     case 'follow':
       return { prefix: `${name} is following you`, reaction: null, suffix: '' };
+    case 'warning':
+      return { prefix: 'Your senti was removed for violating community guidelines', reaction: null, suffix: '' };
     default:
       return { prefix: name, reaction: null, suffix: '' };
   }

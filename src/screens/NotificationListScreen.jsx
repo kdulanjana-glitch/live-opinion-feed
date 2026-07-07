@@ -47,7 +47,8 @@ const getDisplayName = (actor) =>
     ? actor.display_name
     : (actor?.username ? `@${actor.username}` : 'A citizen');
 
-const initialsOf = (actor) => {
+const initialsOf = (actor, type) => {
+  if (type === 'warning') return '!';   // no actor for warnings — actor_id is null
   const ai = actor?.avatar_initials;
   if (ai && ai !== '??') return ai.toUpperCase();
   return (actor?.display_name?.[0] ?? actor?.username?.[0] ?? '?').toUpperCase();
@@ -61,10 +62,11 @@ export default function NotificationListScreen({ onBack }) {
 
   // Avatar colors by notification type.
   const AVATAR_STYLE = {
-    react:  { bg: C.accentLight, fg: C.accent },
-    voice:  { bg: C.yesBg,       fg: C.yesText },
-    reply:  { bg: C.nahBg,       fg: C.nahText },
-    follow: { bg: C.yesBg,       fg: C.yesText },
+    react:   { bg: C.accentLight, fg: C.accent },
+    voice:   { bg: C.yesBg,       fg: C.yesText },
+    reply:   { bg: C.nahBg,       fg: C.nahText },
+    follow:  { bg: C.yesBg,       fg: C.yesText },
+    warning: { bg: C.nahBg,       fg: C.nahText },
   };
 
   const [notifications, setNotifications] = useState([]);
@@ -184,7 +186,7 @@ export default function NotificationListScreen({ onBack }) {
         activeOpacity={0.7}
       >
         <View style={[st.avatar, { backgroundColor: av.bg }]}>
-          <Text style={[st.avatarText, { color: av.fg }]}>{initialsOf(n.actor)}</Text>
+          <Text style={[st.avatarText, { color: av.fg }]}>{initialsOf(n.actor, n.type)}</Text>
         </View>
         <View style={st.content}>
           {renderText(n)}
