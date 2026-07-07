@@ -335,8 +335,8 @@ UGC compliance. Filtering now covers feed, trending, profile **and voices**.
 | Priority | Issue | Notes |
 |---|---|---|
 | 🟢 | "View reacts" lock is a soft UX gate, not enforced server-side | Decided 2026-07-07: vote percentages are non-sensitive aggregate data: not worth the architecture cost (RLS + RPC + fixing 2 other direct senti_counts reads) to fully close. Intentional, not a bug. |
-| 🟡 | Vote can silently no-op | If `batchFetchStates` fails, user may "vote" on an already-voted senti — `ignoreDuplicates` returns no error; UI shows new choice, DB keeps old. Consider `.select()` on upsert + reconcile. |
-| 🟡 | Pin state not synced across screens | Unpin in PinScreen doesn't update SentariumScreen state until refetch. |
+| ✅ | Vote silent no-op — RESOLVED 2026-07-07 | `handleVote` upsert now uses `.select()` + an else-if branch that reconciles against `senti_reactions`/`senti_counts` when `ignoreDuplicates` skips the write. |
+| ✅ | Pin state not synced across screens — RESOLVED 2026-07-07 | Pin membership moved to `PinsContext` (provider in `_layout.tsx`); SentariumScreen + PinScreen both read/write via `usePins()`, so pin/unpin propagates live. |
 | 🟡 | `handleViewLocked` has no rollback | Minor violation of optimistic+rollback rule. |
 | 🟢 | Voices double-count briefly | Optimistic +1 plus realtime update can flash +2; no suppress flag for voices. |
 | 🟢 | SentiCard not memoized | Every realtime tick re-renders all mounted cards. Add React.memo + useCallback renderItem + getItemLayout. |
