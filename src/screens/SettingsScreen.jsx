@@ -98,6 +98,7 @@ export default function SettingsScreen({ onBack, session, profile, onSaved }) {
   // users column, kept local here.
   const { wavePrefs, setWavePref } = useWavePrefs();
   const [dnaPublic, setDnaPublic] = useState(false);
+  const [leaderboardPublic, setLeaderboardPublic] = useState(false);
 
   // Profile-tab seed for EditProfileSheet — always fetched from the DB below so we
   // don't depend on the caller's profile-object shape.
@@ -168,7 +169,7 @@ export default function SettingsScreen({ onBack, session, profile, onSaved }) {
       // Profile seed — authoritative columns straight from the users row.
       const { data: u } = await supabase
         .from('users')
-        .select('username, display_name, bio, avatar_url, dna_public')
+        .select('username, display_name, bio, avatar_url, dna_public, leaderboard_public')
         .eq('id', uid)
         .single();
       if (u) {
@@ -180,6 +181,7 @@ export default function SettingsScreen({ onBack, session, profile, onSaved }) {
           dnaPublic:   !!u.dna_public,
         });
         setDnaPublic(!!u.dna_public);
+        setLeaderboardPublic(!!u.leaderboard_public);
       }
     })();
   }, [uid]);
@@ -227,6 +229,20 @@ export default function SettingsScreen({ onBack, session, profile, onSaved }) {
       .eq('id', uid);
     if (error) {
       setDnaPublic(prev);
+      Alert.alert('Could not save', error.message ?? 'Please try again.');
+    }
+  };
+
+  // ── Personalize: leaderboard visibility (users.leaderboard_public) — optimistic + rollback ──
+  const saveLeaderboardPublic = async (next) => {
+    const prev = leaderboardPublic;
+    setLeaderboardPublic(next);
+    const { error } = await supabase
+      .from('users')
+      .update({ leaderboard_public: next })
+      .eq('id', uid);
+    if (error) {
+      setLeaderboardPublic(prev);
       Alert.alert('Could not save', error.message ?? 'Please try again.');
     }
   };
@@ -500,6 +516,28 @@ export default function SettingsScreen({ onBack, session, profile, onSaved }) {
                   key={opt.label}
                   style={[st.segmentBtn, active && st.segmentBtnActive]}
                   onPress={() => saveDnaPublic(opt.val)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[st.segmentText, active && st.segmentTextActive]}>{opt.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
+        <View style={st.dnaVisRow}>
+          <Text style={st.dnaVisLabel}>Show me on leaderboards</Text>
+          <View style={st.segment}>
+            {[
+              { val: false, label: 'Only me'  },
+              { val: true,  label: 'Everyone' },
+            ].map((opt) => {
+              const active = leaderboardPublic === opt.val;
+              return (
+                <TouchableOpacity
+                  key={opt.label}
+                  style={[st.segmentBtn, active && st.segmentBtnActive]}
+                  onPress={() => saveLeaderboardPublic(opt.val)}
                   activeOpacity={0.8}
                 >
                   <Text style={[st.segmentText, active && st.segmentTextActive]}>{opt.label}</Text>

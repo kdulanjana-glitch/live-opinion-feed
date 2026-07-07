@@ -126,6 +126,7 @@ export default function SentariumScreen({
   const [userVotes,     setUserVotes]     = useState({}); // { sentiId: 'yes'|'hmm'|'nah' }
   const [userViewLocks, setUserViewLocks] = useState({}); // { sentiId: true }
   const [likedSentis,   setLikedSentis]   = useState({}); // { sentiId: true/false }
+  const [followActivity, setFollowActivity] = useState({}); // { sentiId: count of followed citizens who reacted }
   const [voiceSentiId,  setVoiceSentiId]  = useState(null); // sentiId for open VoiceSheet
   const [reportSentiId, setReportSentiId] = useState(null); // sentiId for open ReportSheet
   const [reportBusy,    setReportBusy]    = useState(false);
@@ -221,7 +222,8 @@ export default function SentariumScreen({
         .eq('user_id', uid).in('senti_id', sentiIds),
       supabase.from('senti_likes').select('senti_id')
         .eq('user_id', uid).in('senti_id', sentiIds),
-    ]).then(([reactRes, lockRes, likeRes]) => {
+      supabase.rpc('get_follow_activity', { p_senti_ids: sentiIds }),
+    ]).then(([reactRes, lockRes, likeRes, followRes]) => {
       const votes = {};
       (reactRes.data ?? []).forEach((r) => { votes[r.senti_id] = r.reaction; });
       if (Object.keys(votes).length) setUserVotes((prev) => ({ ...prev, ...votes }));
@@ -236,6 +238,10 @@ export default function SentariumScreen({
         setLikedSentis((prev) => ({ ...prev, ...likes }));
         likedSentisRef.current = { ...likedSentisRef.current, ...likes };
       }
+
+      const follows = {};
+      (followRes.data ?? []).forEach((r) => { follows[r.senti_id] = r.follow_count; });
+      if (Object.keys(follows).length) setFollowActivity((prev) => ({ ...prev, ...follows }));
 
       // Unblock all cards
       sentiIds.forEach((id) => stateLoadingRef.current.delete(id));
@@ -888,6 +894,7 @@ export default function SentariumScreen({
               onViewLocked={() => handleViewLocked(item.id)}
               liked={likedSentis[item.id]  ?? false}
               pinned={isPinned(item.id)}
+              followCount={followActivity[item.id] ?? 0}
               userVote={userVotes[item.id] ?? null}
               userViewedReacts={userViewLocks[item.id] ?? false}
             />

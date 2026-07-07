@@ -350,6 +350,7 @@ export default function Index() {
         return (
           <TrendingScreen
             onOpenSenti={handleNavigateToFeedOpinion}
+            onOpenUser={handleNavigateToUser}
           />
         );
 

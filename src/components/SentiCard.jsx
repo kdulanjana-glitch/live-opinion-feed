@@ -36,6 +36,7 @@ export default function SentiCard({
   onViewLocked,
   liked  = false,   // ← true when user has liked this senti
   pinned = false,   // ← true when user has pinned this senti
+  followCount = 0,  // ← # of citizens the viewer follows who reacted to this senti
   userVote = null,
   userViewedReacts = false,
 }) {
@@ -143,6 +144,13 @@ export default function SentiCard({
       {/* Results panel (toggled by the eye) sits directly above the vote bar */}
       <VoteResultsPanel visible={resultsOpen} results={senti?.results} />
 
+      {/* Follow-activity line — citizens the viewer follows who reacted */}
+      {followCount > 0 && (
+        <Text style={s_.followActivityText}>
+          {followCount === 1 ? '1 citizen you follow reacted' : `${followCount} citizens you follow reacted`}
+        </Text>
+      )}
+
       {/* Vote bar */}
       <VoteBar
         voted={hasVoted ? userVote : null}
@@ -240,4 +248,5 @@ const makeStyles = (C) => StyleSheet.create({
     alignSelf: 'flex-start',
   },
   swellText:  { fontSize: fs(14), fontFamily: F.semiBold, color: C.badgeText },
+  followActivityText: { fontSize: fs(14), fontFamily: F.semiBold, color: C.textMuted, paddingHorizontal: ms(16), marginBottom: vs(6) },
 });
